@@ -1,5 +1,9 @@
 # Generated figures
 figures/
+# Report 
+
+docs/reports/TexReport/
+
 
 # Generated data (keep README.md)
 data/*
