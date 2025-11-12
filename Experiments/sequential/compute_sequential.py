@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 
-from utils import get_data_dir
+from utils import datatools
 
 # from numba import njit
 
@@ -180,7 +180,7 @@ df['elapsed_time'] = elapsed_time
 df['iter_run'] = iter_run
 
 # Save results to data directory (automatically mirrors Experiments/ structure)
-data_dir = get_data_dir()
+data_dir = datatools.get_data_dir()
 
 if options.output:
     base_name = options.output.replace('.npz', '').replace('.parquet', '')

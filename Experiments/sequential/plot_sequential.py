@@ -12,14 +12,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import get_data_dir, get_figures_dir
+from utils import datatools
 
 # Set seaborn style
 sns.set_theme(style="whitegrid")
 
 # Get directories (automatically mirrors Experiments/ structure)
-data_dir = get_data_dir()
-figures_dir = get_figures_dir()
+data_dir = datatools.get_data_dir()
+figures_dir = datatools.get_figures_dir()
 
 
 def plot_slice(filename: str, axis: str, pos, u: np.ndarray) -> None:
