@@ -1,129 +1,89 @@
-"""Sequential Jacobi solver implementation.
+"""Sequential Jacobi solver."""
 
-This module provides a single-node Jacobi solver that can use different
-computational kernels (numpy or numba-accelerated).
-"""
-
-from __future__ import annotations
-
-from typing import Tuple
-
+import time
+import socket
+from datetime import datetime
 import numpy as np
 from mpi4py import MPI
-
 from .base import PoissonSolver
 from .datastructures import RuntimeConfig, GlobalResults, PerRankResults
 
 
 class SequentialJacobi(PoissonSolver):
-    """Sequential Jacobi solver with pluggable computational kernel.
+    """Sequential Jacobi solver (single-node, no domain decomposition)."""
 
-    Single-node Jacobi solver that can use either pure numpy or numba-accelerated
-    kernels. Implemented as an MPI-aware solver with size=1 (no domain decomposition).
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    Parameters
-    ----------
-    omega : float, default 0.75
-        Relaxation parameter
-    use_numba : bool, default True
-        Use numba JIT-compiled kernel for better performance
-    mpi_strategy : str, default "numpy_buffer"
-        MPI communication strategy (not used for sequential, but kept for interface consistency)
-    verbose : bool, default False
-        Print convergence information
+    def solve(self, u1, u2, f, h, max_iter, tolerance=1e-8, u_true=None):
+        """Solve using sequential Jacobi iteration."""
+        N = u1.shape[0]
+        converged = False
+        compute_times = []
+        t_start = time.perf_counter()
 
-    Examples
-    --------
-    >>> # Pure numpy version
-    >>> solver = SequentialJacobi(omega=0.75, use_numba=False)
-    >>> result = solver.solve(u1, u2, f, h, max_iter=100, tolerance=1e-6)
+        # Main iteration loop
+        for i in range(max_iter):
+            if i % 2 == 0:
+                uold, u = u1, u2
+            else:
+                u, uold = u1, u2
 
-    >>> # Numba-accelerated version
-    >>> solver = SequentialJacobi(omega=0.75, use_numba=True)
-    >>> solver.warmup(N=10)  # Trigger JIT compilation
-    >>> result = solver.solve(u1, u2, f, h, max_iter=100, tolerance=1e-6)
+            # Jacobi step
+            t_comp_start = time.perf_counter()
+            residual = self._step(uold, u, f, h, self.config.omega)
+            t_comp_end = time.perf_counter()
+            compute_times.append(t_comp_end - t_comp_start)
 
-    """
+            # Check convergence
+            if residual < tolerance:
+                converged = True
+                if self.config.verbose:
+                    print(f"Converged at iteration {i + 1} (residual: {residual:.2e})")
+                break
 
-    def __init__(
-        self,
-        omega: float = 0.75,
-        use_numba: bool = True,
-        mpi_strategy: str = "numpy_buffer",
-        verbose: bool = False,
-    ):
-        """Initialize sequential Jacobi solver with chosen kernel."""
-        # Use MPI.COMM_SELF to create a single-rank "MPI" communicator
-        super().__init__(
-            comm=MPI.COMM_SELF,
-            omega=omega,
-            use_numba=use_numba,
-            mpi_strategy=mpi_strategy,
-            verbose=verbose,
+        elapsed_time = time.perf_counter() - t_start
+
+        if not converged and self.config.verbose:
+            print(f"Did not converge after {max_iter} iterations (residual: {residual:.2e})")
+
+        # Compute error
+        final_error = None
+        if u_true is not None:
+            final_error = self.compute_error(u, u_true)
+            if self.config.verbose:
+                print(f"Final error vs true solution: {final_error:.2e}")
+
+        # Build results
+        runtime_config = RuntimeConfig(
+            N=N,
+            h=h,
+            method="sequential_jacobi",
+            omega=self.config.omega,
+            tolerance=tolerance,
+            max_iter=max_iter,
+            use_numba=self.config.use_numba,
+            num_threads=self.get_num_threads(self.config.use_numba),
+            mpi_size=1,
+            timestamp=datetime.now().isoformat(),
         )
 
-    def _decompose_domain(self, N: int):
-        """No domain decomposition for sequential solver (full domain on single rank)."""
-        return None  # Not used in sequential solver
-
-    def _exchange_boundaries(self, u: np.ndarray, compute_time_list: list, comm_time_list: list) -> None:
-        """No boundary exchange needed for sequential solver."""
-        pass  # No-op for single rank
-
-    def _gather_solution(self, u_local: np.ndarray, N: int) -> np.ndarray:
-        """No gathering needed for sequential solver (already have full solution)."""
-        return u_local  # Just return the input
-
-    def _setup_local_arrays(
-        self, u1: np.ndarray, u2: np.ndarray, f: np.ndarray, N: int
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Sequential solver uses arrays as-is (no decomposition or ghost layers)."""
-        return u1, u2, f
-
-    def warmup(self, N: int = 10) -> None:
-        """Warmup JIT compilation (only needed for numba kernel)."""
-        h = 2.0 / (N - 1)
-        self._warmup_kernel(self._step, (N, N, N), h)
-
-    def solve(
-        self,
-        u1: np.ndarray,
-        u2: np.ndarray,
-        f: np.ndarray,
-        h: float,
-        max_iter: int,
-        tolerance: float = 1e-8,
-        u_true: np.ndarray | None = None,
-    ) -> Tuple[np.ndarray, RuntimeConfig, GlobalResults, PerRankResults]:
-        """Solve using sequential Jacobi iteration.
-
-        Parameters
-        ----------
-        u1, u2 : np.ndarray
-            Solution arrays for swapping, shape (N, N, N)
-        f : np.ndarray
-            Source term, shape (N, N, N)
-        h : float
-            Grid spacing
-        max_iter : int
-            Maximum iterations
-        tolerance : float, default 1e-8
-            Convergence tolerance
-        u_true : np.ndarray, optional
-            True solution for final error computation
-
-        Returns
-        -------
-        u : np.ndarray
-            Final solution array
-        runtime_config : RuntimeConfig
-            Global runtime configuration
-        global_results : GlobalResults
-            Global solver results
-        per_rank_results : PerRankResults
-            Per-rank performance data
-        """
-        return self._solve_common(
-            u1, u2, f, h, max_iter, tolerance, u_true,
-            method_name="sequential_jacobi"
+        global_results = GlobalResults(
+            iterations=i + 1,
+            converged=converged,
+            final_residual=residual,
+            final_error=final_error or 0.0,
+            wall_time=elapsed_time,
+            compute_time=sum(compute_times),
+            mpi_comm_time=0.0,
         )
+
+        per_rank_results = PerRankResults(
+            mpi_rank=0,
+            hostname=socket.gethostname(),
+            wall_time=elapsed_time,
+            compute_time=sum(compute_times),
+            mpi_comm_time=0.0,
+        )
+
+        return u, runtime_config, global_results, per_rank_results

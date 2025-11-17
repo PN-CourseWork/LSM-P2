@@ -52,19 +52,20 @@ solver = SequentialJacobi(omega=0.75, verbose=False)
 # Run the solver
 u, runtime_config, global_results, per_rank_results = solver.solve(u1, u2, f, h, N_iter, tolerance, u_true=u_true)
 
-print(f"Wall time = {per_rank_results['wall_time']:.6f} s")
-print(f"Compute time = {per_rank_results['compute_time']:.6f} s")
-print(f"MPI comm time = {per_rank_results['mpi_comm_time']:.6f} s")
-print(f"Iterations = {global_results['iterations']}")
-if global_results["converged"]:
-    print(f"Converged within tolerance {runtime_config['tolerance']}")
-if "final_error" in global_results:
-    print(f"Final error = {global_results['final_error']:.6e}")
+print(f"Wall time = {per_rank_results.wall_time:.6f} s")
+print(f"Compute time = {per_rank_results.compute_time:.6f} s")
+print(f"MPI comm time = {per_rank_results.mpi_comm_time:.6f} s")
+print(f"Iterations = {global_results.iterations}")
+if global_results.converged:
+    print(f"Converged within tolerance {runtime_config.tolerance}")
+if global_results.final_error > 0:
+    print(f"Final error = {global_results.final_error:.6e}")
 
 # Create DataFrames (single row each, MLflow-compatible)
-df_runtime_config = pd.DataFrame([runtime_config])
-df_global_results = pd.DataFrame([global_results])
-df_per_rank_results = pd.DataFrame([per_rank_results])
+from dataclasses import asdict
+df_runtime_config = pd.DataFrame([asdict(runtime_config)])
+df_global_results = pd.DataFrame([asdict(global_results)])
+df_per_rank_results = pd.DataFrame([asdict(per_rank_results)])
 
 # Save results to data directory (automatically mirrors Experiments/ structure)
 data_dir = datatools.get_data_dir()
@@ -76,7 +77,7 @@ if options.output:
     perrank_file = data_dir / f"{base_name}_perrank.parquet"
     grid_file = data_dir / f"{base_name}_grid.npy"
 else:
-    iter_run = global_results["iterations"]
+    iter_run = global_results.iterations
     config_file = data_dir / f"run_N{N}_iter{iter_run}_{method}_config.parquet"
     global_file = data_dir / f"run_N{N}_iter{iter_run}_{method}_global.parquet"
     perrank_file = data_dir / f"run_N{N}_iter{iter_run}_{method}_perrank.parquet"
