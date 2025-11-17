@@ -61,12 +61,6 @@ class MPIJacobiCubic(PoissonSolver):
         # Get neighbors
         self.neighbors = self._get_neighbors()
 
-        if self.verbose and self.rank == 0:
-            print(
-                f"Using {'numba' if self.config.use_numba else 'numpy'} kernel with {self.size} MPI ranks "
-                f"(topology: {dims[0]}x{dims[1]}x{dims[2]})"
-            )
-
     def _compute_topology_dims(self, nprocs):
         """Compute 3D processor grid dimensions."""
         # Try to find a factorization close to cubic
@@ -143,14 +137,9 @@ class MPIJacobiCubic(PoissonSolver):
             # Check convergence
             if global_residual < tolerance:
                 converged = True
-                if self.verbose and self.rank == 0:
-                    print(f"Converged at iteration {i + 1} (residual: {global_residual:.2e})")
                 break
 
         elapsed_time = time.perf_counter() - t_start
-
-        if not converged and self.verbose and self.rank == 0:
-            print(f"Did not converge after {max_iter} iterations (residual: {global_residual:.2e})")
 
         # Gather solution
         u_global = self._gather_solution(u_local, N)
@@ -159,8 +148,6 @@ class MPIJacobiCubic(PoissonSolver):
         final_error = 0.0
         if self.rank == 0 and u_true is not None:
             final_error = np.linalg.norm(u_global - u_true)
-            if self.verbose:
-                print(f"Final error vs true solution: {final_error:.2e})")
         final_error = self.comm.bcast(final_error, root=0)
 
         # Build per-rank results

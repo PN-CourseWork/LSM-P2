@@ -11,7 +11,7 @@ class RuntimeConfig:
     # Problem
     N: int = 0
 
-    # Specs 
+    # Specs
     mpi_ranks: int = 1
     method: str = ""
 

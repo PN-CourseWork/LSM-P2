@@ -19,13 +19,9 @@ class PoissonSolver:
         Relaxation parameter
     use_numba : bool, default True
         Use numba JIT compilation
-    verbose : bool, default False
-        Print convergence info (rank 0 only)
     """
 
     def __init__(self, **kwargs):
-        # Extract verbose before passing to RuntimeConfig
-        self.verbose = kwargs.pop('verbose', False)
         self.config = RuntimeConfig(**kwargs)
         self._step = self._select_kernel(self.config.use_numba)
 

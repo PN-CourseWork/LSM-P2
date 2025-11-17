@@ -38,21 +38,14 @@ class SequentialJacobi(PoissonSolver):
             # Check convergence
             if residual < tolerance:
                 converged = True
-                if self.verbose:
-                    print(f"Converged at iteration {i + 1} (residual: {residual:.2e})")
                 break
 
         elapsed_time = time.perf_counter() - t_start
-
-        if not converged and self.verbose:
-            print(f"Did not converge after {max_iter} iterations (residual: {residual:.2e})")
 
         # Compute error
         final_error = 0.0
         if u_true is not None:
             final_error = np.linalg.norm(u - u_true)
-            if self.verbose:
-                print(f"Final error vs true solution: {final_error:.2e}")
 
         # Build results
         runtime_config = RuntimeConfig(

@@ -16,8 +16,6 @@ class MPIJacobiSliced(PoissonSolver):
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
-        if self.verbose and self.rank == 0:
-            print(f"Using {'numba' if self.config.use_numba else 'numpy'} kernel with {self.size} MPI ranks")
 
     def solve(self, u1, u2, f, h, max_iter, tolerance=1e-8, u_true=None):
         """Solve using MPI sliced Jacobi iteration."""
@@ -59,14 +57,9 @@ class MPIJacobiSliced(PoissonSolver):
             # Check convergence
             if global_residual < tolerance:
                 converged = True
-                if self.verbose and self.rank == 0:
-                    print(f"Converged at iteration {i + 1} (residual: {global_residual:.2e})")
                 break
 
         elapsed_time = time.perf_counter() - t_start
-
-        if not converged and self.verbose and self.rank == 0:
-            print(f"Did not converge after {max_iter} iterations (residual: {global_residual:.2e})")
 
         # Gather solution
         u_global = self._gather_solution(u_local, N)
@@ -75,8 +68,6 @@ class MPIJacobiSliced(PoissonSolver):
         final_error = 0.0
         if self.rank == 0 and u_true is not None:
             final_error = np.linalg.norm(u_global - u_true)
-            if self.verbose:
-                print(f"Final error vs true solution: {final_error:.2e})")
         final_error = self.comm.bcast(final_error, root=0)
 
         # Build per-rank results
