@@ -4,7 +4,7 @@ import os
 import numpy as np
 from mpi4py import MPI
 
-from .datastructures import SolverConfig, RuntimeConfig, GlobalResults, PerRankResults
+from .datastructures import RuntimeConfig, GlobalResults, PerRankResults
 
 
 class PoissonSolver:
@@ -24,7 +24,7 @@ class PoissonSolver:
     """
 
     def __init__(self, **kwargs):
-        self.config = SolverConfig(**kwargs)
+        self.config = RuntimeConfig(**kwargs)
         self._step = self._select_kernel(self.config.use_numba)
 
     def solve(self, u1, u2, f, h, max_iter, tolerance=1e-8, u_true=None):
