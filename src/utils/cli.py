@@ -47,7 +47,7 @@ def create_parser(
     parser.add_argument(
         "-N",
         type=int,
-        default=100,
+        default=20,
         help="Number of divisions along each of the 3 dimensions",
     )
 
@@ -55,7 +55,7 @@ def create_parser(
     parser.add_argument(
         "--iter",
         type=int,
-        default=200,
+        default=100,
         help="Number of (max) iterations.",
     )
 

@@ -27,7 +27,10 @@ class MPIJacobiSliced(PoissonSolver):
         return self.plane_type
 
     def solve(self, u1, u2, f, h, max_iter, tolerance=1e-8, u_true=None):
-        """Solve using MPI sliced Jacobi iteration."""
+        """Solve using MPI sliced Jacobi iteration.
+
+        Results are stored in solver instance variables and nothing is returned.
+        """
         N = u1.shape[0]
 
         # Create MPI datatype for plane communication
@@ -102,27 +105,21 @@ class MPIJacobiSliced(PoissonSolver):
         # Update config with method
         self.config.method = "mpi_sliced_jacobi"
 
-        # Build config and global results on rank 0
+        # Build global results on rank 0
         if self.rank == 0:
-            runtime_config = RuntimeConfig(
-                N=N, method="mpi_sliced_jacobi", omega=self.config.omega,
-                tolerance=tolerance, max_iter=max_iter, use_numba=self.config.use_numba,
-                num_threads=self.config.num_threads, mpi_size=self.config.mpi_size,
-            )
-
             timings = self._aggregate_timing_results(all_perrank)
             self.global_results = GlobalResults(
                 iterations=i + 1, residual_history=self.residual_history,
                 converged=converged, final_error=final_error, **timings
             )
         else:
-            runtime_config, self.global_results = RuntimeConfig(), GlobalResults()
+            self.global_results = GlobalResults()
 
-        # Broadcast to all ranks
-        runtime_config = self.comm.bcast(runtime_config, root=0)
+        # Broadcast global results to all ranks
         self.global_results = self.comm.bcast(self.global_results, root=0)
 
-        return u_global, runtime_config, self.global_results, per_rank_results
+        # Store solution grid
+        self.u = u_global
 
     def _decompose_domain(self, N):
         interior_N = N - 2
