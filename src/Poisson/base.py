@@ -11,18 +11,6 @@ import mlflow
 import pandas as pd
 
 class PoissonSolver:
-    """Base class for all Poisson solvers.
-
-    Provides shared bookkeeping and utility methods.
-    Subclasses override solve() to implement specific strategies.
-
-    Parameters
-    ----------
-    omega : float, default 0.75
-        Relaxation parameter
-    use_numba : bool, default True
-        Use numba JIT compilation
-    """
 
     def __init__(self, **kwargs):
         self.config = RuntimeConfig(**kwargs)

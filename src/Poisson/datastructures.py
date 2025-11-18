@@ -37,8 +37,6 @@ class GlobalResults:
     halo_exchange_time: float = 0.0
 
 
-
-
 @dataclass
 class PerRankResults:
     """Per-rank performance results."""
