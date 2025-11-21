@@ -68,16 +68,8 @@ if size == 1:
         solver.summary()
 
         if rank == 0:
+            spatial_results.append(solver.to_dict())
             res = solver.global_results
-            spatial_results.append({
-                "N": N,
-                "h": 2.0 / (N - 1),
-                "method": "Sequential (NumPy)",
-                "iterations": res.iterations,
-                "converged": res.converged,
-                "final_error": res.final_error,
-                "wall_time": res.wall_time,
-            })
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
             print(f"  Final error (L2): {res.final_error:.4e}")
@@ -116,16 +108,8 @@ for method_name, decomposition, communicator in mpi_methods:
         solver.summary()
 
         if rank == 0:
+            spatial_results.append(solver.to_dict())
             res = solver.global_results
-            spatial_results.append({
-                "N": N,
-                "h": 2.0 / (N - 1),
-                "method": method_name,
-                "iterations": res.iterations,
-                "converged": res.converged,
-                "final_error": res.final_error,
-                "wall_time": res.wall_time,
-            })
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
             print(f"  Final error (L2): {res.final_error:.4e}")

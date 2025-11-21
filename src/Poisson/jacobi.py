@@ -9,7 +9,7 @@ import socket
 import numpy as np
 from mpi4py import MPI
 from .base import PoissonSolver
-from .datastructures import LocalResults, LocalFields, sinusoidal_exact_solution
+from .datastructures import sinusoidal_exact_solution
 from .strategies import (
     NoDecomposition,
     SlicedDecomposition,
@@ -17,6 +17,17 @@ from .strategies import (
     CustomMPICommunicator,
     NumpyCommunicator,
 )
+
+# Strategy registries
+DECOMPOSITION_REGISTRY = {
+    "sliced": SlicedDecomposition,
+    "cubic": CubicDecomposition,
+}
+
+COMMUNICATOR_REGISTRY = {
+    "custom": CustomMPICommunicator,
+    "numpy": NumpyCommunicator,
+}
 
 
 class JacobiPoisson(PoissonSolver):
@@ -53,66 +64,70 @@ class JacobiPoisson(PoissonSolver):
     def __init__(self, decomposition=None, communicator=None, **kwargs):
         super().__init__(**kwargs)
 
-        # MPI setup (always needed for rank checking)
+        # MPI setup
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
 
-        # Instantiate decomposition strategy (NoDecomposition for sequential)
+        # Setup strategies
         if decomposition is None:
             # Sequential mode: entire domain on rank 0
             self.decomposition = NoDecomposition()
-            # Use NumpyCommunicator (will handle empty exchange specs)
             self.communicator = NumpyCommunicator()
             kernel_name = "Numba" if self.config.use_numba else "NumPy"
             self.config.method = f"Sequential ({kernel_name})"
         else:
-            # Distributed mode
+            # Distributed mode - instantiate decomposition
+            self.decomposition = self._create_strategy(
+                decomposition, DECOMPOSITION_REGISTRY, "decomposition"
+            )
+
+            # Default communicator to "numpy" if not specified
             if communicator is None:
-                raise ValueError("communicator must be specified when using decomposition")
+                communicator = "numpy"
 
-            # Instantiate decomposition strategy
-            if isinstance(decomposition, str):
-                decomposition = decomposition.lower()
-                if decomposition == "sliced":
-                    self.decomposition = SlicedDecomposition()
-                elif decomposition == "cubic":
-                    self.decomposition = CubicDecomposition()
-                else:
-                    raise ValueError(f"Unknown decomposition strategy: {decomposition}")
-            else:
-                self.decomposition = decomposition
-
-            # Instantiate communicator strategy
-            if isinstance(communicator, str):
-                communicator = communicator.lower()
-                if communicator == "custom":
-                    self.communicator = CustomMPICommunicator()
-                elif communicator == "numpy":
-                    self.communicator = NumpyCommunicator()
-                else:
-                    raise ValueError(f"Unknown communicator strategy: {communicator}")
-            else:
-                self.communicator = communicator
+            self.communicator = self._create_strategy(
+                communicator, COMMUNICATOR_REGISTRY, "communicator"
+            )
 
             # Set method name
             decomp_name = self.decomposition.__class__.__name__.replace("Decomposition", "")
             comm_name = self.communicator.__class__.__name__.replace("Communicator", "")
             self.config.method = f"MPI_{decomp_name}_{comm_name}"
 
-        # Initialize local fields
-        self.local_fields = LocalFields()
-
         # Initialize local arrays using decomposition strategy
         N = self.config.N
-        u1_local, u2_local, f_local = self.decomposition.initialize_local_arrays_distributed(
+        self.u1_local, self.u2_local, self.f_local = self.decomposition.initialize_local_arrays_distributed(
             N, self.rank, self.comm
         )
 
-        # Store in local_fields (None for non-root ranks in sequential mode)
-        self.local_fields.u1 = u1_local
-        self.local_fields.u2 = u2_local
-        self.local_fields.f = f_local
+    def _create_strategy(self, strategy, registry, strategy_type):
+        """Create a strategy instance from string or return existing instance.
+
+        Parameters
+        ----------
+        strategy : str or object
+            Strategy name or instance
+        registry : dict
+            Registry mapping names to classes
+        strategy_type : str
+            Type name for error messages
+
+        Returns
+        -------
+        object
+            Strategy instance
+        """
+        if isinstance(strategy, str):
+            strategy_lower = strategy.lower()
+            if strategy_lower not in registry:
+                raise ValueError(
+                    f"Unknown {strategy_type} strategy: {strategy}. "
+                    f"Available: {list(registry.keys())}"
+                )
+            return registry[strategy_lower]()
+        else:
+            return strategy
 
     def method_solve(self):
         """Solve using Jacobi iteration.
@@ -122,43 +137,36 @@ class JacobiPoisson(PoissonSolver):
         For other decompositions, domain is distributed across all ranks.
         """
         # NoDecomposition returns None for non-root ranks - they should exit
-        if self.local_fields.u1 is None:
+        if self.u1_local is None:
             return
 
-        # Get problem size and local arrays
+        # Get problem size
         N = self.config.N
         h = 2.0 / (N - 1)
-        u1_local = self.local_fields.u1
-        u2_local = self.local_fields.u2
-        f_local = self.local_fields.f
+
+        # Initialize buffer pointers for ping-pong
+        uold_local = self.u1_local
+        u_local = self.u2_local
 
         # Main iteration loop
         for i in range(self.config.max_iter):
-            if i % 2 == 0:
-                uold_local, u_local = u1_local, u2_local
-            else:
-                u_local, uold_local = u1_local, u2_local
-
-            # Exchange ghost zones (decomposition provides exchange spec)
-            t_comm_start = MPI.Wtime()
-            self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm)
-            t_comm_end = MPI.Wtime()
-            if t_comm_end - t_comm_start > 0:
-                self.global_timeseries.halo_exchange_times.append(t_comm_end - t_comm_start)
+            # Exchange ghost zones
+            self._time_operation(
+                lambda: self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm),
+                self.global_timeseries.halo_exchange_times
+            )
 
             # Jacobi step on local domain
-            t_comp_start = MPI.Wtime()
-            local_residual = self._step(uold_local, u_local, f_local, h, self.config.omega)
-            t_comp_end = MPI.Wtime()
-            self.global_timeseries.compute_times.append(t_comp_end - t_comp_start)
+            local_residual = self._time_operation(
+                lambda: self._step(uold_local, u_local, self.f_local, h, self.config.omega),
+                self.global_timeseries.compute_times
+            )
 
-            # Compute global residual (reduction across active ranks)
-            t_comm_start = MPI.Wtime()
-            global_residual = self.comm.allreduce(local_residual**2, op=MPI.SUM)
-            global_residual = np.sqrt(global_residual)
-            t_comm_end = MPI.Wtime()
-            if t_comm_end - t_comm_start > 0:
-                self.global_timeseries.mpi_comm_times.append(t_comm_end - t_comm_start)
+            # Compute global residual
+            global_residual = self._time_operation(
+                lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
+                self.global_timeseries.mpi_comm_times
+            )
 
             # Store residual history on rank 0
             if self.rank == 0:
@@ -166,25 +174,74 @@ class JacobiPoisson(PoissonSolver):
 
             # Check convergence
             if global_residual < self.config.tolerance:
-                if self.rank == 0:
-                    self.global_results.converged = True
-                    self.global_results.iterations = i + 1
+                self._record_convergence(i + 1, converged=True)
                 break
+
+            # Swap buffers for next iteration
+            uold_local, u_local = u_local, uold_local
         else:
-            if self.rank == 0:
-                self.global_results.iterations = self.config.max_iter
+            # Max iterations reached without convergence
+            self._record_convergence(self.config.max_iter, converged=False)
 
-        # Gather solution to rank 0 using decomposition strategy
-        u_global = self._gather_solution(u_local, N)
+        # Gather solution to rank 0
+        if self.rank == 0:
+            # Extract interior points using decomposition strategy
+            local_interior = self.decomposition.extract_interior(u_local)
+            all_interiors = self.comm.gather(local_interior, root=0)
 
-        # Store final solution in global_fields on rank 0
-        if self.rank == 0 and hasattr(self, 'global_fields'):
-            if self.global_results.iterations % 2 == 0:
+            u_global = np.zeros((N, N, N))
+            for rank_id, interior_data in enumerate(all_interiors):
+                placement = self.decomposition.get_interior_placement(rank_id, N, self.comm)
+                u_global[placement] = interior_data
+
+            # Store final solution in global_fields
+            if hasattr(self, 'global_fields'):
                 self.global_fields.u1[:] = u_global
-            else:
-                self.global_fields.u2[:] = u_global
+        else:
+            # Non-root ranks just participate in gather
+            local_interior = self.decomposition.extract_interior(u_local)
+            self.comm.gather(local_interior, root=0)
 
         # Build per-rank results
+        self._build_local_results()
+
+    def _time_operation(self, operation, time_list):
+        """Time an operation and append to time list.
+
+        Parameters
+        ----------
+        operation : callable
+            Operation to time
+        time_list : list
+            List to append timing to
+
+        Returns
+        -------
+        result
+            Result of operation
+        """
+        t_start = MPI.Wtime()
+        result = operation()
+        t_end = MPI.Wtime()
+        time_list.append(t_end - t_start)
+        return result
+
+    def _record_convergence(self, iterations, converged):
+        """Record convergence status on rank 0.
+
+        Parameters
+        ----------
+        iterations : int
+            Number of iterations performed
+        converged : bool
+            Whether the solver converged
+        """
+        if self.rank == 0:
+            self.global_results.iterations = iterations
+            self.global_results.converged = converged
+
+    def _build_local_results(self):
+        """Build per-rank results."""
         self.local_results.mpi_rank = self.rank
         self.local_results.hostname = socket.gethostname()
         self.local_results.compute_time = sum(self.global_timeseries.compute_times)
@@ -207,11 +264,8 @@ class JacobiPoisson(PoissonSolver):
         N = self.config.N
         h = 2.0 / (N - 1)
 
-        # Get the current solution from global_fields
-        if self.global_results.iterations % 2 == 0:
-            u_computed = self.global_fields.u1
-        else:
-            u_computed = self.global_fields.u2
+        # Get the computed solution from global_fields
+        u_computed = self.global_fields.u1
 
         # Get exact solution
         if exact_solution is None:
@@ -224,39 +278,3 @@ class JacobiPoisson(PoissonSolver):
         # Compute L2 error
         error_diff = u_computed - u_exact
         self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
-
-    def _gather_solution(self, u_local, N):
-        """Gather local solutions to global array on rank 0.
-
-        Uses decomposition strategy to extract interior and determine placement,
-        then performs generic gather and reconstruction.
-
-        Parameters
-        ----------
-        u_local : np.ndarray
-            Local solution array with ghost zones
-        N : int
-            Global grid size
-
-        Returns
-        -------
-        u_global : np.ndarray or None
-            Global solution on rank 0, None on other ranks
-        """
-        # Extract interior points using decomposition strategy
-        local_interior = self.decomposition.extract_interior(u_local)
-
-        # Gather all interior arrays to rank 0
-        all_interiors = self.comm.gather(local_interior, root=0)
-
-        if self.rank == 0:
-            u_global = np.zeros((N, N, N))
-
-            # Place each rank's interior data using decomposition mapping
-            for rank_id, interior_data in enumerate(all_interiors):
-                placement = self.decomposition.get_interior_placement(rank_id, N, self.comm)
-                u_global[placement] = interior_data
-
-            return u_global
-        else:
-            return None

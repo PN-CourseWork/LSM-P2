@@ -113,6 +113,48 @@ class PoissonSolver:
         mlflow.log_table(pd.DataFrame(per_rank_dicts), "per_rank_results.json")
         mlflow.end_run()
 
+    def to_dict(self, include_config=True, include_timeseries=False):
+        """Return results as a dictionary.
+
+        Parameters
+        ----------
+        include_config : bool
+            Include configuration parameters (N, omega, method, etc.)
+        include_timeseries : bool
+            Include detailed timeseries data (residual history, timing arrays)
+
+        Returns
+        -------
+        dict or None
+            Results dictionary on rank 0, None on other ranks
+        """
+        if self.rank != 0:
+            return None
+
+        result = {}
+
+        # Core results
+        result['iterations'] = self.global_results.iterations
+        result['converged'] = self.global_results.converged
+        result['final_error'] = self.global_results.final_error
+        result['wall_time'] = self.global_results.wall_time
+
+        if include_config:
+            result['N'] = self.config.N
+            result['h'] = 2.0 / (self.config.N - 1)
+            result['omega'] = self.config.omega
+            result['method'] = self.config.method
+            result['max_iter'] = self.config.max_iter
+            result['tolerance'] = self.config.tolerance
+
+        if include_timeseries:
+            result['residual_history'] = self.global_timeseries.residual_history
+            result['compute_times'] = self.global_timeseries.compute_times
+            result['mpi_comm_times'] = self.global_timeseries.mpi_comm_times
+            result['halo_exchange_times'] = self.global_timeseries.halo_exchange_times
+
+        return result
+
     def print_summary(self):
         """Print a summary of the solver results."""
         print(f"Wall time = {self.global_results.wall_time:.6f} s")
