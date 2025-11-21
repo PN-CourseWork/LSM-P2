@@ -16,13 +16,12 @@ This project implements and benchmarks different parallelization strategies for 
 Overview
 --------
 
-This project unifies multiple Poisson solver implementations under a common base class architecture with a **modular composition pattern**. The goal is to enable fair performance comparisons between different decomposition strategies and MPI communication approaches while maintaining consistent bookkeeping, logging, and data management.
-
+This project unifies multiple Poisson solver implementations under a common base class architecture with a **modular composition pattern**.
 The modular design allows us to independently study:
 
 * **Kernels** (Numba vs Numpy)
 * **Decomposition strategies** (Cubic vs Sliced)
-* **Communication methods** (Custom MPI datatypes vs Numpy contiguous arrays)
+* **Communication methods** (Custom MPI datatypes vs Numpy arrays)
 
 Investigation Goals
 -------------------
@@ -52,17 +51,15 @@ Different Types of Domain Decompositions
 Different Types of Communication Methods
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Numpy-based** (``ascontiguousarray``)
+**Numpy-based** 
    Uses explicit numpy array copies to create contiguous buffers before MPI communication.
 
 **Custom MPI datatypes**
-   Uses MPI's native datatype system (``Create_contiguous``, ``Create_subarray``) for zero-copy communication.
+   Uses MPI's native datatype system for zero-copy communication.
 
 **Key Questions:**
 
 * Can we reduce communication overhead with custom MPI datatypes?
-* Is the code cleaner and more readable?
-* What's the performance trade-off?
 
 Scaling Analysis
 ^^^^^^^^^^^^^^^^
@@ -86,44 +83,5 @@ The package requires Python 3.12+ and uses ``uv`` for dependency management::
    curl -LsSf https://astral.sh/uv/install.sh | sh
    uv sync
 
-MPI Setup
-^^^^^^^^^
-
-For MPI functionality, ensure you have an MPI implementation installed::
-
-   # macOS with Homebrew
-   brew install open-mpi
-
-   # Ubuntu/Debian
-   sudo apt-get install libopenmpi-dev openmpi-bin
-
-Running Examples
-^^^^^^^^^^^^^^^^
-
-Run experiments using the main script::
-
-   # Build documentation
-   uv run python main.py --docs
-
-   # Run all plotting scripts
-   uv run python main.py --plot
-
-   # Copy plots to LaTeX report
-   uv run python main.py --copy-plots
-
-   # Clean all generated files
-   uv run python main.py --clean
-
 For the full codebase, please visit the `GitHub repository <https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2>`_.
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Experiments
-
-   example_gallery/index
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference
-
-   api_reference
