@@ -126,5 +126,4 @@ For the full codebase, please visit the `GitHub repository <https://github.com/P
    :maxdepth: 2
    :caption: API Reference
 
-   architecture
    api_reference
