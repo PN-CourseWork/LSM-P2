@@ -3,7 +3,13 @@
 
 A modular framework for studying parallel performance of 3D Poisson equation solvers using MPI domain decomposition.
 
-**Authors:** Philip Nickel, DTU
+**Authors:**
+
+* Alexander Elbæk Nielsen (s214724)
+* Junriu Li (s242643)
+* Philip Korsager Nickel (s214960)
+
+**Institution:** Technical University of Denmark, DTU Compute
 
 This project implements and benchmarks different parallelization strategies for solving the 3D Poisson equation with Dirichlet boundary conditions using iterative Jacobi methods.
 

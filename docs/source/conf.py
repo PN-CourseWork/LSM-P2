@@ -13,8 +13,8 @@ sys.path.insert(0, repo_root)
 # -- Project information -----------------------------------------------------
 
 project = "3D Poisson Solver: MPI Performance Study"
-copyright = "2025, Philip Nickel, DTU"
-author = "Philip Nickel"
+copyright = "2025, Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel, DTU Compute"
+author = "Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel"
 
 # -- General configuration ---------------------------------------------------
 
