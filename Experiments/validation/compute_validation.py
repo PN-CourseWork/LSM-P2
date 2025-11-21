@@ -50,33 +50,41 @@ max_iter = 5000
 
 spatial_results = []
 
-# Test Sequential solver (NumPy kernel only) - only on rank 0
-if rank == 0:
-    print("\nSequential (NumPy)")
-    print("=" * 60)
+# Test Sequential solver (NumPy kernel only) - only when running with single rank
+size = comm.Get_size()
+if size == 1:
+    if rank == 0:
+        print("\nSequential (NumPy)")
+        print("=" * 60)
 
     for N in problem_sizes:
-        print(f"\nTesting N={N} (h={2.0/(N-1):.6f})")
-        print("-" * 60)
+        if rank == 0:
+            print(f"\nTesting N={N} (h={2.0/(N-1):.6f})")
+            print("-" * 60)
 
         # JacobiPoisson with no decomposition = sequential
         solver = JacobiPoisson(N=N, omega=omega, max_iter=max_iter, use_numba=False)
         solver.solve()
+        solver.summary()
 
-        res = solver.global_results
-        spatial_results.append({
-            "N": N,
-            "h": 2.0 / (N - 1),
-            "method": "Sequential (NumPy)",
-            "iterations": res.iterations,
-            "converged": res.converged,
-            "final_error": res.final_error,
-            "wall_time": res.wall_time,
-        })
-        print(f"  Iterations: {res.iterations}")
-        print(f"  Converged: {res.converged}")
-        print(f"  Final error (L2): {res.final_error:.4e}")
-        print(f"  Wall time: {res.wall_time:.4f}s")
+        if rank == 0:
+            res = solver.global_results
+            spatial_results.append({
+                "N": N,
+                "h": 2.0 / (N - 1),
+                "method": "Sequential (NumPy)",
+                "iterations": res.iterations,
+                "converged": res.converged,
+                "final_error": res.final_error,
+                "wall_time": res.wall_time,
+            })
+            print(f"  Iterations: {res.iterations}")
+            print(f"  Converged: {res.converged}")
+            print(f"  Final error (L2): {res.final_error:.4e}")
+            print(f"  Wall time: {res.wall_time:.4f}s")
+elif rank == 0:
+    print("\nSkipping Sequential tests (use single rank for sequential)")
+    print("=" * 60)
 
 # Test all MPI solver combinations
 mpi_methods = [
@@ -105,6 +113,7 @@ for method_name, decomposition, communicator in mpi_methods:
             max_iter=max_iter,
         )
         solver.solve()
+        solver.summary()
 
         if rank == 0:
             res = solver.global_results

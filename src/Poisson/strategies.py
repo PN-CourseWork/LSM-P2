@@ -17,6 +17,70 @@ from mpi4py import MPI
 # ==============================================================================
 
 
+class NoDecomposition:
+    """No decomposition - entire domain on rank 0 (sequential execution).
+
+    This is a special case where rank 0 owns the entire domain and there
+    are no ghost exchanges. Used for sequential execution.
+    """
+
+    def initialize_local_arrays_distributed(self, N, rank, comm):
+        """Initialize full global arrays on rank 0, empty on others.
+
+        Parameters
+        ----------
+        N : int
+            Global grid size
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+
+        Returns
+        -------
+        u1_local, u2_local, f_local : np.ndarray
+            Full global arrays on rank 0, empty on other ranks
+        """
+        if rank == 0:
+            # Rank 0 gets the full global domain
+            h = 2.0 / (N - 1)
+
+            # Initialize full arrays
+            u1 = np.zeros((N, N, N))
+            u2 = np.zeros((N, N, N))
+            f = np.zeros((N, N, N))
+
+            # Create global coordinate arrays
+            x = np.linspace(-1, 1, N)
+            y = np.linspace(-1, 1, N)
+            z = np.linspace(-1, 1, N)
+            X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+
+            # Compute source term: f = 3π²sin(πx)sin(πy)sin(πz)
+            f[1:-1, 1:-1, 1:-1] = (3 * np.pi**2 *
+                                    np.sin(np.pi * X[1:-1, 1:-1, 1:-1]) *
+                                    np.sin(np.pi * Y[1:-1, 1:-1, 1:-1]) *
+                                    np.sin(np.pi * Z[1:-1, 1:-1, 1:-1]))
+
+            # Boundary conditions are zero (already initialized)
+            return u1, u2, f
+        else:
+            # Other ranks do nothing in sequential mode
+            return None, None, None
+
+    def extract_interior(self, u_local):
+        """Extract interior points - for sequential, strip boundary."""
+        return u_local[1:-1, 1:-1, 1:-1].copy()
+
+    def get_interior_placement(self, rank_id, N, comm):
+        """Entire interior goes to [1:-1, 1:-1, 1:-1]."""
+        return (slice(1, N-1), slice(1, N-1), slice(1, N-1))
+
+    def get_ghost_exchange_spec(self, u, rank, comm):
+        """No ghost exchanges for sequential execution."""
+        return []  # Empty list - no exchanges needed
+
+
 class SlicedDecomposition:
     """1D domain decomposition along the Z-axis.
 
@@ -100,7 +164,7 @@ class SlicedDecomposition:
         upper = rank + 1 if rank < size - 1 else None
         return lower, upper
 
-    def initialize_local_arrays_distributed(self, N, rank, size):
+    def initialize_local_arrays_distributed(self, N, rank, comm):
         """Initialize local arrays directly from global coordinates (PETSc-style).
 
         This method creates local arrays without requiring global arrays,
@@ -113,8 +177,8 @@ class SlicedDecomposition:
             Global grid size
         rank : int
             MPI rank
-        size : int
-            MPI size
+        comm : MPI.Comm
+            MPI communicator
 
         Returns
         -------
@@ -122,6 +186,7 @@ class SlicedDecomposition:
             Local arrays with ghost zones, properly initialized
         """
         # Get local domain decomposition
+        size = comm.Get_size()
         local_N, z_start, z_end = self.decompose(N, rank, size)
         local_shape = self.get_local_shape(N, local_N)
 
@@ -194,6 +259,55 @@ class SlicedDecomposition:
         size = comm.Get_size()
         local_N, z_start, z_end = self.decompose(N, rank_id, size)
         return (slice(z_start, z_end), slice(0, N), slice(0, N))
+
+    def get_ghost_exchange_spec(self, u, rank, comm):
+        """Get specification for ghost zone exchanges.
+
+        Parameters
+        ----------
+        u : np.ndarray
+            Local array with ghost zones
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+
+        Returns
+        -------
+        exchanges : list of dict
+            Each dict specifies one exchange with keys:
+            - 'neighbor': neighbor rank (or None)
+            - 'send_slice': tuple of slices for data to send
+            - 'recv_slice': tuple of slices for where to receive
+            - 'tag_offset': integer tag offset for this exchange
+        """
+        size = comm.Get_size()
+        lower, upper = self.get_neighbors(rank, size)
+
+        exchanges = []
+
+        # Lower neighbor exchange (send bottom, receive top ghost)
+        if lower is not None:
+            # Tag is based on min(rank, neighbor) to ensure both sides use same tag
+            tag = min(rank, lower)
+            exchanges.append({
+                'neighbor': lower,
+                'send_slice': (slice(1, 2), slice(None), slice(None)),
+                'recv_slice': (slice(0, 1), slice(None), slice(None)),
+                'tag': tag
+            })
+
+        # Upper neighbor exchange (send top, receive bottom ghost)
+        if upper is not None:
+            tag = min(rank, upper)
+            exchanges.append({
+                'neighbor': upper,
+                'send_slice': (slice(-2, -1), slice(None), slice(None)),
+                'recv_slice': (slice(-1, None), slice(None), slice(None)),
+                'tag': tag
+            })
+
+        return exchanges
 
 
 class CubicDecomposition:
@@ -314,6 +428,60 @@ class CubicDecomposition:
             neighbors[name] = dest if dest != MPI.PROC_NULL else None
 
         return neighbors
+
+    def get_ghost_exchange_spec(self, u, rank, comm):
+        """Get specification for ghost zone exchanges.
+
+        Parameters
+        ----------
+        u : np.ndarray
+            Local array with ghost zones
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+
+        Returns
+        -------
+        exchanges : list of dict
+            Each dict specifies one exchange with keys:
+            - 'neighbor': neighbor rank (or None)
+            - 'send_slice': tuple of slices for data to send
+            - 'recv_slice': tuple of slices for where to receive
+            - 'tag_offset': integer tag offset for this exchange
+        """
+        neighbors = self.get_neighbors(rank, comm)
+
+        # Define exchanges for all 6 faces
+        face_specs = [
+            ('x_lower', (slice(1, 2), slice(1, -1), slice(1, -1)),
+                       (slice(0, 1), slice(1, -1), slice(1, -1))),
+            ('x_upper', (slice(-2, -1), slice(1, -1), slice(1, -1)),
+                       (slice(-1, None), slice(1, -1), slice(1, -1))),
+            ('y_lower', (slice(1, -1), slice(1, 2), slice(1, -1)),
+                       (slice(1, -1), slice(0, 1), slice(1, -1))),
+            ('y_upper', (slice(1, -1), slice(-2, -1), slice(1, -1)),
+                       (slice(1, -1), slice(-1, None), slice(1, -1))),
+            ('z_lower', (slice(1, -1), slice(1, -1), slice(1, 2)),
+                       (slice(1, -1), slice(1, -1), slice(0, 1))),
+            ('z_upper', (slice(1, -1), slice(1, -1), slice(-2, -1)),
+                       (slice(1, -1), slice(1, -1), slice(-1, None))),
+        ]
+
+        exchanges = []
+        for face_name, send_slice, recv_slice in face_specs:
+            neighbor = neighbors[face_name]
+            if neighbor is not None:
+                # Use min(rank, neighbor) to ensure matching tags
+                tag = min(rank, neighbor)
+                exchanges.append({
+                    'neighbor': neighbor,
+                    'send_slice': send_slice,
+                    'recv_slice': recv_slice,
+                    'tag': tag
+                })
+
+        return exchanges
 
     def initialize_local_arrays_distributed(self, N, rank, comm):
         """Initialize local arrays directly from global coordinates (PETSc-style).
@@ -457,6 +625,53 @@ class CustomMPICommunicator:
     def __init__(self):
         self.datatypes = {}
 
+    def exchange_ghosts(self, u, decomposition, rank, comm):
+        """Generic ghost exchange using decomposition's exchange specification.
+
+        Parameters
+        ----------
+        u : np.ndarray
+            Local array with ghost zones (modified in-place)
+        decomposition : DecompositionStrategy
+            Decomposition strategy providing exchange spec
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+        """
+        # Get exchange specification from decomposition
+        exchanges = decomposition.get_ghost_exchange_spec(u, rank, comm)
+
+        # Prepare all send/receive buffers
+        send_bufs = []
+        recv_bufs = []
+
+        for exchange in exchanges:
+            send_slice = exchange['send_slice']
+            recv_slice = exchange['recv_slice']
+
+            send_bufs.append(u[send_slice].copy())
+            recv_bufs.append(np.empty_like(u[recv_slice]))
+
+        # Post all receives first
+        recv_reqs = []
+        for i, exchange in enumerate(exchanges):
+            req = comm.Irecv(recv_bufs[i], source=exchange['neighbor'], tag=exchange['tag'])
+            recv_reqs.append(req)
+
+        # Post all sends
+        send_reqs = []
+        for i, exchange in enumerate(exchanges):
+            req = comm.Isend(send_bufs[i], dest=exchange['neighbor'], tag=exchange['tag'])
+            send_reqs.append(req)
+
+        # Wait for all communications to complete
+        MPI.Request.Waitall(recv_reqs + send_reqs)
+
+        # Copy received data into ghost zones
+        for i, exchange in enumerate(exchanges):
+            u[exchange['recv_slice']] = recv_bufs[i]
+
     def _create_plane_datatype(self, N):
         """Create MPI datatype for 2D plane (sliced decomposition)."""
         key = ('plane', N)
@@ -576,6 +791,54 @@ class NumpyCommunicator:
     Expected Interface:
     - exchange_ghosts(u, decomposition, rank, comm) -> None (in-place)
     """
+
+    def exchange_ghosts(self, u, decomposition, rank, comm):
+        """Generic ghost exchange using decomposition's exchange specification.
+
+        Parameters
+        ----------
+        u : np.ndarray
+            Local array with ghost zones (modified in-place)
+        decomposition : DecompositionStrategy
+            Decomposition strategy providing exchange spec
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+        """
+        # Get exchange specification from decomposition
+        exchanges = decomposition.get_ghost_exchange_spec(u, rank, comm)
+
+        # Prepare all send/receive buffers
+        send_bufs = []
+        recv_bufs = []
+
+        for exchange in exchanges:
+            send_slice = exchange['send_slice']
+            recv_slice = exchange['recv_slice']
+
+            # Ensure contiguous data for send
+            send_bufs.append(np.ascontiguousarray(u[send_slice]))
+            recv_bufs.append(np.empty_like(u[recv_slice]))
+
+        # Post all receives first
+        recv_reqs = []
+        for i, exchange in enumerate(exchanges):
+            req = comm.Irecv(recv_bufs[i], source=exchange['neighbor'], tag=exchange['tag'])
+            recv_reqs.append(req)
+
+        # Post all sends
+        send_reqs = []
+        for i, exchange in enumerate(exchanges):
+            req = comm.Isend(send_bufs[i], dest=exchange['neighbor'], tag=exchange['tag'])
+            send_reqs.append(req)
+
+        # Wait for all communications to complete
+        MPI.Request.Waitall(recv_reqs + send_reqs)
+
+        # Copy received data into ghost zones
+        for i, exchange in enumerate(exchanges):
+            u[exchange['recv_slice']] = recv_bufs[i]
 
     def exchange_ghosts_sliced(self, u, decomposition, rank, size, comm):
         """Exchange ghost planes using NumPy arrays.

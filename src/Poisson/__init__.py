@@ -5,6 +5,7 @@ from .datastructures import GlobalConfig, GlobalFields, LocalFields, GlobalResul
 from .kernels import jacobi_step_numpy, jacobi_step_numba
 from .jacobi import JacobiPoisson
 from .strategies import (
+    NoDecomposition,
     SlicedDecomposition,
     CubicDecomposition,
     CustomMPICommunicator,
@@ -28,6 +29,7 @@ __all__ = [
     # Solver
     "JacobiPoisson",
     # Strategies
+    "NoDecomposition",
     "SlicedDecomposition",
     "CubicDecomposition",
     "CustomMPICommunicator",

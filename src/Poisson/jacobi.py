@@ -9,8 +9,9 @@ import socket
 import numpy as np
 from mpi4py import MPI
 from .base import PoissonSolver
-from .datastructures import LocalResults, LocalFields
+from .datastructures import LocalResults, LocalFields, sinusoidal_exact_solution
 from .strategies import (
+    NoDecomposition,
     SlicedDecomposition,
     CubicDecomposition,
     CustomMPICommunicator,
@@ -57,18 +58,16 @@ class JacobiPoisson(PoissonSolver):
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
 
-        # Determine execution mode
+        # Instantiate decomposition strategy (NoDecomposition for sequential)
         if decomposition is None:
-            # Sequential mode
-            self.is_distributed = False
+            # Sequential mode: entire domain on rank 0
+            self.decomposition = NoDecomposition()
+            # Use NumpyCommunicator (will handle empty exchange specs)
+            self.communicator = NumpyCommunicator()
             kernel_name = "Numba" if self.config.use_numba else "NumPy"
             self.config.method = f"Sequential ({kernel_name})"
-            self.decomposition = None
-            self.communicator = None
         else:
             # Distributed mode
-            self.is_distributed = True
-
             if communicator is None:
                 raise ValueError("communicator must be specified when using decomposition")
 
@@ -104,44 +103,34 @@ class JacobiPoisson(PoissonSolver):
         # Initialize local fields
         self.local_fields = LocalFields()
 
+        # Initialize local arrays using decomposition strategy
+        N = self.config.N
+        u1_local, u2_local, f_local = self.decomposition.initialize_local_arrays_distributed(
+            N, self.rank, self.comm
+        )
+
+        # Store in local_fields (None for non-root ranks in sequential mode)
+        self.local_fields.u1 = u1_local
+        self.local_fields.u2 = u2_local
+        self.local_fields.f = f_local
+
     def method_solve(self):
         """Solve using Jacobi iteration.
 
-        For sequential mode (decomposition=None), rank 0 owns the entire domain.
-        For distributed mode, domain is decomposed across all ranks.
+        Uses decomposition strategy to determine domain ownership.
+        For NoDecomposition, rank 0 owns entire domain and others do nothing.
+        For other decompositions, domain is distributed across all ranks.
         """
-        # Only rank 0 runs in sequential mode
-        if not self.is_distributed and self.rank != 0:
+        # NoDecomposition returns None for non-root ranks - they should exit
+        if self.local_fields.u1 is None:
             return
 
-        # Broadcast N to all ranks (in distributed mode)
+        # Get problem size and local arrays
         N = self.config.N
-        if self.is_distributed:
-            N = self.comm.bcast(N, root=0)
         h = 2.0 / (N - 1)
-
-        # Initialize local arrays
-        if self.is_distributed:
-            # Decomposed domain initialization
-            if isinstance(self.decomposition, CubicDecomposition):
-                u1_local, u2_local, f_local = self.decomposition.initialize_local_arrays_distributed(
-                    N, self.rank, self.comm
-                )
-            elif isinstance(self.decomposition, SlicedDecomposition):
-                u1_local, u2_local, f_local = self.decomposition.initialize_local_arrays_distributed(
-                    N, self.rank, self.size
-                )
-            else:
-                raise ValueError(f"Unknown decomposition strategy: {type(self.decomposition)}")
-        else:
-            # Sequential: rank 0 owns entire domain
-            u1_local = self.global_fields.u1
-            u2_local = self.global_fields.u2
-            f_local = self.global_fields.f
-
-        # Store in local_fields
-        self.local_fields.u1 = u1_local
-        self.local_fields.u2 = u2_local
+        u1_local = self.local_fields.u1
+        u2_local = self.local_fields.u2
+        f_local = self.local_fields.f
 
         # Main iteration loop
         for i in range(self.config.max_iter):
@@ -150,11 +139,11 @@ class JacobiPoisson(PoissonSolver):
             else:
                 u_local, uold_local = u1_local, u2_local
 
-            # Exchange ghost zones (only in distributed mode)
-            if self.is_distributed:
-                t_comm_start = MPI.Wtime()
-                self._exchange_ghosts(uold_local)
-                t_comm_end = MPI.Wtime()
+            # Exchange ghost zones (decomposition provides exchange spec)
+            t_comm_start = MPI.Wtime()
+            self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm)
+            t_comm_end = MPI.Wtime()
+            if t_comm_end - t_comm_start > 0:
                 self.global_timeseries.halo_exchange_times.append(t_comm_end - t_comm_start)
 
             # Jacobi step on local domain
@@ -163,17 +152,13 @@ class JacobiPoisson(PoissonSolver):
             t_comp_end = MPI.Wtime()
             self.global_timeseries.compute_times.append(t_comp_end - t_comp_start)
 
-            # Compute global residual
-            if self.is_distributed:
-                # Reduction across all ranks
-                t_comm_start = MPI.Wtime()
-                global_residual = self.comm.allreduce(local_residual**2, op=MPI.SUM)
-                global_residual = np.sqrt(global_residual)
-                t_comm_end = MPI.Wtime()
+            # Compute global residual (reduction across active ranks)
+            t_comm_start = MPI.Wtime()
+            global_residual = self.comm.allreduce(local_residual**2, op=MPI.SUM)
+            global_residual = np.sqrt(global_residual)
+            t_comm_end = MPI.Wtime()
+            if t_comm_end - t_comm_start > 0:
                 self.global_timeseries.mpi_comm_times.append(t_comm_end - t_comm_start)
-            else:
-                # Sequential: local residual is global residual
-                global_residual = local_residual
 
             # Store residual history on rank 0
             if self.rank == 0:
@@ -189,52 +174,56 @@ class JacobiPoisson(PoissonSolver):
             if self.rank == 0:
                 self.global_results.iterations = self.config.max_iter
 
-        # Gather solution to rank 0 (only in distributed mode)
-        if self.is_distributed:
-            u_global = self._gather_solution(u_local, N)
-        else:
-            # Sequential: u_local is already u_global
-            u_global = u_local
+        # Gather solution to rank 0 using decomposition strategy
+        u_global = self._gather_solution(u_local, N)
 
-        # Compute error on rank 0
-        if self.rank == 0:
-            # Get exact solution
-            if self.is_distributed:
-                from .datastructures import sinusoidal_exact_solution
-                u_exact = sinusoidal_exact_solution(N)
+        # Store final solution in global_fields on rank 0
+        if self.rank == 0 and hasattr(self, 'global_fields'):
+            if self.global_results.iterations % 2 == 0:
+                self.global_fields.u1[:] = u_global
             else:
-                u_exact = self.global_fields.u_exact
-
-            error_diff = u_global - u_exact
-            self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
-
-            # Store final solution in global_fields (if they exist)
-            if hasattr(self, 'global_fields'):
-                if self.global_results.iterations % 2 == 0:
-                    self.global_fields.u1[:] = u_global
-                else:
-                    self.global_fields.u2[:] = u_global
+                self.global_fields.u2[:] = u_global
 
         # Build per-rank results
         self.local_results.mpi_rank = self.rank
         self.local_results.hostname = socket.gethostname()
         self.local_results.compute_time = sum(self.global_timeseries.compute_times)
-        if self.is_distributed:
-            self.local_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
-            self.local_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
+        self.local_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
+        self.local_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
 
-    def _exchange_ghosts(self, u_local):
-        """Exchange ghost zones using the communicator strategy."""
-        if isinstance(self.decomposition, SlicedDecomposition):
-            self.communicator.exchange_ghosts_sliced(
-                u_local, self.decomposition, self.rank, self.size, self.comm
-            )
-        elif isinstance(self.decomposition, CubicDecomposition):
-            self.communicator.exchange_ghosts_cubic(
-                u_local, self.decomposition, self.rank, self.comm
-            )
+    def summary(self, exact_solution=None):
+        """Compute summary statistics and error against exact solution.
+
+        Parameters
+        ----------
+        exact_solution : callable or np.ndarray, optional
+            Either a function that takes N and returns the exact solution,
+            or the exact solution array itself. If None, uses the default
+            sinusoidal exact solution.
+        """
+        if self.rank != 0:
+            return
+
+        N = self.config.N
+        h = 2.0 / (N - 1)
+
+        # Get the current solution from global_fields
+        if self.global_results.iterations % 2 == 0:
+            u_computed = self.global_fields.u1
         else:
-            raise ValueError(f"Unknown decomposition strategy: {type(self.decomposition)}")
+            u_computed = self.global_fields.u2
+
+        # Get exact solution
+        if exact_solution is None:
+            u_exact = sinusoidal_exact_solution(N)
+        elif callable(exact_solution):
+            u_exact = exact_solution(N)
+        else:
+            u_exact = exact_solution
+
+        # Compute L2 error
+        error_diff = u_computed - u_exact
+        self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
 
     def _gather_solution(self, u_local, N):
         """Gather local solutions to global array on rank 0.
