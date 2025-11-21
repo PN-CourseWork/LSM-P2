@@ -65,6 +65,7 @@ sphinx_gallery_conf = {
     "examples_dirs": "../../Experiments",  # Path to example scripts
     "gallery_dirs": "example_gallery",  # Output directory for gallery
     "filename_pattern": "/plot_",  # Pattern to match which scripts to execute
+    "ignore_pattern": r"/_",  # Ignore files starting with underscore
     "download_all_examples": False,  # No download buttons
     "remove_config_comments": True,  # Clean up notebook outputs
     "abort_on_example_error": False,  # Continue if examples fail

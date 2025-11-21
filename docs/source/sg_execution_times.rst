@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.408** total execution time for 18 files **from all galleries**:
+**00:03.606** total execution time for 18 files **from all galleries**:
 
 .. container::
 
@@ -33,40 +33,40 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_example_gallery_communication_plot_08_numpy_arrays.py` (``../../Experiments/communication/plot_08_numpy_arrays.py``)
-     - 00:01.343
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_baseline_plot_01_sequential_baseline.py` (``../../Experiments/baseline/plot_01_sequential_baseline.py``)
-     - 00:00.146
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_11_weak_scaling.py` (``../../Experiments/scaling/plot_11_weak_scaling.py``)
-     - 00:00.145
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_10_strong_scaling.py` (``../../Experiments/scaling/plot_10_strong_scaling.py``)
-     - 00:00.130
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_12_parallel_efficiency.py` (``../../Experiments/scaling/plot_12_parallel_efficiency.py``)
-     - 00:00.125
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_06_sliced_vs_cubic_comparison.py` (``../../Experiments/decomposition/plot_06_sliced_vs_cubic_comparison.py``)
-     - 00:00.115
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_05_cubic_decomposition.py` (``../../Experiments/decomposition/plot_05_cubic_decomposition.py``)
-     - 00:00.085
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_04_sliced_decomposition.py` (``../../Experiments/decomposition/plot_04_sliced_decomposition.py``)
-     - 00:00.084
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_kernels_plot_03_thread_scaling.py` (``../../Experiments/kernels/plot_03_thread_scaling.py``)
-     - 00:00.066
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_communication_plot_07_custom_mpi_datatypes.py` (``../../Experiments/communication/plot_07_custom_mpi_datatypes.py``)
-     - 00:00.062
+     - 00:02.116
      - 0.0
    * - :ref:`sphx_glr_example_gallery_kernels_plot_02_numba_vs_numpy.py` (``../../Experiments/kernels/plot_02_numba_vs_numpy.py``)
-     - 00:00.059
+     - 00:00.284
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_scaling_plot_12_parallel_efficiency.py` (``../../Experiments/scaling/plot_12_parallel_efficiency.py``)
+     - 00:00.185
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_scaling_plot_10_strong_scaling.py` (``../../Experiments/scaling/plot_10_strong_scaling.py``)
+     - 00:00.175
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_baseline_plot_01_sequential_baseline.py` (``../../Experiments/baseline/plot_01_sequential_baseline.py``)
+     - 00:00.169
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_scaling_plot_11_weak_scaling.py` (``../../Experiments/scaling/plot_11_weak_scaling.py``)
+     - 00:00.167
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_decomposition_plot_06_sliced_vs_cubic_comparison.py` (``../../Experiments/decomposition/plot_06_sliced_vs_cubic_comparison.py``)
+     - 00:00.107
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_decomposition_plot_05_cubic_decomposition.py` (``../../Experiments/decomposition/plot_05_cubic_decomposition.py``)
+     - 00:00.101
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_communication_plot_07_custom_mpi_datatypes.py` (``../../Experiments/communication/plot_07_custom_mpi_datatypes.py``)
+     - 00:00.093
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_kernels_plot_03_thread_scaling.py` (``../../Experiments/kernels/plot_03_thread_scaling.py``)
+     - 00:00.092
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_decomposition_plot_04_sliced_decomposition.py` (``../../Experiments/decomposition/plot_04_sliced_decomposition.py``)
+     - 00:00.085
      - 0.0
    * - :ref:`sphx_glr_example_gallery_communication_plot_09_communication_overhead.py` (``../../Experiments/communication/plot_09_communication_overhead.py``)
-     - 00:00.049
+     - 00:00.033
      - 0.0
    * - :ref:`sphx_glr_example_gallery_baseline_compute_sequential.py` (``../../Experiments/baseline/compute_sequential.py``)
      - 00:00.000

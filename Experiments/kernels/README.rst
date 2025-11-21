@@ -1,11 +1,4 @@
 Kernel Benchmarks
 =================
 
-Compare Numba JIT-compiled kernels vs pure NumPy implementations.
-
-Investigation Goals
--------------------
-
-1. **Numba vs Numpy Performance**: Measure speedup from JIT compilation
-2. **Thread Scaling**: Test performance with different thread counts
-3. **Problem Size Scaling**: How does each kernel scale with N?
+Compare Numba JIT-compiled kernels vs pure NumPy implementations. These experiments measure speedup from JIT compilation, test performance with different thread counts, and analyze how each kernel implementation scales with problem size.

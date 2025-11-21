@@ -1,25 +1,4 @@
 Communication Methods
 =====================
 
-Compare different MPI communication strategies for ghost exchange.
-
-Investigation Goals
--------------------
-
-1. **Custom MPI Datatypes vs NumPy Arrays**: Zero-copy vs explicit buffers
-2. **Communication Overhead**: Measure datatype creation and transfer costs
-3. **Code Clarity**: Evaluate readability and maintainability
-4. **Performance Trade-offs**: When does each method excel?
-
-Communication Strategies
-------------------------
-
-**Custom MPI Datatypes**
-   Uses ``MPI.Create_contiguous()``, ``MPI.Create_subarray()``.
-   Zero-copy communication (no temporary buffers).
-   More complex code, but potentially faster.
-
-**NumPy Arrays**
-   Uses ``np.ascontiguousarray()`` for explicit copies.
-   Simpler, more Pythonic code.
-   Additional memory overhead.
+Compare custom MPI datatypes vs NumPy array communication for ghost exchange. Custom MPI datatypes use zero-copy communication with ``MPI.Create_contiguous()`` and ``MPI.Create_subarray()``, offering potentially better performance with more complex code. NumPy arrays use ``np.ascontiguousarray()`` for explicit buffer copies, providing simpler, more Pythonic code with additional memory overhead. These experiments measure datatype creation costs, transfer overhead, and performance trade-offs.

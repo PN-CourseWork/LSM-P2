@@ -85,3 +85,14 @@ The package requires Python 3.12+ and uses ``uv`` for dependency management::
 
 For the full codebase, please visit the `GitHub repository <https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2>`_.
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Experiments
+
+   example_gallery/index
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API Reference
+
+   api_reference
