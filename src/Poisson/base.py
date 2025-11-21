@@ -45,10 +45,9 @@ class PoissonSolver:
         pass 
    
     def solve(self):
-        # start wall timings 
-        if self.rank == 0:
-            time_start = MPI.Wtime()
-        
+        # start wall timings
+        time_start = MPI.Wtime() if self.rank == 0 else None
+
         # run method specific solver
         self.method_solve()
 
