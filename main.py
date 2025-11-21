@@ -9,32 +9,8 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def get_repo_root() -> Path:
-    """Get repository root directory.
-
-    Returns the repository root by detecting the presence of pyproject.toml.
-    Works from any subdirectory of the repository.
-
-    Returns
-    -------
-    Path
-        Absolute path to the repository root
-
-    """
-    # Start from this script's location
-    current = Path(__file__).resolve().parent
-
-    # Walk up until we find pyproject.toml (marks repo root)
-    for parent in [current] + list(current.parents):
-        if (parent / "pyproject.toml").exists():
-            return parent
-
-    # Fallback: assume script is in repo root
-    return current
-
-
-# Get repo root once at module level
-REPO_ROOT = get_repo_root()
+# Repository root (main.py is at repo root)
+REPO_ROOT = Path(__file__).resolve().parent
 
 
 def discover_plot_scripts():
@@ -155,10 +131,6 @@ def build_docs():
 
     print("\nBuilding Sphinx documentation...")
 
-    if not source_dir.exists():
-        print(f"  Error: Documentation source directory not found: {source_dir}")
-        return False
-
     try:
         result = subprocess.run(
             [
@@ -201,101 +173,69 @@ def clean_all():
     """Clean all generated files and caches."""
     print("\nCleaning all generated files and caches...")
 
-    cleaned = []
-    failed = []
+    def remove_item(path):
+        """Remove file or directory, return (success, error)."""
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
-    # List of directories to clean
-    clean_targets = [
-        REPO_ROOT / "docs" / "build",
-        REPO_ROOT / "docs" / "source" / "example_gallery",
-        REPO_ROOT / "docs" / "source" / "generated",
-        REPO_ROOT / "docs" / "source" / "gen_modules",
-        REPO_ROOT / "plots",
-        REPO_ROOT / "build",
-        REPO_ROOT / "dist",
-        REPO_ROOT / ".pytest_cache",
-        REPO_ROOT / ".ruff_cache",
-        REPO_ROOT / ".mypy_cache",
+    cleaned, failed = 0, 0
+
+    # Directories to clean
+    dirs = [
+        "docs/build", "docs/source/example_gallery", "docs/source/generated",
+        "docs/source/gen_modules", "plots", "build", "dist",
+        ".pytest_cache", ".ruff_cache", ".mypy_cache",
     ]
+    for d in dirs:
+        path = REPO_ROOT / d
+        if path.exists():
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    # Clean directories
-    for target_path in clean_targets:
-        if target_path.exists():
-            try:
-                shutil.rmtree(target_path)
-                cleaned.append(str(target_path.relative_to(REPO_ROOT)))
-            except Exception as e:
-                failed.append(f"{target_path.relative_to(REPO_ROOT)}: {e}")
+    # Specific files to clean
+    files = ["docs/source/sg_execution_times.rst"]
+    for f in files:
+        path = REPO_ROOT / f
+        if path.exists():
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    # Clean specific files
-    clean_files = [
-        REPO_ROOT / "docs" / "source" / "sg_execution_times.rst",
-    ]
+    # Recursive patterns to clean
+    patterns = ["__pycache__", "*.pyc", ".DS_Store"]
+    for pattern in patterns:
+        for path in REPO_ROOT.rglob(pattern):
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    for target_file in clean_files:
-        if target_file.exists():
-            try:
-                target_file.unlink()
-                cleaned.append(str(target_file.relative_to(REPO_ROOT)))
-            except Exception as e:
-                failed.append(f"{target_file.relative_to(REPO_ROOT)}: {e}")
-
-    # Clean __pycache__ directories
-    for pycache in REPO_ROOT.rglob("__pycache__"):
-        try:
-            shutil.rmtree(pycache)
-            cleaned.append(str(pycache.relative_to(REPO_ROOT)))
-        except Exception as e:
-            failed.append(f"{pycache.relative_to(REPO_ROOT)}: {e}")
-
-    # Clean .pyc files
-    for pyc in REPO_ROOT.rglob("*.pyc"):
-        try:
-            pyc.unlink()
-            cleaned.append(str(pyc.relative_to(REPO_ROOT)))
-        except Exception as e:
-            failed.append(f"{pyc.relative_to(REPO_ROOT)}: {e}")
-
-    # Clean .DS_Store files (macOS metadata)
-    for ds_store in REPO_ROOT.rglob(".DS_Store"):
-        try:
-            ds_store.unlink()
-            cleaned.append(str(ds_store.relative_to(REPO_ROOT)))
-        except Exception as e:
-            failed.append(f"{ds_store.relative_to(REPO_ROOT)}: {e}")
-
-    # Clean data directory (but keep README.md)
+    # Clean data/ directory contents (preserve README.md and .gitkeep)
     data_dir = REPO_ROOT / "data"
     if data_dir.exists():
         for item in data_dir.iterdir():
-            if item.name != "README.md" and item.name != ".gitkeep":
-                try:
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-                    cleaned.append(str(item.relative_to(REPO_ROOT)))
-                except Exception as e:
-                    failed.append(f"{item.relative_to(REPO_ROOT)}: {e}")
+            if item.name not in {"README.md", ".gitkeep"}:
+                success, _ = remove_item(item)
+                cleaned += success
+                failed += not success
 
     # Clean Experiments/*/output directories
-    experiments_dir = REPO_ROOT / "Experiments"
-    if experiments_dir.exists():
-        for output_dir in experiments_dir.glob("*/output"):
-            if output_dir.exists():
-                try:
-                    shutil.rmtree(output_dir)
-                    cleaned.append(str(output_dir.relative_to(REPO_ROOT)))
-                except Exception as e:
-                    failed.append(f"{output_dir.relative_to(REPO_ROOT)}: {e}")
+    for output_dir in (REPO_ROOT / "Experiments").glob("*/output"):
+        success, _ = remove_item(output_dir)
+        cleaned += success
+        failed += not success
 
     # Print results
     if cleaned:
-        print(f"  ✓ Cleaned {len(cleaned)} items")
+        print(f"  ✓ Cleaned {cleaned} items")
     if failed:
-        print(f"  ✗ Failed to clean {len(failed)} items:")
-        for fail in failed[:5]:  # Show first 5 failures
-            print(f"    - {fail}")
+        print(f"  ✗ Failed to clean {failed} items")
     if not cleaned and not failed:
         print("  Nothing to clean")
     print()
