@@ -5,12 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "poisson_solver"
 version = "0.1.0"
-description = "MPI Poisson 3d solver"
+description = "MPI Poisson Solver"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "", email = "your.email@example.com" }
+    { name = "Alexander Elbæk Nielsen" },
+    { name = "Junriu Li" },
+    { name = "Philip Korsager Nickel" }
 ]
 
 # All dependencies (runtime, docs, and dev)

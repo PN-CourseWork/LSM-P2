@@ -1,141 +1,38 @@
-# University Project Template
+# MPI Poisson Solver
 
-A template repository for numerical computing projects with documentation, examples, and best practices.
+A modular framework for studying parallel performance of 3D Poisson equation solvers using MPI domain decomposition.
 
-## Features
-
-- **Package structure**: Clean `src/` layout with numerical utilities
-- **Documentation**: Sphinx with ReadTheDocs integration
-- **Examples**: Automated gallery generation with sphinx-gallery
-- **Testing**: pytest with coverage reporting
-- **Code quality**: Ruff for linting and formatting
-- **Dependency management**: Compatible with uv or pip
-
-## Quick Start
-
-### 1. Clone and customize
-
-```bash
-git clone <your-repo-url>
-cd <your-repo-name>
-```
-
-### 2. Update project metadata
-
-Edit `pyproject.toml`:
-- Change `name` from "numutils" to your project name
-- Update `authors` with your information
-- Modify `description` as needed
-
-### 3. Install dependencies
-
-Using uv (recommended):
-```bash
-uv sync
-```
-
-```
-
-### 4. Run example
-
-```bash
-python Examples/example_integration/compute.py
-python Examples/example_integration/plot_integration.py
-```
-
-## Project Structure
-
-```
-.
-├── src/numutils/           # Main package (rename as needed)
-│   ├── integration.py      # Numerical integration methods
-│   ├── linalg.py          # Linear algebra utilities
-│   ├── utils/             # Helper utilities
-│   └── styles/            # Custom matplotlib styles
-├── Examples/              # Example scripts (auto-documented)
-│   └── example_integration/
-├── docs/                  # Sphinx documentation
-├── data/                  # Generated data files (gitignored)
-└── pyproject.toml        # Project configuration
-```
+**Authors:** Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel
+**Institution:** Technical University of Denmark, DTU Compute
 
 ## Documentation
 
-Build documentation locally:
+📖 **[View Full Documentation](https://lsm-p2.readthedocs.io/)** 
+For local documentation, see [Building Documentation](#building-documentation) below.
 
-```bash
-cd docs
-make html
-```
+## Quick Start
 
-View at `docs/build/html/index.html`
+### Installation
 
-### ReadTheDocs
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
-To enable ReadTheDocs:
-1. Update `.readthedocs.yaml` with your project name
-2. Connect your repository at https://readthedocs.org
-3. Update the documentation URL in this README
-
-## Adding Examples
-
-1. Create a new directory in `Examples/`:
+1. **Install uv** (if not already installed):
    ```bash
-   mkdir Examples/my_example
+   curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-2. Add scripts (automatically discovered):
-   - `compute.py` - Data generation
-   - `plot_*.py` - Visualization
+2. **Install dependencies**:
+   ```bash
+   uv sync
+   ```
+## Building Documentation
 
-3. Add a `README.rst` with description
-
-4. Rebuild docs to see it in the gallery
-
-## Development
-
-### Running tests
+Build the documentation locally:
 
 ```bash
-pytest
+uv run python main.py --build-docs
 ```
 
-### Code quality
+The documentation will be generated at `docs/build/html/index.html` and opened in your browser.
 
-```bash
-ruff check .
-ruff format .
-```
 
-### Type checking
-
-```bash
-# Add mypy if needed
-pip install mypy
-mypy src/
-```
-
-## Customization Tips
-
-### Rename the package
-
-1. Rename `src/numutils/` to `src/yourpackage/`
-2. Update imports in example scripts
-3. Update `pyproject.toml` package name
-4. Update `docs/source/conf.py` if needed
-
-### Change matplotlib style
-
-Edit `src/utils/utils.mplstyle` to customize the plotting style. The style is automatically applied when you import `utils.plotting`, along with the seaborn style.
-
-### Modify documentation theme
-
-Edit `docs/source/conf.py` and change `html_theme` or theme options.
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Contributing
-
-This is a template repository. Fork it and adapt it to your needs!

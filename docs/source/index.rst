@@ -1,4 +1,4 @@
-3D Poisson Solver: MPI Performance Study
+MPI Poisson Solver
 =========================================
 
 A modular framework for studying parallel performance of 3D Poisson equation solvers using MPI domain decomposition.

@@ -12,7 +12,7 @@ sys.path.insert(0, repo_root)
 
 # -- Project information -----------------------------------------------------
 
-project = "3D Poisson Solver: MPI Performance Study"
+project = "MPI 3D Poisson Solver"
 copyright = "2025, Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel, DTU Compute"
 author = "Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel"
 
@@ -98,7 +98,7 @@ intersphinx_mapping = {
 # -- HTML output options -----------------------------------------------------
 
 html_theme = "pydata_sphinx_theme"
-html_title = "3D Poisson Solver: MPI Performance Study"
+html_title = "MPI Poisson Solver"
 html_static_path = ["_static"]
 html_show_sourcelink = False  # Hide "Show Source" link
 html_css_files = ["custom.css"]  # Custom CSS for hiding download buttons
