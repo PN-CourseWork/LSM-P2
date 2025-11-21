@@ -1,6 +1,7 @@
 # Generated figures
 figures/
 # Report 
+.playwright-mcp
 
 docs/reports/TexReport/
 

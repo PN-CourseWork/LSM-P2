@@ -1,5 +1,5 @@
-Example Scripts
-===============
+Experiments
+===========
 
-Example scripts demonstrating the use of the numerical utilities package. 
+Computational experiments for benchmarking MPI Poisson solvers. 
 

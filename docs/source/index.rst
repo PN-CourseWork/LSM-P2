@@ -24,12 +24,107 @@ The modular design allows us to independently study:
 * **Decomposition strategies** (Cubic vs Sliced)
 * **Communication methods** (Custom MPI datatypes vs Numpy contiguous arrays)
 
-.. include:: investigation_goals.rst
+Investigation Goals
+-------------------
 
-.. include:: architecture.rst
+Benchmark Numba vs Numpy Kernels
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. include:: experiments.rst
+* Different number of threads
+* Performance comparison for same problem size
+* Scalability with problem size N
 
-.. include:: installation.rst
+Different Types of Domain Decompositions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+**Cubic** (3D Cartesian decomposition)
+   3D domain decomposition that distributes the grid across all three spatial dimensions.
 
+**Sliced** (1D decomposition along Z-axis)
+   1D domain decomposition that splits only along the Z-axis, with each rank owning horizontal slices.
+
+**Key Questions:**
+
+* How does communication and computation scale with problem size?
+* Plot communication and computation timings as a function of N (fixed number of ranks)
+* Which decomposition is more efficient for different problem sizes?
+
+Different Types of Communication Methods
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Numpy-based** (``ascontiguousarray``)
+   Uses explicit numpy array copies to create contiguous buffers before MPI communication.
+
+**Custom MPI datatypes**
+   Uses MPI's native datatype system (``Create_contiguous``, ``Create_subarray``) for zero-copy communication.
+
+**Key Questions:**
+
+* Can we reduce communication overhead with custom MPI datatypes?
+* Is the code cleaner and more readable?
+* What's the performance trade-off?
+
+Scaling Analysis
+^^^^^^^^^^^^^^^^
+
+**Strong Scaling**
+   Fixed problem size with increasing number of ranks. Measures parallel speedup.
+
+**Weak Scaling**
+   Problem size grows proportionally with ranks (constant work per rank). Measures parallel efficiency.
+
+**Key Questions:**
+
+* Can we relate decomposition/communication results to scaling behavior?
+* Where are the bottlenecks?
+
+Installation
+------------
+
+The package requires Python 3.12+ and uses ``uv`` for dependency management::
+
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   uv sync
+
+MPI Setup
+^^^^^^^^^
+
+For MPI functionality, ensure you have an MPI implementation installed::
+
+   # macOS with Homebrew
+   brew install open-mpi
+
+   # Ubuntu/Debian
+   sudo apt-get install libopenmpi-dev openmpi-bin
+
+Running Examples
+^^^^^^^^^^^^^^^^
+
+Run experiments using the main script::
+
+   # Build documentation
+   uv run python main.py --docs
+
+   # Run all plotting scripts
+   uv run python main.py --plot
+
+   # Copy plots to LaTeX report
+   uv run python main.py --copy-plots
+
+   # Clean all generated files
+   uv run python main.py --clean
+
+For the full codebase, please visit the `GitHub repository <https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2>`_.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Experiments
+
+   example_gallery/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   architecture
+   api_reference
