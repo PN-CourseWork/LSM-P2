@@ -239,6 +239,35 @@ class JacobiPoisson(PoissonSolver):
     def _gather_solution(self, u_local, N):
         """Gather local solutions to global array on rank 0.
 
-        Delegates to the decomposition strategy's gather_solution method.
+        Uses decomposition strategy to extract interior and determine placement,
+        then performs generic gather and reconstruction.
+
+        Parameters
+        ----------
+        u_local : np.ndarray
+            Local solution array with ghost zones
+        N : int
+            Global grid size
+
+        Returns
+        -------
+        u_global : np.ndarray or None
+            Global solution on rank 0, None on other ranks
         """
-        return self.decomposition.gather_solution(u_local, N, self.rank, self.comm)
+        # Extract interior points using decomposition strategy
+        local_interior = self.decomposition.extract_interior(u_local)
+
+        # Gather all interior arrays to rank 0
+        all_interiors = self.comm.gather(local_interior, root=0)
+
+        if self.rank == 0:
+            u_global = np.zeros((N, N, N))
+
+            # Place each rank's interior data using decomposition mapping
+            for rank_id, interior_data in enumerate(all_interiors):
+                placement = self.decomposition.get_interior_placement(rank_id, N, self.comm)
+                u_global[placement] = interior_data
+
+            return u_global
+        else:
+            return None

@@ -159,37 +159,41 @@ class SlicedDecomposition:
 
         return u1_local, u2_local, f_local
 
-    def gather_solution(self, u_local, N, rank, comm):
-        """Gather local solutions to global array on rank 0.
+    def extract_interior(self, u_local):
+        """Extract interior points from local array (without ghost zones).
 
         Parameters
         ----------
         u_local : np.ndarray
-            Local solution array with ghost zones
+            Local array with ghost zones
+
+        Returns
+        -------
+        interior : np.ndarray
+            Interior points only
+        """
+        return u_local[1:-1, :, :].copy()
+
+    def get_interior_placement(self, rank_id, N, comm):
+        """Get global array indices where this rank's interior data belongs.
+
+        Parameters
+        ----------
+        rank_id : int
+            Rank ID
         N : int
             Global grid size
-        rank : int
-            MPI rank
         comm : MPI.Comm
             MPI communicator
 
         Returns
         -------
-        u_global : np.ndarray or None
-            Global solution on rank 0, None on other ranks
+        slices : tuple of slice objects
+            Slices for indexing into global array
         """
-        u_global = np.zeros((N, N, N)) if rank == 0 else None
-        local_interior = u_local[1:-1, :, :].copy()
-        all_locals = comm.gather(local_interior, root=0)
-
-        if rank == 0:
-            current_z = 1
-            for rank_data in all_locals:
-                rank_local_N = rank_data.shape[0]
-                u_global[current_z : current_z + rank_local_N, :, :] = rank_data
-                current_z += rank_local_N
-
-        return u_global
+        size = comm.Get_size()
+        local_N, z_start, z_end = self.decompose(N, rank_id, size)
+        return (slice(z_start, z_end), slice(0, N), slice(0, N))
 
 
 class CubicDecomposition:
@@ -377,64 +381,62 @@ class CubicDecomposition:
 
         return u1_local, u2_local, f_local
 
-    def gather_solution(self, u_local, N, rank, comm):
-        """Gather local solutions to global array on rank 0.
+    def extract_interior(self, u_local):
+        """Extract interior points from local array (without ghost zones).
 
         Parameters
         ----------
         u_local : np.ndarray
-            Local solution array with ghost zones
-        N : int
-            Global grid size
-        rank : int
-            MPI rank
-        comm : MPI.Comm
-            MPI communicator (not used, cart_comm is stored in self)
+            Local array with ghost zones
 
         Returns
         -------
-        u_global : np.ndarray or None
-            Global solution on rank 0, None on other ranks
+        interior : np.ndarray
+            Interior points only
         """
-        # Extract interior points
-        local_interior = u_local[1:-1, 1:-1, 1:-1].copy()
+        return u_local[1:-1, 1:-1, 1:-1].copy()
 
-        # Gather to rank 0
-        all_locals = self.cart_comm.gather(local_interior, root=0)
+    def get_interior_placement(self, rank_id, N, comm):
+        """Get global array indices where this rank's interior data belongs.
 
-        if rank == 0:
-            u_global = np.zeros((N, N, N))
-            interior_N = N - 2
+        Parameters
+        ----------
+        rank_id : int
+            Rank ID
+        N : int
+            Global grid size
+        comm : MPI.Comm
+            MPI communicator (for getting Cartesian coordinates)
 
-            # Reconstruct global array from all local pieces
-            for rank_id, rank_data in enumerate(all_locals):
-                # Get coordinates for this rank
-                rank_coords = self.cart_comm.Get_coords(rank_id)
+        Returns
+        -------
+        slices : tuple of slice objects
+            Slices for indexing into global array
+        """
+        # Get coordinates for this rank
+        rank_coords = self.cart_comm.Get_coords(rank_id)
+        interior_N = N - 2
 
-                # Compute global indices for this rank's coordinates
-                starts = []
-                ends = []
-                for dim_idx, (dim_size, coord) in enumerate(zip(self.dims, rank_coords)):
-                    base_size, remainder = divmod(interior_N, dim_size)
-                    local_size = base_size + (1 if coord < remainder else 0)
+        # Compute global indices for this rank's coordinates
+        starts = []
+        ends = []
+        for dim_idx, (dim_size, coord) in enumerate(zip(self.dims, rank_coords)):
+            base_size, remainder = divmod(interior_N, dim_size)
+            local_size = base_size + (1 if coord < remainder else 0)
 
-                    if coord < remainder:
-                        start = coord * (base_size + 1) + 1
-                    else:
-                        start = remainder * (base_size + 1) + (coord - remainder) * base_size + 1
+            if coord < remainder:
+                start = coord * (base_size + 1) + 1
+            else:
+                start = remainder * (base_size + 1) + (coord - remainder) * base_size + 1
 
-                    end = start + local_size
-                    starts.append(start)
-                    ends.append(end)
+            end = start + local_size
+            starts.append(start)
+            ends.append(end)
 
-                x_start, y_start, z_start = starts
-                x_end, y_end, z_end = ends
+        x_start, y_start, z_start = starts
+        x_end, y_end, z_end = ends
 
-                u_global[x_start:x_end, y_start:y_end, z_start:z_end] = rank_data
-
-            return u_global
-        else:
-            return None
+        return (slice(x_start, x_end), slice(y_start, y_end), slice(z_start, z_end))
 
 
 # ==============================================================================
