@@ -204,11 +204,12 @@ def clean_all():
     cleaned = []
     failed = []
 
-    # List of paths to clean (relative to repo root)
+    # List of directories to clean
     clean_targets = [
         REPO_ROOT / "docs" / "build",
         REPO_ROOT / "docs" / "source" / "example_gallery",
         REPO_ROOT / "docs" / "source" / "generated",
+        REPO_ROOT / "docs" / "source" / "gen_modules",
         REPO_ROOT / "plots",
         REPO_ROOT / "build",
         REPO_ROOT / "dist",
@@ -226,6 +227,19 @@ def clean_all():
             except Exception as e:
                 failed.append(f"{target_path.relative_to(REPO_ROOT)}: {e}")
 
+    # Clean specific files
+    clean_files = [
+        REPO_ROOT / "docs" / "source" / "sg_execution_times.rst",
+    ]
+
+    for target_file in clean_files:
+        if target_file.exists():
+            try:
+                target_file.unlink()
+                cleaned.append(str(target_file.relative_to(REPO_ROOT)))
+            except Exception as e:
+                failed.append(f"{target_file.relative_to(REPO_ROOT)}: {e}")
+
     # Clean __pycache__ directories
     for pycache in REPO_ROOT.rglob("__pycache__"):
         try:
@@ -241,6 +255,14 @@ def clean_all():
             cleaned.append(str(pyc.relative_to(REPO_ROOT)))
         except Exception as e:
             failed.append(f"{pyc.relative_to(REPO_ROOT)}: {e}")
+
+    # Clean .DS_Store files (macOS metadata)
+    for ds_store in REPO_ROOT.rglob(".DS_Store"):
+        try:
+            ds_store.unlink()
+            cleaned.append(str(ds_store.relative_to(REPO_ROOT)))
+        except Exception as e:
+            failed.append(f"{ds_store.relative_to(REPO_ROOT)}: {e}")
 
     # Clean data directory (but keep README.md)
     data_dir = REPO_ROOT / "data"
