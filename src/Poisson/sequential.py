@@ -51,8 +51,10 @@ class SequentialJacobi(PoissonSolver):
             # Max iterations reached
             self.global_results.iterations = self.config.max_iter
 
-        # Compute error
-        self.global_results.final_error = float(np.linalg.norm(u - u_exact))
+        # Compute discrete L2 error (accounts for grid spacing)
+        # For 3D: ||e||_L2 ≈ sqrt(h³ * sum(|u - u_exact|²))
+        error_diff = u - u_exact
+        self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
 
         # Store final solution in u1
         if self.global_results.iterations % 2 == 0:

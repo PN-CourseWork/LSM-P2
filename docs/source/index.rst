@@ -82,6 +82,7 @@ The package requires Python 3.12+ and uses ``uv`` for dependency management::
 
    curl -LsSf https://astral.sh/uv/install.sh | sh
    uv sync
+   uv run setup_mlflow.py
 
 For the full codebase, please visit the `GitHub repository <https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2>`_.
 
