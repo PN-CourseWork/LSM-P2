@@ -20,6 +20,7 @@ The package implements a unified, **rank-symmetric** architecture for studying p
 2. **Scalable I/O**: Parallel HDF5 writes eliminate serial bottlenecks
 3. **Pluggable strategies**: Duck-typed decomposition and communication strategies
 4. **Clean abstractions**: Simple dataclasses without global/local redundancy
+5. **Separation of concerns**: Solver solves + writes; PostProcessor analyzes + logs
 
 Unified Solver Design
 ----------------------
@@ -40,8 +41,10 @@ A single :class:`JacobiPoisson` solver handles both sequential and distributed e
 .. note::
    We use **duck typing** instead of abstract base classes. Each strategy implements the expected interface documented in docstrings.
 
-Common Interface
-----------------
+Common Workflow
+---------------
+
+**Phase 1: Solve + Write (with MPI)**
 
 Simple, unified API for all execution modes:
 
@@ -63,12 +66,36 @@ Simple, unified API for all execution modes:
        omega=0.75
    )
    solver.solve()
-   solver.save_hdf5("results/distributed.h5")  # Parallel write!
+   solver.save_hdf5("results/distributed.h5")  # All ranks write in parallel!
 
-   # Access results 
-   print(f"Converged: {solver.results.converged}")
-   print(f"Iterations: {solver.results.iterations}")
-   print(f"Error: {solver.results.final_error}")
+**Phase 2: Post-Process + Analyze (no MPI needed)**
+
+.. code-block:: python
+
+   from Poisson import PostProcessor
+
+   # Load results from HDF5
+   pp = PostProcessor("results/distributed.h5")
+
+   # Aggregate per-rank timings to global statistics
+   timings = pp.aggregate_timings()
+   print(f"Total compute time: {timings['total_compute_time']:.4f}s")
+   print(f"Total MPI comm time: {timings['total_mpi_comm_time']:.4f}s")
+
+   # Export metrics for analysis
+   pp.to_parquet("analysis/metrics.parquet")
+
+   # Log to MLflow for experiment tracking
+   pp.log_to_mlflow("scaling-experiments")
+
+   # Multi-file analysis for scaling studies
+   pp_multi = PostProcessor([
+       "results/experiment_np2.h5",
+       "results/experiment_np4.h5",
+       "results/experiment_np6.h5"
+   ])
+   pp_multi.plot_strong_scaling()
+   pp_multi.plot_communication_overhead()
 
 Data Flow & Rank Symmetry
 --------------------------
@@ -219,13 +246,10 @@ Time Series (Optional)
 
 **Stores:** Detailed profiling data (residual_history, compute_times, mpi_comm_times, halo_exchange_times)
 
-I/O Methods
-===========
+Solver I/O
+==========
 
-The solver provides multiple output formats for different use cases:
-
-Parallel HDF5 
---------------------------------------------
+The solver writes complete simulation state to HDF5:
 
 .. code-block:: python
 
@@ -233,25 +257,53 @@ Parallel HDF5
 
 **Features:**
 
-- **Parallel writes**: Each rank writes its data concurrently
-- **Single file**: All data (config, solution, results, timings) in one place
-- **Hierarchical structure**: Organized groups for config/fields/results/timings
-- **Compressed arrays**: Automatic compression for large datasets
-- **Scalable**: No gather-to-rank-0 bottleneck
+- ✅ **Parallel writes**: Each rank writes its data concurrently
+- ✅ **Single file**: All data (config, fields, results, timings) in one place
+- ✅ **Hierarchical structure**: Organized groups for config/fields/results/timings
+- ✅ **Compressed arrays**: Automatic compression for large datasets
+- ✅ **Scalable**: No gather-to-rank-0 bottleneck
+- ✅ **Self-contained**: Everything needed to reproduce or analyze the run
 
-MLflow Logging
---------------
+Post-Processing
+===============
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+
+   PostProcessor
+
+The :class:`PostProcessor` class handles analysis, aggregation, and export of simulation results.
+
+**Key Methods:**
 
 .. code-block:: python
 
-   solver.log_to_mlflow("scaling-experiments")
+   from Poisson import PostProcessor
 
-**Features:**
+   pp = PostProcessor("results/experiment.h5")
 
-- **Experiment tracking**: Automatic versioning and comparison
-- **Web UI**: Browse and visualize results
-- **Scalars only**: Cannot store arrays
-- **Serial**: Rank 0 only
+   # Aggregate per-rank data
+   timings = pp.aggregate_timings()        # Sum across all ranks
+   metadata = pp.get_config()              # Extract configuration
+   convergence = pp.get_convergence()      # Get iterations, error, etc.
+
+   # Export to different formats
+   pp.to_parquet("analysis/metrics.parquet")  # For pandas analysis
+   pp.log_to_mlflow("experiment-name")        # For experiment tracking
+
+   # Visualization
+   pp.plot_residual_convergence()
+   pp.plot_per_rank_breakdown()
+
+   # Multi-run analysis
+   pp_multi = PostProcessor([
+       "results/run_np2.h5",
+       "results/run_np4.h5",
+       "results/run_np6.h5"
+   ])
+   pp_multi.plot_strong_scaling()
+   pp_multi.to_dataframe()  # All runs as single DataFrame
 
 
 Computational Kernels
