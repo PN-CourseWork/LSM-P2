@@ -28,21 +28,41 @@ import seaborn as sns
 from pathlib import Path
 
 from utils import datatools
+from Poisson import PostProcessor
 
-# Set seaborn style
-
-# Load validation data
+# Load validation data from HDF5 files
 repo_root = datatools.get_repo_root()
 data_dir = repo_root / "data" / "validation"
-df_spatial = datatools.load_simulation_data(data_dir, "spatial_convergence")
+h5_dir = data_dir / "validation_h5"
 
-# Load iterative convergence data if available
-try:
-    df_iterative = datatools.load_simulation_data(data_dir, "iterative_convergence")
-    has_iterative = True
-except FileNotFoundError:
-    print("Note: Iterative convergence data not found - skipping iterative plots")
-    has_iterative = False
+# Find all HDF5 files
+h5_files = sorted(h5_dir.glob("*.h5"))
+
+if not h5_files:
+    raise FileNotFoundError(f"No HDF5 files found in {h5_dir}")
+
+print(f"Found {len(h5_files)} HDF5 files")
+
+# Load data using PostProcessor
+pp = PostProcessor(h5_files)
+df_spatial = pp.to_dataframe()
+
+# Add method column based on decomposition and communicator
+def get_method_name(row):
+    if row['decomposition'] == 'none':
+        return 'Sequential'
+    else:
+        decomp = row['decomposition'].capitalize()
+        comm = row['communicator'].capitalize()
+        return f"MPI_{decomp}_{comm}"
+
+df_spatial['method'] = df_spatial.apply(get_method_name, axis=1)
+
+print(f"Loaded {len(df_spatial)} validation runs")
+print(df_spatial[['N', 'method', 'final_error']].to_string())
+
+# No iterative convergence data in this version
+has_iterative = False
 
 # %%
 # Spatial Convergence: Method Comparison

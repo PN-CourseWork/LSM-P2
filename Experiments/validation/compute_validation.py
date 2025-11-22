@@ -19,8 +19,16 @@ Validation experiments to verify solver correctness and convergence properties.
 
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from mpi4py import MPI
-from Poisson import JacobiPoisson
+from Poisson import (
+    JacobiPoisson,
+    PostProcessor,
+    SlicedDecomposition,
+    CubicDecomposition,
+    CustomMPICommunicator,
+    NumpyCommunicator,
+)
 from utils import datatools
 
 # %%
@@ -46,7 +54,12 @@ max_iter = 5000
 # Initialize Results Storage
 # ---------------------------
 
-spatial_results = []  # Will collect DataFrames
+# Create output directory for HDF5 files
+data_dir = datatools.get_data_dir()
+h5_dir = data_dir / "validation_h5"
+h5_dir.mkdir(parents=True, exist_ok=True)
+
+hdf5_files = []  # Will collect HDF5 file paths
 
 if rank == 0:
     print("Spatial Convergence Analysis")
@@ -74,20 +87,18 @@ if size == 1:
         solver.solve()
         solver.summary()
 
-        if rank == 0:
-            # Collect results as DataFrame
-            import pandas as pd
-            df_result = pd.concat([
-                solver._dataclass_to_df(solver.config),
-                solver._dataclass_to_df(solver.global_results)
-            ], axis=1)
-            spatial_results.append(df_result)
+        # Save to HDF5
+        h5_file = h5_dir / f"sequential_N{N}.h5"
+        solver.save_hdf5(h5_file)
 
-            res = solver.global_results
+        if rank == 0:
+            hdf5_files.append(h5_file)
+
+            res = solver.results
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
             print(f"  Final error (L2): {res.final_error:.4e}")
-            print(f"  Wall time: {res.wall_time:.4f}s")
+            print(f"  Saved to: {h5_file}")
 elif rank == 0:
     print("\nSkipping Sequential tests (use single rank for sequential)")
     print("=" * 60)
@@ -101,10 +112,10 @@ elif rank == 0:
 # - Communication methods: Custom MPI datatypes vs NumPy arrays
 
 mpi_methods = [
-    ("MPI_Sliced_CustomMPI", "sliced", "custom"),
-    ("MPI_Sliced_Numpy", "sliced", "numpy"),
-    ("MPI_Cubic_CustomMPI", "cubic", "custom"),
-    ("MPI_Cubic_Numpy", "cubic", "numpy"),
+    ("MPI_Sliced_Custom", SlicedDecomposition(), CustomMPICommunicator()),
+    ("MPI_Sliced_Numpy", SlicedDecomposition(), NumpyCommunicator()),
+    ("MPI_Cubic_Custom", CubicDecomposition(), CustomMPICommunicator()),
+    ("MPI_Cubic_Numpy", CubicDecomposition(), NumpyCommunicator()),
 ]
 
 for method_name, decomposition, communicator in mpi_methods:
@@ -117,7 +128,7 @@ for method_name, decomposition, communicator in mpi_methods:
             print(f"\nTesting N={N} (h={2.0/(N-1):.6f})")
             print("-" * 60)
 
-        # JacobiPoisson with decomposition = distributed
+        # JacobiPoisson with decomposition = distributed (new cleaner API!)
         solver = JacobiPoisson(
             decomposition=decomposition,
             communicator=communicator,
@@ -128,35 +139,18 @@ for method_name, decomposition, communicator in mpi_methods:
         solver.solve()
         solver.summary()
 
-        if rank == 0:
-            # Collect results as DataFrame
-            df_result = pd.concat([
-                solver._dataclass_to_df(solver.config),
-                solver._dataclass_to_df(solver.global_results)
-            ], axis=1)
-            spatial_results.append(df_result)
+        # Save to HDF5 (all ranks participate in parallel write)
+        h5_file = h5_dir / f"{method_name}_N{N}_np{size}.h5"
+        solver.save_hdf5(h5_file)
 
-            res = solver.global_results
+        if rank == 0:
+            hdf5_files.append(h5_file)
+
+            res = solver.results
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
             print(f"  Final error (L2): {res.final_error:.4e}")
-            print(f"  Wall time: {res.wall_time:.4f}s")
-
-# %%
-# Save Results
-# ------------
-#
-# Concatenate all DataFrames and save to parquet format.
-# Only rank 0 performs the save operation.
-
-if rank == 0:
-    df_spatial = pd.concat(spatial_results, ignore_index=True)
-    data_dir = datatools.get_data_dir()
-    datatools.save_simulation_data(
-        df_spatial,
-        data_dir / "spatial_convergence.parquet",
-        format="parquet"
-    )
+            print(f"  Saved to: {h5_file}")
 
 # %%
 # Summary
@@ -165,4 +159,6 @@ if rank == 0:
 if rank == 0:
     print("\n" + "=" * 60)
     print("Validation data generated successfully!")
-    print(f"Spatial convergence: {data_dir / 'spatial_convergence.parquet'}")
+    print(f"HDF5 files: {h5_dir}")
+    print(f"Generated {len(hdf5_files)} HDF5 result files")
+    print("=" * 60)

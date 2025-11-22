@@ -31,80 +31,67 @@ def sinusoidal_source_term(N: int) -> np.ndarray:
     xs, ys, zs = np.ogrid[-1 : 1 : complex(N), -1 : 1 : complex(N), -1 : 1 : complex(N)]
     return 3 * np.pi**2 * np.sin(np.pi * xs) * np.sin(np.pi * ys) * np.sin(np.pi * zs)
 
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
 @dataclass
-class GlobalConfig:
-    """Global runtime configuration (same for all ranks)."""
-    # Problem
+class Config:
+    """Runtime configuration (all ranks have a copy)."""
+    # Problem size
     N: int = 0
 
-    # Specs
+    # MPI configuration
     mpi_size: int = 1
-    method: str = ""
+    decomposition: str = "none"  # "none", "sliced", "cubic"
+    communicator: str = "none"   # "none", "numpy", "custom"
 
-    # Jacobi Solver
+    # Jacobi solver parameters
     omega: float = 0.75
     use_numba: bool = False
     num_threads: int = 1
-    max_iter: int = 0
-    tolerance: float = 0.0
+    max_iter: int = 100000
+    tolerance: float = 1e-10
 
 
-@dataclass
-class GlobalFields:
-    """Problem definition for the Poisson solver."""
-    N: int = 0
-    h: float = 0.0
-
-    f: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
-    u1: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
-    u2: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
-    u_exact: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
-
-    def __post_init__(self):
-        self.h = 2.0 / (self.N - 1)
-        self.u1 = create_grid_3d(self.N) 
-        self.u2 = self.u1.copy()
-        self.f = sinusoidal_source_term(self.N)
-        self.u_exact = sinusoidal_exact_solution(self.N)
+# ============================================================================
+# Local fields (per-rank arrays)
+# ============================================================================
 
 @dataclass
-class LocalFields: 
-    local_N: int = 0
-    u1: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
-    u2: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+class LocalFields:
+    """Local domain arrays with ghost zones (all ranks)."""
+    # Local domain size (including ghosts)
+    u1_local: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    u2_local: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    f_local: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+
+
+# ============================================================================
+# Results
+# ============================================================================
 
 @dataclass
-class GlobalResults:
-    """Global solver results (same for all ranks)."""
-    # Convergence info
+class Results:
+    """Convergence information (computed/stored on rank 0 only)."""
     iterations: int = 0
     converged: bool = False
     final_error: float = 0.0
-    # Global timings
-    wall_time: float = 0.0
-    compute_time: float = 0.0
-    mpi_comm_time: float = 0.0
-    halo_exchange_time: float = 0.0
+
+
+# ============================================================================
+# Timing data (per-rank)
+# ============================================================================
 
 @dataclass
-class TimeSeriesLocal:    
-    """pr rank time series data."""
+class Timeseries:
+    """Per-iteration timing arrays (all ranks).
+
+    Each rank accumulates timing data for each iteration.
+    Rank 0 additionally stores residual history.
+    """
     compute_times: list[float] = field(default_factory=list)
     mpi_comm_times: list[float] = field(default_factory=list)
     halo_exchange_times: list[float] = field(default_factory=list)
-
-@dataclass 
-class TimeSeriesGlobal(TimeSeriesLocal):
-    residual_history: list[float] = field(default_factory=list)
-
-
-@dataclass
-class LocalResults:
-    """Per-rank performance results."""
-    mpi_rank: int = 0
-    hostname: str = ""
-    wall_time: float = 0.0
-    compute_time: float = 0.0
-    mpi_comm_time: float = 0.0
-    halo_exchange_time: float = 0.0
-
+    residual_history: list[float] = field(default_factory=list)  # Rank 0 only

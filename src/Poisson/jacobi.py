@@ -5,72 +5,26 @@ single interface. Sequential execution is the default, and distributed execution
 is enabled by providing decomposition and communicator strategies.
 """
 
-import socket
 import numpy as np
 from mpi4py import MPI
 from numba import get_num_threads
 
 from .kernels import jacobi_step_numpy, jacobi_step_numba
 from .datastructures import (
-    GlobalConfig,
-    GlobalFields,
-    GlobalResults,
-    LocalResults,
-    TimeSeriesLocal,
-    TimeSeriesGlobal,
+    Config,
+    Results,
+    Timeseries,
     sinusoidal_exact_solution,
 )
 from .strategies import (
     NoDecomposition,
-    SlicedDecomposition,
-    CubicDecomposition,
-    CustomMPICommunicator,
     NumpyCommunicator,
 )
-
-# Strategy registries
-DECOMPOSITION_REGISTRY = {
-    "sliced": SlicedDecomposition,
-    "cubic": CubicDecomposition,
-}
-
-COMMUNICATOR_REGISTRY = {
-    "custom": CustomMPICommunicator,
-    "numpy": NumpyCommunicator,
-}
 
 
 # ============================================================================
 # Module-level utilities
 # ============================================================================
-
-def _create_strategy(strategy, registry, strategy_type):
-    """Create a strategy instance from string or return existing instance.
-
-    Parameters
-    ----------
-    strategy : str or object
-        Strategy name or instance
-    registry : dict
-        Registry mapping names to classes
-    strategy_type : str
-        Type name for error messages
-
-    Returns
-    -------
-    object
-        Strategy instance
-    """
-    if isinstance(strategy, str):
-        strategy_lower = strategy.lower()
-        if strategy_lower not in registry:
-            raise ValueError(
-                f"Unknown {strategy_type} strategy: {strategy}. "
-                f"Available: {list(registry.keys())}"
-            )
-        return registry[strategy_lower]()
-    else:
-        return strategy
 
 
 def _time_operation(operation, time_list):
@@ -103,30 +57,33 @@ class JacobiPoisson:
     """Unified Jacobi solver for sequential and distributed execution.
 
     This solver provides a single interface for both sequential and MPI-parallel
-    execution. Sequential execution is the default. For distributed execution,
-    specify decomposition and communicator strategies.
+    execution. For single-rank execution, sequential mode is automatic. For
+    multi-rank execution, decomposition and communicator must be provided.
 
     Parameters
     ----------
-    decomposition : str or DecompositionStrategy, optional
-        Domain decomposition strategy: "sliced", "cubic", or strategy instance.
-        If None (default), runs in sequential mode.
-    communicator : str or CommunicatorStrategy, optional
-        Ghost exchange strategy: "custom", "numpy", or strategy instance.
-        Required if decomposition is specified.
+    decomposition : DecompositionStrategy, optional
+        Domain decomposition strategy object (e.g., SlicedDecomposition(),
+        CubicDecomposition()). Required for multi-rank execution.
+    communicator : CommunicatorStrategy, optional
+        Ghost exchange communicator object (e.g., NumpyCommunicator(),
+        CustomMPICommunicator()). If None, defaults to NumpyCommunicator().
     **kwargs
-        Additional arguments for solver configuration
-        (N, omega, use_numba, max_iter, tolerance, etc.)
+        Solver configuration: N, omega, use_numba, max_iter, tolerance, etc.
 
     Examples
     --------
-    Sequential execution:
-    >>> solver = JacobiPoisson(N=100, omega=0.75)
+    Sequential execution (single rank):
+    >>> solver = JacobiPoisson(N=100)
     >>> solver.solve()
 
-    Distributed execution (must run with mpiexec):
-    >>> solver = JacobiPoisson(decomposition="cubic", communicator="custom",
-    ...                         N=100, omega=0.75)
+    Distributed execution (run with mpiexec -n 4):
+    >>> from Poisson import SlicedDecomposition, NumpyCommunicator
+    >>> solver = JacobiPoisson(
+    ...     N=100,
+    ...     decomposition=SlicedDecomposition(),
+    ...     communicator=NumpyCommunicator()
+    ... )
     >>> solver.solve()
     """
 
@@ -137,49 +94,42 @@ class JacobiPoisson:
         self.rank = comm.Get_rank()
         self.size = comm.Get_size()
 
-        # Global configuration
-        self.config = GlobalConfig(**kwargs)
+        # Configuration (all ranks)
+        self.config = Config(**kwargs)
         self.config.num_threads = get_num_threads()
         self.config.mpi_size = self.size
 
-        # Local results and timeseries (all ranks)
-        self.local_results = LocalResults()
-        self.global_timeseries = TimeSeriesLocal()
+        # Timeseries (all ranks)
+        self.timeseries = Timeseries()
 
-        # Global results and fields (rank 0 only)
+        # Results (rank 0 only)
         if self.rank == 0:
-            self.global_results = GlobalResults()
-            self.global_fields = GlobalFields(N=self.config.N)
-            self.global_timeseries = TimeSeriesGlobal()
+            self.results = Results()
 
         # Kernel selection
         self._step = jacobi_step_numba if self.config.use_numba else jacobi_step_numpy
 
-        # Setup strategies
-        if decomposition is None:
-            # Sequential mode: entire domain on rank 0
+        # Setup strategies based on MPI size
+        if self.size == 1:
+            # Single rank: always use sequential mode
             self.decomposition = NoDecomposition()
             self.communicator = NumpyCommunicator()
-            kernel_name = "Numba" if self.config.use_numba else "NumPy"
-            self.config.method = f"Sequential ({kernel_name})"
+            self.config.decomposition = "none"
+            self.config.communicator = "none"
         else:
-            # Distributed mode
-            self.decomposition = _create_strategy(
-                decomposition, DECOMPOSITION_REGISTRY, "decomposition"
-            )
+            # Multi-rank: require decomposition strategy
+            if decomposition is None:
+                raise ValueError(
+                    "Decomposition strategy required for multi-rank execution. "
+                    "Example: decomposition=SlicedDecomposition()"
+                )
 
-            # Default communicator to "numpy" if not specified
-            if communicator is None:
-                communicator = "numpy"
+            self.decomposition = decomposition
+            self.communicator = communicator if communicator is not None else NumpyCommunicator()
 
-            self.communicator = _create_strategy(
-                communicator, COMMUNICATOR_REGISTRY, "communicator"
-            )
-
-            # Set method name
-            decomp_name = self.decomposition.__class__.__name__.replace("Decomposition", "")
-            comm_name = self.communicator.__class__.__name__.replace("Communicator", "")
-            self.config.method = f"MPI_{decomp_name}_{comm_name}"
+            # Store strategy names in config
+            self.config.decomposition = decomposition.__class__.__name__.lower().replace('decomposition', '')
+            self.config.communicator = self.communicator.__class__.__name__.lower().replace('communicator', '').replace('mpi', '')
 
         # Initialize local arrays using decomposition strategy
         N = self.config.N
@@ -217,9 +167,6 @@ class JacobiPoisson:
 
         # Gather solution to rank 0
         self._gather_solution(u_final)
-
-        # Build per-rank results
-        self._build_local_results()
 
     def _run_iterations(self):
         """Execute main Jacobi iteration loop.
@@ -274,24 +221,24 @@ class JacobiPoisson:
         # Exchange ghost zones
         _time_operation(
             lambda: self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm),
-            self.global_timeseries.halo_exchange_times
+            self.timeseries.halo_exchange_times
         )
 
         # Jacobi step on local domain
         local_residual = _time_operation(
             lambda: self._step(uold_local, u_local, self.f_local, h, self.config.omega),
-            self.global_timeseries.compute_times
+            self.timeseries.compute_times
         )
 
         # Compute global residual
         global_residual = _time_operation(
             lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
-            self.global_timeseries.mpi_comm_times
+            self.timeseries.mpi_comm_times
         )
 
         # Store residual history on rank 0
         if self.rank == 0:
-            self.global_timeseries.residual_history.append(float(global_residual))
+            self.timeseries.residual_history.append(float(global_residual))
 
         return global_residual
 
@@ -302,6 +249,11 @@ class JacobiPoisson:
         ----------
         u_local : np.ndarray
             Local solution (with ghost zones)
+
+        Notes
+        -----
+        Stores the gathered global solution in self.u_global (rank 0 only).
+        This is used for computing error in summary() and writing to HDF5.
         """
         N = self.config.N
 
@@ -310,36 +262,31 @@ class JacobiPoisson:
             local_interior = self.decomposition.extract_interior(u_local)
             all_interiors = self.comm.gather(local_interior, root=0)
 
-            u_global = np.zeros((N, N, N))
+            self.u_global = np.zeros((N, N, N))
             for rank_id, interior_data in enumerate(all_interiors):
                 placement = self.decomposition.get_interior_placement(rank_id, N, self.comm)
-                u_global[placement] = interior_data
-
-            # Store final solution in global_fields
-            if hasattr(self, 'global_fields'):
-                self.global_fields.u1[:] = u_global
+                self.u_global[placement] = interior_data
         else:
             # Non-root ranks just participate in gather
             local_interior = self.decomposition.extract_interior(u_local)
             self.comm.gather(local_interior, root=0)
 
     def _post_solve(self, start_time):
-        """Aggregate timing results after solve.
+        """Record final timing after solve.
 
         Parameters
         ----------
         start_time : float or None
             Start time from MPI.Wtime() on rank 0, None on other ranks
-        """
-        # Calculate wall time and aggregate timings (rank 0 only)
-        if self.rank == 0:
-            wall_time = MPI.Wtime() - start_time
 
-            # Aggregate local timings to global results
-            self.global_results.wall_time = wall_time
-            self.global_results.compute_time = sum(self.global_timeseries.compute_times)
-            self.global_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
-            self.global_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
+        Notes
+        -----
+        Timing aggregation is now handled by PostProcessor from HDF5 files.
+        This method is kept minimal - convergence info is already in self.results.
+        """
+        # Nothing to do here - results are already stored in self.results
+        # Timing data is in self.timeseries (per-rank)
+        pass
 
     # ========================================================================
     # Helper methods
@@ -356,16 +303,8 @@ class JacobiPoisson:
             Whether the solver converged
         """
         if self.rank == 0:
-            self.global_results.iterations = iterations
-            self.global_results.converged = converged
-
-    def _build_local_results(self):
-        """Build per-rank results."""
-        self.local_results.mpi_rank = self.rank
-        self.local_results.hostname = socket.gethostname()
-        self.local_results.compute_time = sum(self.global_timeseries.compute_times)
-        self.local_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
-        self.local_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
+            self.results.iterations = iterations
+            self.results.converged = converged
 
     # ========================================================================
     # Public utility methods
@@ -404,8 +343,8 @@ class JacobiPoisson:
         N = self.config.N
         h = 2.0 / (N - 1)
 
-        # Get the computed solution from global_fields
-        u_computed = self.global_fields.u1
+        # Get the computed solution (gathered in _gather_solution)
+        u_computed = self.u_global
 
         # Get exact solution
         if exact_solution is None:
@@ -415,85 +354,117 @@ class JacobiPoisson:
         else:
             u_exact = exact_solution
 
-        # Compute L2 error
-        error_diff = u_computed - u_exact
-        self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
+        # Compute L2 error (interior points only)
+        error_diff = u_computed[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
+        self.results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
 
-    def _dataclass_to_df(self, obj):
-        """Convert any dataclass instance to single-row DataFrame.
-
-        Parameters
-        ----------
-        obj : dataclass instance
-            Any dataclass object to convert
-
-        Returns
-        -------
-        pd.DataFrame or None
-            Single-row DataFrame on rank 0, None on other ranks
-        """
-        if self.rank != 0:
-            return None
-
-        from dataclasses import asdict
-        import pandas as pd
-
-        return pd.DataFrame([asdict(obj)])
-
-    def save_results(self, path, include_timeseries=False):
-        """Save results to parquet file.
+    def save_hdf5(self, path):
+        """Save complete simulation state to HDF5 using parallel I/O.
 
         Parameters
         ----------
         path : str or Path
-            Output file path (should end in .parquet)
-        include_timeseries : bool, optional
-            Include detailed timeseries data (default: False)
+            Output HDF5 file path
 
         Notes
         -----
-        Only rank 0 performs the save operation.
+        This method uses parallel HDF5 I/O where each rank writes its data
+        concurrently when running with multiple MPI ranks. For sequential
+        execution (single rank), it uses standard HDF5 I/O.
+
+        The file structure is:
+        - /config: Runtime configuration (written by rank 0)
+        - /fields/u: Global solution array (collective write by all ranks)
+        - /results: Convergence information (written by rank 0)
+        - /timings/rank_N/: Per-rank timing data (each rank writes its own)
+
+        Requires h5py built with MPI support when using multiple ranks.
+        If MPI support is not available, falls back to sequential write on rank 0.
         """
-        if self.rank != 0:
-            return
-
-        import pandas as pd
-
-        # Combine config and results into single row
-        df = pd.concat([
-            self._dataclass_to_df(self.config),
-            self._dataclass_to_df(self.global_results)
-        ], axis=1)
-
-        if include_timeseries:
-            df_timeseries = self._dataclass_to_df(self.global_timeseries)
-            df = pd.concat([df, df_timeseries], axis=1)
-
-        df.to_parquet(path, index=False)
-
-    def log_to_mlflow(self, experiment_name):
-        """Log results to MLflow.
-
-        Parameters
-        ----------
-        experiment_name : str
-            Name of the MLflow experiment
-
-        Notes
-        -----
-        Only rank 0 performs the logging operation.
-        Logs config as params and results as metrics.
-        """
-        if self.rank != 0:
-            return
-
-        import mlflow
+        import h5py
         from dataclasses import asdict
 
-        mlflow.set_experiment(experiment_name)
-        with mlflow.start_run():
-            # Log configuration as parameters
-            mlflow.log_params(asdict(self.config))
+        N = self.config.N
+        use_parallel_io = False
 
-            # Log results as metrics
-            mlflow.log_metrics(asdict(self.global_results))
+        # Determine whether to use parallel I/O
+        if self.size > 1:
+            try:
+                # Try to use parallel MPI driver
+                file_kwargs = {'driver': 'mpio', 'comm': self.comm}
+                f = h5py.File(path, 'w', **file_kwargs)
+                use_parallel_io = True
+            except (ValueError, TypeError):
+                # Fall back to sequential write if MPI not supported
+                if self.rank == 0:
+                    import warnings
+                    warnings.warn(
+                        "h5py was built without MPI support. Falling back to "
+                        "sequential HDF5 writes (rank 0 only). For better "
+                        "scalability, rebuild h5py with MPI support.",
+                        UserWarning
+                    )
+                    # Gather solution to rank 0 if not already done
+                    if not hasattr(self, 'u_global'):
+                        self._gather_solution(self.u2_local if hasattr(self, 'u2_local') else self.u1_local)
+
+                    f = h5py.File(path, 'w')
+                else:
+                    # Non-root ranks exit in fallback mode
+                    return
+        else:
+            f = h5py.File(path, 'w')
+
+        # Write data to HDF5 file
+        with f:
+            # Rank 0 writes config
+            if self.rank == 0:
+                config_grp = f.create_group('config')
+                for key, value in asdict(self.config).items():
+                    config_grp.attrs[key] = value
+
+            # Write solution array
+            fields_grp = f.create_group('fields')
+            u_dset = fields_grp.create_dataset('u', (N, N, N), dtype='f8')
+
+            if use_parallel_io:
+                # Parallel I/O: each rank writes its interior slice
+                local_interior = self.decomposition.extract_interior(
+                    self.u2_local if hasattr(self, 'u2_local') else self.u1_local
+                )
+                placement = self.decomposition.get_interior_placement(self.rank, N, self.comm)
+                u_dset[placement] = local_interior
+            else:
+                # Sequential write: rank 0 writes complete solution
+                if self.rank == 0:
+                    if hasattr(self, 'u_global'):
+                        u_dset[:] = self.u_global
+                    else:
+                        # For sequential execution, write from local array
+                        u_dset[:] = self.u2_local if hasattr(self, 'u2_local') else self.u1_local
+
+            # Rank 0 writes results
+            if self.rank == 0:
+                results_grp = f.create_group('results')
+                for key, value in asdict(self.results).items():
+                    results_grp.attrs[key] = value
+
+            # Write timing data
+            if use_parallel_io:
+                # Parallel I/O: each rank writes its own timing data
+                rank_grp = f.create_group(f'timings/rank_{self.rank}')
+                rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times, compression='gzip')
+                rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times, compression='gzip')
+                rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times, compression='gzip')
+
+                # Rank 0 additionally writes residual history
+                if self.rank == 0:
+                    rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history, compression='gzip')
+            else:
+                # Sequential write: only rank 0 writes timing data
+                if self.rank == 0:
+                    rank_grp = f.create_group(f'timings/rank_0')
+                    rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times, compression='gzip')
+                    rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times, compression='gzip')
+                    rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times, compression='gzip')
+                    rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history, compression='gzip')

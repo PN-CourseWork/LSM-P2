@@ -1,7 +1,0 @@
-Nov 18
-
-run_sequential.py: simplified sequential script. Save the baseline .npy
-slice.py: slice decomposition mpi implementation
-verify.py: verificatin among more metrics. L2, Max, Relative, Mean ...
-
-Test locally, running smoothly. But didn't observe the performance difference between slice-x and slice-z under problem sacle N=100, 500. 
