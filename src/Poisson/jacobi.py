@@ -359,7 +359,7 @@ class JacobiPoisson:
         self.results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
 
     def save_hdf5(self, path):
-        """Save complete simulation state to HDF5 using parallel I/O.
+        """Save complete simulation state to HDF5.
 
         Parameters
         ----------
@@ -368,103 +368,46 @@ class JacobiPoisson:
 
         Notes
         -----
-        This method uses parallel HDF5 I/O where each rank writes its data
-        concurrently when running with multiple MPI ranks. For sequential
-        execution (single rank), it uses standard HDF5 I/O.
+        Gathers distributed solution to rank 0, which writes the complete file.
 
-        The file structure is:
-        - /config: Runtime configuration (written by rank 0)
-        - /fields/u: Global solution array (collective write by all ranks)
-        - /results: Convergence information (written by rank 0)
-        - /timings/rank_N/: Per-rank timing data (each rank writes its own)
-
-        Requires h5py built with MPI support when using multiple ranks.
-        If MPI support is not available, falls back to sequential write on rank 0.
+        File structure:
+        - /config: Runtime configuration
+        - /fields/u: Global solution array
+        - /results: Convergence information
+        - /timings/rank_0/: Rank 0 timing data
         """
         import h5py
         from dataclasses import asdict
 
         N = self.config.N
-        use_parallel_io = False
 
-        # Determine whether to use parallel I/O
-        if self.size > 1:
-            try:
-                # Try to use parallel MPI driver
-                file_kwargs = {'driver': 'mpio', 'comm': self.comm}
-                f = h5py.File(path, 'w', **file_kwargs)
-                use_parallel_io = True
-            except (ValueError, TypeError):
-                # Fall back to sequential write if MPI not supported
-                if self.rank == 0:
-                    import warnings
-                    warnings.warn(
-                        "h5py was built without MPI support. Falling back to "
-                        "sequential HDF5 writes (rank 0 only). For better "
-                        "scalability, rebuild h5py with MPI support.",
-                        UserWarning
-                    )
-                    # Gather solution to rank 0 if not already done
-                    if not hasattr(self, 'u_global'):
-                        self._gather_solution(self.u2_local if hasattr(self, 'u2_local') else self.u1_local)
+        # Gather solution to rank 0 and write (simpler and more reliable than parallel I/O)
+        if not hasattr(self, 'u_global'):
+            self._gather_solution(self.u2_local if hasattr(self, 'u2_local') else self.u1_local)
 
-                    f = h5py.File(path, 'w')
-                else:
-                    # Non-root ranks exit in fallback mode
-                    return
-        else:
-            f = h5py.File(path, 'w')
+        # Only rank 0 writes the file
+        if self.rank != 0:
+            return
 
-        # Write data to HDF5 file
-        with f:
-            # Rank 0 writes config
-            if self.rank == 0:
-                config_grp = f.create_group('config')
-                for key, value in asdict(self.config).items():
-                    config_grp.attrs[key] = value
+        with h5py.File(path, 'w') as f:
+            # Write config
+            config_grp = f.create_group('config')
+            for key, value in asdict(self.config).items():
+                config_grp.attrs[key] = value
 
             # Write solution array
             fields_grp = f.create_group('fields')
             u_dset = fields_grp.create_dataset('u', (N, N, N), dtype='f8')
+            u_dset[:] = self.u_global
 
-            if use_parallel_io:
-                # Parallel I/O: each rank writes its interior slice
-                local_interior = self.decomposition.extract_interior(
-                    self.u2_local if hasattr(self, 'u2_local') else self.u1_local
-                )
-                placement = self.decomposition.get_interior_placement(self.rank, N, self.comm)
-                u_dset[placement] = local_interior
-            else:
-                # Sequential write: rank 0 writes complete solution
-                if self.rank == 0:
-                    if hasattr(self, 'u_global'):
-                        u_dset[:] = self.u_global
-                    else:
-                        # For sequential execution, write from local array
-                        u_dset[:] = self.u2_local if hasattr(self, 'u2_local') else self.u1_local
+            # Write results
+            results_grp = f.create_group('results')
+            for key, value in asdict(self.results).items():
+                results_grp.attrs[key] = value
 
-            # Rank 0 writes results
-            if self.rank == 0:
-                results_grp = f.create_group('results')
-                for key, value in asdict(self.results).items():
-                    results_grp.attrs[key] = value
-
-            # Write timing data
-            if use_parallel_io:
-                # Parallel I/O: each rank writes its own timing data
-                rank_grp = f.create_group(f'timings/rank_{self.rank}')
-                rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times, compression='gzip')
-                rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times, compression='gzip')
-                rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times, compression='gzip')
-
-                # Rank 0 additionally writes residual history
-                if self.rank == 0:
-                    rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history, compression='gzip')
-            else:
-                # Sequential write: only rank 0 writes timing data
-                if self.rank == 0:
-                    rank_grp = f.create_group(f'timings/rank_0')
-                    rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times, compression='gzip')
-                    rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times, compression='gzip')
-                    rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times, compression='gzip')
-                    rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history, compression='gzip')
+            # Write timing data (rank 0 only for now)
+            rank_grp = f.create_group(f'timings/rank_{self.rank}')
+            rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times)
+            rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times)
+            rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times)
+            rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history)
