@@ -35,7 +35,14 @@ from utils import datatools
 repo_root = datatools.get_repo_root()
 data_dir = repo_root / "data" / "validation"
 df_spatial = datatools.load_simulation_data(data_dir, "spatial_convergence")
-df_iterative = datatools.load_simulation_data(data_dir, "iterative_convergence")
+
+# Load iterative convergence data if available
+try:
+    df_iterative = datatools.load_simulation_data(data_dir, "iterative_convergence")
+    has_iterative = True
+except FileNotFoundError:
+    print("Note: Iterative convergence data not found - skipping iterative plots")
+    has_iterative = False
 
 # %%
 # Spatial Convergence: Method Comparison
@@ -67,22 +74,34 @@ ax.legend(fontsize=11)
 
 plt.tight_layout()
 
+# Save figure
+from utils import datatools
+fig_dir = datatools.get_repo_root() / "figures" / "validation"
+fig_dir.mkdir(parents=True, exist_ok=True)
+fig.savefig(fig_dir / "validation_spatial_convergence.png", dpi=300, bbox_inches='tight')
+print(f"Saved: {fig_dir / 'validation_spatial_convergence.png'}")
+
 # %%
 # Iterative Convergence: NumPy vs Numba
 # --------------------------------------
 #
 # Compare convergence behavior between NumPy and Numba kernels.
 
-g = sns.relplot(data=df_iterative, x="iteration", y="residual", col="kernel",
-                kind="line", height=5, aspect=1.3, linewidth=2,
-                facet_kws={"sharex": True, "sharey": True})
+if has_iterative:
+    g = sns.relplot(data=df_iterative, x="iteration", y="residual", col="kernel",
+                    kind="line", height=5, aspect=1.3, linewidth=2,
+                    facet_kws={"sharex": True, "sharey": True})
 
-g.set(yscale="log")
-g.set_axis_labels("Iteration", "Residual", fontsize=12)
-N_val = df_iterative['N'].iloc[0]
-g.set_titles(col_template="{col_name} Kernel (N=" + str(N_val) + ")", fontsize=13)
+    g.set(yscale="log")
+    g.set_axis_labels("Iteration", "Residual", fontsize=12)
+    N_val = df_iterative['N'].iloc[0]
+    g.set_titles(col_template="{col_name} Kernel (N=" + str(N_val) + ")", fontsize=13)
 
-plt.tight_layout()
+    plt.tight_layout()
+
+    # Save figure
+    g.savefig(fig_dir / "validation_iterative_convergence.png", dpi=300, bbox_inches='tight')
+    print(f"Saved: {fig_dir / 'validation_iterative_convergence.png'}")
 
 # %%
 # Key Findings

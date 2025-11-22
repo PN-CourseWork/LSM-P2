@@ -14,27 +14,28 @@ Architecture Overview
 Design Philosophy
 -----------------
 
-The package implements a unified framework for studying parallel performance of 3D Poisson equation solvers. All solver variants share a common base class architecture with consistent data structures, enabling fair performance comparisons between different parallelization strategies.
+The package implements a unified, **rank-symmetric** architecture for studying parallel performance of 3D Poisson equation solvers. The design prioritizes:
 
-**Current Implementation:**
+1. **Minimal data duplication**: Each rank stores only its local domain and results
+2. **Scalable I/O**: Parallel HDF5 writes eliminate serial bottlenecks
+3. **Pluggable strategies**: Duck-typed decomposition and communication strategies
+4. **Clean abstractions**: Simple dataclasses without global/local redundancy
 
-.. code-block:: text
+Unified Solver Design
+----------------------
 
-   PoissonSolver (base class)
-   ├── SequentialJacobi (single-node baseline)
-   └── MPIJacobiSliced (1D domain decomposition)
+A single :class:`JacobiPoisson` solver handles both sequential and distributed execution through strategy injection::
 
-**Future Modular Design:**
+   JacobiPoisson (unified solver)
+       ├── DecompositionStrategy (pluggable)
+       │   ├── NoDecomposition (sequential: entire domain on rank 0)
+       │   ├── SlicedDecomposition (1D along Z-axis)
+       │   └── CubicDecomposition (3D Cartesian grid)
+       └── CommunicatorStrategy (pluggable)
+           ├── NumpyCommunicator (array slicing + send/recv)
+           └── CustomMPICommunicator (MPI datatypes)
 
-The architecture is designed to support a **Factory + Strategy pattern** for pluggable decomposition and communication strategies::
-
-   MPIJacobi (modular with factory)
-       ├── DecompositionStrategy
-       │   ├── SlicedDecomposition (1D along Z-axis) ✓ Implemented
-       │   └── CubicDecomposition (3D Cartesian)
-       └── CommunicatorStrategy
-           ├── CustomMPICommunicator (MPI datatypes)
-           └── NumpyCommunicator (explicit copies)
+**Key principle:** Sequential execution is just distributed execution with ``decomposition=None``.
 
 .. note::
    We use **duck typing** instead of abstract base classes. Each strategy implements the expected interface documented in docstrings.
@@ -42,67 +43,129 @@ The architecture is designed to support a **Factory + Strategy pattern** for plu
 Common Interface
 ----------------
 
-All solvers extend :class:`PoissonSolver` and follow this unified interface:
+Simple, unified API for all execution modes:
 
 .. code-block:: python
 
-   from Poisson import SequentialJacobi, MPIJacobiSliced
+   from Poisson import JacobiPoisson
 
-   # Sequential baseline
-   solver = SequentialJacobi(omega=0.75, use_numba=True, N=100)
+   # Sequential execution (no decomposition)
+   solver = JacobiPoisson(N=100, omega=0.75, use_numba=True)
+   solver.solve()
+   solver.save_hdf5("results/sequential.h5")
 
-   # MPI sliced decomposition (currently implemented)
-   solver = MPIJacobiSliced(omega=0.75, use_numba=True, N=100)
+   # Distributed execution with sliced decomposition
+   # Run with: mpiexec -n 4 python script.py
+   solver = JacobiPoisson(
+       decomposition="sliced",
+       communicator="numpy",
+       N=200,
+       omega=0.75
+   )
+   solver.solve()
+   solver.save_hdf5("results/distributed.h5")  # Parallel write!
 
-   # Common workflow for all solvers
-   solver.solve(max_iter=1000, tolerance=1e-5)
-   solver.print_summary()
-   solver.save_results("output/")
+   # Access results 
+   print(f"Converged: {solver.results.converged}")
+   print(f"Iterations: {solver.results.iterations}")
+   print(f"Error: {solver.results.final_error}")
 
-Data Flow
----------
+Data Flow & Rank Symmetry
+--------------------------
 
-All solvers use consistent data structures for configuration, fields, and results:
+**Core principle:** Each rank is self-contained with local data only. No redundant global/local splits.
 
-**Configuration & Problem Setup:**
+Simplified Datastructures
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- :class:`GlobalConfig` - Runtime parameters (N, omega, tolerance, etc.)
-- :class:`GlobalFields` - Problem definition (solution arrays, source term, exact solution)
-- :class:`LocalFields` - MPI-specific local domain information
+**Per-Solver (rank 0 only):**
+- :class:`Results` - Convergence info (iterations, converged) 
 
-**Results & Metrics:**
+**Per-Rank (all ranks):**
 
-- :class:`GlobalResults` - Aggregated solver statistics (iterations, error, timings)
-- :class:`LocalResults` - Per-rank performance metrics
-- :class:`TimeSeriesGlobal` - Global time series data (residuals, compute times)
-- :class:`TimeSeriesLocal` - Per-rank time series data
+- :class:`Config` - Runtime parameters (N, omega, tolerance, method, MPI size, etc.)
+- :class:`LocalFields` - Local domain arrays (u_local with ghosts, f_local)
+- :class:`Timeseries` - timing arrays with results pr. iteration (compute_time, mpi_comm_time, halo_exchange_time)
 
-See :ref:`data-structures` for detailed documentation.
+Parallel I/O Strategy
+^^^^^^^^^^^^^^^^^^^^^^
+
+**HDF5 collective writes** eliminate the gather-to-rank-0 bottleneck:
+
+.. code-block:: text
+
+   Traditional (serial I/O):
+   ┌─────────────┐
+   │ Rank 0      │──┐
+   │ Rank 1      │──┤  Gather    ┌─────────┐
+   │ Rank 2      │──┼───────────▶│ Rank 0  │─────▶ HDF5
+   │ Rank 3      │──┘            │ (serial)│
+   └─────────────┘               └─────────┘
+   Memory bottleneck on rank 0
+   Serial write
+
+   New (parallel I/O):
+   ┌─────────────┐
+   │ Rank 0      │─────┐
+   │ Rank 1      │─────┤
+   │ Rank 2      │─────┼───▶ HDF5 (parallel)
+   │ Rank 3      │─────┘
+   └─────────────┘
+   Each rank writes its piece to the same file 
+   Scales to large problems
+
+**HDF5 File Structure:**
+
+.. code-block:: text
+
+   results.h5
+   ├── /config                    # Scalars written by rank 0
+   │   ├── N, omega, tolerance, ...
+   ├── /fields                  # Collective write (N,N,N)
+   │   └── [all ranks write their interior slices]
+   ├── /results                   # Convergence info 
+   │   ├── iterations, converged 
+   └── /timings                   # Per-rank timing data
+       ├── rank_0/compute_time, mpi_comm_time, ...
+       ├── rank_1/...
+       └── rank_N/...
+
+See :ref:`data-structures` for detailed API documentation.
 
 Solver Classes
 ==============
 
-Base Class
-----------
+Unified Solver
+--------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   PoissonSolver
+   JacobiPoisson
 
-Concrete Implementations
+The :class:`JacobiPoisson` solver handles both sequential (no decomposition) and distributed (with decomposition strategy) execution modes through a unified interface.
+
+Decomposition Strategies
+-------------------------
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+
+   NoDecomposition
+   SlicedDecomposition
+   CubicDecomposition
+
+Communication Strategies
 ------------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   SequentialJacobi
-   MPIJacobiSliced
-
-The :class:`SequentialJacobi` solver provides a single-node baseline with no domain decomposition.
-The :class:`MPIJacobiSliced` solver implements 1D domain decomposition along the Z-axis with ghost plane exchange.
+   NumpyCommunicator
+   CustomMPICommunicator
 
 .. _data-structures:
 
@@ -116,7 +179,9 @@ Configuration
    :toctree: generated
    :template: class.rst
 
-   GlobalConfig
+   Config
+
+**Stores:** N, omega, tolerance, max_iter, use_numba, method, num_threads, mpi_size
 
 Fields
 ------
@@ -125,8 +190,9 @@ Fields
    :toctree: generated
    :template: class.rst
 
-   GlobalFields
    LocalFields
+
+**Stores:** Local domain arrays with ghost zones (u1_local, u2_local, f_local)
 
 Results
 -------
@@ -135,18 +201,58 @@ Results
    :toctree: generated
    :template: class.rst
 
-   GlobalResults
-   LocalResults
+   Results
+   TimingResults
 
-Time Series
------------
+**Results:** Convergence information (iterations, converged)
+
+**TimingResults:** Per-rank timing summary (compute_time, mpi_comm_time, halo_exchange_time)
+
+Time Series (Optional)
+----------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   TimeSeriesGlobal
-   TimeSeriesLocal
+   Timeseries
+
+**Stores:** Detailed profiling data (residual_history, compute_times, mpi_comm_times, halo_exchange_times)
+
+I/O Methods
+===========
+
+The solver provides multiple output formats for different use cases:
+
+Parallel HDF5 
+--------------------------------------------
+
+.. code-block:: python
+
+   solver.save_hdf5("results/experiment.h5")
+
+**Features:**
+
+- **Parallel writes**: Each rank writes its data concurrently
+- **Single file**: All data (config, solution, results, timings) in one place
+- **Hierarchical structure**: Organized groups for config/fields/results/timings
+- **Compressed arrays**: Automatic compression for large datasets
+- **Scalable**: No gather-to-rank-0 bottleneck
+
+MLflow Logging
+--------------
+
+.. code-block:: python
+
+   solver.log_to_mlflow("scaling-experiments")
+
+**Features:**
+
+- **Experiment tracking**: Automatic versioning and comparison
+- **Web UI**: Browse and visualize results
+- **Scalars only**: Cannot store arrays
+- **Serial**: Rank 0 only
+
 
 Computational Kernels
 =====================

@@ -8,8 +8,18 @@ is enabled by providing decomposition and communicator strategies.
 import socket
 import numpy as np
 from mpi4py import MPI
-from .base import PoissonSolver
-from .datastructures import sinusoidal_exact_solution
+from numba import get_num_threads
+
+from .kernels import jacobi_step_numpy, jacobi_step_numba
+from .datastructures import (
+    GlobalConfig,
+    GlobalFields,
+    GlobalResults,
+    LocalResults,
+    TimeSeriesLocal,
+    TimeSeriesGlobal,
+    sinusoidal_exact_solution,
+)
 from .strategies import (
     NoDecomposition,
     SlicedDecomposition,
@@ -30,7 +40,66 @@ COMMUNICATOR_REGISTRY = {
 }
 
 
-class JacobiPoisson(PoissonSolver):
+# ============================================================================
+# Module-level utilities
+# ============================================================================
+
+def _create_strategy(strategy, registry, strategy_type):
+    """Create a strategy instance from string or return existing instance.
+
+    Parameters
+    ----------
+    strategy : str or object
+        Strategy name or instance
+    registry : dict
+        Registry mapping names to classes
+    strategy_type : str
+        Type name for error messages
+
+    Returns
+    -------
+    object
+        Strategy instance
+    """
+    if isinstance(strategy, str):
+        strategy_lower = strategy.lower()
+        if strategy_lower not in registry:
+            raise ValueError(
+                f"Unknown {strategy_type} strategy: {strategy}. "
+                f"Available: {list(registry.keys())}"
+            )
+        return registry[strategy_lower]()
+    else:
+        return strategy
+
+
+def _time_operation(operation, time_list):
+    """Time an operation and append to time list.
+
+    Parameters
+    ----------
+    operation : callable
+        Operation to time
+    time_list : list
+        List to append timing to
+
+    Returns
+    -------
+    result
+        Result of operation
+    """
+    t_start = MPI.Wtime()
+    result = operation()
+    t_end = MPI.Wtime()
+    time_list.append(t_end - t_start)
+    return result
+
+
+# ============================================================================
+# Main solver class
+# ============================================================================
+
+class JacobiPoisson:
     """Unified Jacobi solver for sequential and distributed execution.
 
     This solver provides a single interface for both sequential and MPI-parallel
@@ -46,7 +115,7 @@ class JacobiPoisson(PoissonSolver):
         Ghost exchange strategy: "custom", "numpy", or strategy instance.
         Required if decomposition is specified.
     **kwargs
-        Additional arguments passed to PoissonSolver base class
+        Additional arguments for solver configuration
         (N, omega, use_numba, max_iter, tolerance, etc.)
 
     Examples
@@ -62,12 +131,29 @@ class JacobiPoisson(PoissonSolver):
     """
 
     def __init__(self, decomposition=None, communicator=None, **kwargs):
-        super().__init__(**kwargs)
-
         # MPI setup
-        self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.Get_rank()
-        self.size = self.comm.Get_size()
+        comm = MPI.COMM_WORLD
+        self.comm = comm
+        self.rank = comm.Get_rank()
+        self.size = comm.Get_size()
+
+        # Global configuration
+        self.config = GlobalConfig(**kwargs)
+        self.config.num_threads = get_num_threads()
+        self.config.mpi_size = self.size
+
+        # Local results and timeseries (all ranks)
+        self.local_results = LocalResults()
+        self.global_timeseries = TimeSeriesLocal()
+
+        # Global results and fields (rank 0 only)
+        if self.rank == 0:
+            self.global_results = GlobalResults()
+            self.global_fields = GlobalFields(N=self.config.N)
+            self.global_timeseries = TimeSeriesGlobal()
+
+        # Kernel selection
+        self._step = jacobi_step_numba if self.config.use_numba else jacobi_step_numpy
 
         # Setup strategies
         if decomposition is None:
@@ -77,8 +163,8 @@ class JacobiPoisson(PoissonSolver):
             kernel_name = "Numba" if self.config.use_numba else "NumPy"
             self.config.method = f"Sequential ({kernel_name})"
         else:
-            # Distributed mode - instantiate decomposition
-            self.decomposition = self._create_strategy(
+            # Distributed mode
+            self.decomposition = _create_strategy(
                 decomposition, DECOMPOSITION_REGISTRY, "decomposition"
             )
 
@@ -86,7 +172,7 @@ class JacobiPoisson(PoissonSolver):
             if communicator is None:
                 communicator = "numpy"
 
-            self.communicator = self._create_strategy(
+            self.communicator = _create_strategy(
                 communicator, COMMUNICATOR_REGISTRY, "communicator"
             )
 
@@ -101,46 +187,49 @@ class JacobiPoisson(PoissonSolver):
             N, self.rank, self.comm
         )
 
-    def _create_strategy(self, strategy, registry, strategy_type):
-        """Create a strategy instance from string or return existing instance.
+    # ========================================================================
+    # Main solve interface
+    # ========================================================================
 
-        Parameters
-        ----------
-        strategy : str or object
-            Strategy name or instance
-        registry : dict
-            Registry mapping names to classes
-        strategy_type : str
-            Type name for error messages
+    def solve(self):
+        """Main solve routine that wraps the Jacobi iteration."""
+        # Start wall timings
+        time_start = MPI.Wtime() if self.rank == 0 else None
 
-        Returns
-        -------
-        object
-            Strategy instance
-        """
-        if isinstance(strategy, str):
-            strategy_lower = strategy.lower()
-            if strategy_lower not in registry:
-                raise ValueError(
-                    f"Unknown {strategy_type} strategy: {strategy}. "
-                    f"Available: {list(registry.keys())}"
-                )
-            return registry[strategy_lower]()
-        else:
-            return strategy
+        # Run Jacobi iteration
+        self._method_solve()
 
-    def method_solve(self):
+        # Post-processing
+        self._post_solve(time_start)
+
+    def _method_solve(self):
         """Solve using Jacobi iteration.
 
-        Uses decomposition strategy to determine domain ownership.
-        For NoDecomposition, rank 0 owns entire domain and others do nothing.
-        For other decompositions, domain is distributed across all ranks.
+        Orchestrates the high-level solve process: iteration loop,
+        solution gathering, and results collection.
         """
         # NoDecomposition returns None for non-root ranks - they should exit
         if self.u1_local is None:
             return
 
-        # Get problem size
+        # Run main iteration loop
+        u_final = self._run_iterations()
+
+        # Gather solution to rank 0
+        self._gather_solution(u_final)
+
+        # Build per-rank results
+        self._build_local_results()
+
+    def _run_iterations(self):
+        """Execute main Jacobi iteration loop.
+
+        Returns
+        -------
+        np.ndarray
+            Final solution array (local domain)
+        """
+        # Get problem parameters
         N = self.config.N
         h = 2.0 / (N - 1)
 
@@ -150,40 +239,72 @@ class JacobiPoisson(PoissonSolver):
 
         # Main iteration loop
         for i in range(self.config.max_iter):
-            # Exchange ghost zones
-            self._time_operation(
-                lambda: self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm),
-                self.global_timeseries.halo_exchange_times
-            )
-
-            # Jacobi step on local domain
-            local_residual = self._time_operation(
-                lambda: self._step(uold_local, u_local, self.f_local, h, self.config.omega),
-                self.global_timeseries.compute_times
-            )
-
-            # Compute global residual
-            global_residual = self._time_operation(
-                lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
-                self.global_timeseries.mpi_comm_times
-            )
-
-            # Store residual history on rank 0
-            if self.rank == 0:
-                self.global_timeseries.residual_history.append(float(global_residual))
+            # Perform one Jacobi iteration
+            global_residual = self._perform_iteration(uold_local, u_local, h)
 
             # Check convergence
             if global_residual < self.config.tolerance:
                 self._record_convergence(i + 1, converged=True)
-                break
+                return u_local
 
             # Swap buffers for next iteration
             uold_local, u_local = u_local, uold_local
         else:
             # Max iterations reached without convergence
             self._record_convergence(self.config.max_iter, converged=False)
+            return u_local
 
-        # Gather solution to rank 0
+    def _perform_iteration(self, uold_local, u_local, h):
+        """Perform a single Jacobi iteration.
+
+        Parameters
+        ----------
+        uold_local : np.ndarray
+            Previous solution (local domain with ghosts)
+        u_local : np.ndarray
+            New solution array (local domain with ghosts)
+        h : float
+            Grid spacing
+
+        Returns
+        -------
+        float
+            Global residual for this iteration
+        """
+        # Exchange ghost zones
+        _time_operation(
+            lambda: self.communicator.exchange_ghosts(uold_local, self.decomposition, self.rank, self.comm),
+            self.global_timeseries.halo_exchange_times
+        )
+
+        # Jacobi step on local domain
+        local_residual = _time_operation(
+            lambda: self._step(uold_local, u_local, self.f_local, h, self.config.omega),
+            self.global_timeseries.compute_times
+        )
+
+        # Compute global residual
+        global_residual = _time_operation(
+            lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
+            self.global_timeseries.mpi_comm_times
+        )
+
+        # Store residual history on rank 0
+        if self.rank == 0:
+            self.global_timeseries.residual_history.append(float(global_residual))
+
+        return global_residual
+
+    def _gather_solution(self, u_local):
+        """Gather local solutions to global array on rank 0.
+
+        Parameters
+        ----------
+        u_local : np.ndarray
+            Local solution (with ghost zones)
+        """
+        N = self.config.N
+
         if self.rank == 0:
             # Extract interior points using decomposition strategy
             local_interior = self.decomposition.extract_interior(u_local)
@@ -202,29 +323,27 @@ class JacobiPoisson(PoissonSolver):
             local_interior = self.decomposition.extract_interior(u_local)
             self.comm.gather(local_interior, root=0)
 
-        # Build per-rank results
-        self._build_local_results()
-
-    def _time_operation(self, operation, time_list):
-        """Time an operation and append to time list.
+    def _post_solve(self, start_time):
+        """Aggregate timing results after solve.
 
         Parameters
         ----------
-        operation : callable
-            Operation to time
-        time_list : list
-            List to append timing to
-
-        Returns
-        -------
-        result
-            Result of operation
+        start_time : float or None
+            Start time from MPI.Wtime() on rank 0, None on other ranks
         """
-        t_start = MPI.Wtime()
-        result = operation()
-        t_end = MPI.Wtime()
-        time_list.append(t_end - t_start)
-        return result
+        # Calculate wall time and aggregate timings (rank 0 only)
+        if self.rank == 0:
+            wall_time = MPI.Wtime() - start_time
+
+            # Aggregate local timings to global results
+            self.global_results.wall_time = wall_time
+            self.global_results.compute_time = sum(self.global_timeseries.compute_times)
+            self.global_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
+            self.global_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
+
+    # ========================================================================
+    # Helper methods
+    # ========================================================================
 
     def _record_convergence(self, iterations, converged):
         """Record convergence status on rank 0.
@@ -247,6 +366,27 @@ class JacobiPoisson(PoissonSolver):
         self.local_results.compute_time = sum(self.global_timeseries.compute_times)
         self.local_results.mpi_comm_time = sum(self.global_timeseries.mpi_comm_times)
         self.local_results.halo_exchange_time = sum(self.global_timeseries.halo_exchange_times)
+
+    # ========================================================================
+    # Public utility methods
+    # ========================================================================
+
+    def warmup(self, N=10):
+        """Warmup the solver (trigger JIT compilation for Numba).
+
+        Parameters
+        ----------
+        N : int, optional
+            Small grid size for warmup (default: 10)
+        """
+        h = 2.0 / (N - 1)
+        u1 = np.zeros((N, N, N))
+        u2 = np.zeros((N, N, N))
+        f = np.random.randn(N, N, N)
+
+        for _ in range(5):
+            self._step(u1, u2, f, h, self.config.omega)
+            u1, u2 = u2, u1
 
     def summary(self, exact_solution=None):
         """Compute summary statistics and error against exact solution.
@@ -278,3 +418,82 @@ class JacobiPoisson(PoissonSolver):
         # Compute L2 error
         error_diff = u_computed - u_exact
         self.global_results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
+
+    def _dataclass_to_df(self, obj):
+        """Convert any dataclass instance to single-row DataFrame.
+
+        Parameters
+        ----------
+        obj : dataclass instance
+            Any dataclass object to convert
+
+        Returns
+        -------
+        pd.DataFrame or None
+            Single-row DataFrame on rank 0, None on other ranks
+        """
+        if self.rank != 0:
+            return None
+
+        from dataclasses import asdict
+        import pandas as pd
+
+        return pd.DataFrame([asdict(obj)])
+
+    def save_results(self, path, include_timeseries=False):
+        """Save results to parquet file.
+
+        Parameters
+        ----------
+        path : str or Path
+            Output file path (should end in .parquet)
+        include_timeseries : bool, optional
+            Include detailed timeseries data (default: False)
+
+        Notes
+        -----
+        Only rank 0 performs the save operation.
+        """
+        if self.rank != 0:
+            return
+
+        import pandas as pd
+
+        # Combine config and results into single row
+        df = pd.concat([
+            self._dataclass_to_df(self.config),
+            self._dataclass_to_df(self.global_results)
+        ], axis=1)
+
+        if include_timeseries:
+            df_timeseries = self._dataclass_to_df(self.global_timeseries)
+            df = pd.concat([df, df_timeseries], axis=1)
+
+        df.to_parquet(path, index=False)
+
+    def log_to_mlflow(self, experiment_name):
+        """Log results to MLflow.
+
+        Parameters
+        ----------
+        experiment_name : str
+            Name of the MLflow experiment
+
+        Notes
+        -----
+        Only rank 0 performs the logging operation.
+        Logs config as params and results as metrics.
+        """
+        if self.rank != 0:
+            return
+
+        import mlflow
+        from dataclasses import asdict
+
+        mlflow.set_experiment(experiment_name)
+        with mlflow.start_run():
+            # Log configuration as parameters
+            mlflow.log_params(asdict(self.config))
+
+            # Log results as metrics
+            mlflow.log_metrics(asdict(self.global_results))

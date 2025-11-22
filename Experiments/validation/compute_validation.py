@@ -14,44 +14,51 @@ Validation experiments to verify solver correctness and convergence properties.
 """
 
 # %%
-# Configuration
-# -------------
-#
-# Test problem sizes for spatial convergence: N = [25, 50, 75, 100]
-# Fixed problem size for iterative convergence: N = 100
-# Use tighter tolerance to see full convergence behavior
+# Imports
+# -------
 
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
-
 from Poisson import JacobiPoisson
 from utils import datatools
 
+# %%
+# MPI Setup
+# ---------
+
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
+size = comm.Get_size()
 
 # %%
-# Spatial Convergence Test
-# -------------------------
+# Test Parameters
+# ---------------
 #
-# Measure solution error vs grid size to verify spatial convergence rate
-# for different solver methods (Sequential and MPI with different strategies).
-# Expected: O(h²) convergence for second-order finite differences.
+# Test problem sizes for spatial convergence: N = [25, 50]
+# Use tighter tolerance to see full convergence behavior
+
+problem_sizes = [25, 50]
+omega = 0.75
+max_iter = 5000
+
+# %%
+# Initialize Results Storage
+# ---------------------------
+
+spatial_results = []  # Will collect DataFrames
 
 if rank == 0:
     print("Spatial Convergence Analysis")
     print("=" * 60)
 
-# Test parameters
-problem_sizes = [25, 50]
-omega = 0.75
-max_iter = 5000
+# %%
+# Sequential Solver Tests
+# ------------------------
+#
+# Test JacobiPoisson without decomposition (sequential mode).
+# Only runs when script is executed with a single MPI rank.
 
-spatial_results = []
-
-# Test Sequential solver (NumPy kernel only) - only when running with single rank
-size = comm.Get_size()
 if size == 1:
     if rank == 0:
         print("\nSequential (NumPy)")
@@ -68,7 +75,14 @@ if size == 1:
         solver.summary()
 
         if rank == 0:
-            spatial_results.append(solver.to_dict())
+            # Collect results as DataFrame
+            import pandas as pd
+            df_result = pd.concat([
+                solver._dataclass_to_df(solver.config),
+                solver._dataclass_to_df(solver.global_results)
+            ], axis=1)
+            spatial_results.append(df_result)
+
             res = solver.global_results
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
@@ -78,7 +92,14 @@ elif rank == 0:
     print("\nSkipping Sequential tests (use single rank for sequential)")
     print("=" * 60)
 
-# Test all MPI solver combinations
+# %%
+# MPI Solver Tests
+# ----------------
+#
+# Test all combinations of:
+# - Decomposition strategies: Sliced (1D) vs Cubic (3D)
+# - Communication methods: Custom MPI datatypes vs NumPy arrays
+
 mpi_methods = [
     ("MPI_Sliced_CustomMPI", "sliced", "custom"),
     ("MPI_Sliced_Numpy", "sliced", "numpy"),
@@ -108,22 +129,38 @@ for method_name, decomposition, communicator in mpi_methods:
         solver.summary()
 
         if rank == 0:
-            spatial_results.append(solver.to_dict())
+            # Collect results as DataFrame
+            df_result = pd.concat([
+                solver._dataclass_to_df(solver.config),
+                solver._dataclass_to_df(solver.global_results)
+            ], axis=1)
+            spatial_results.append(df_result)
+
             res = solver.global_results
             print(f"  Iterations: {res.iterations}")
             print(f"  Converged: {res.converged}")
             print(f"  Final error (L2): {res.final_error:.4e}")
             print(f"  Wall time: {res.wall_time:.4f}s")
 
-# Save spatial convergence data (only on rank 0)
+# %%
+# Save Results
+# ------------
+#
+# Concatenate all DataFrames and save to parquet format.
+# Only rank 0 performs the save operation.
+
 if rank == 0:
-    df_spatial = pd.DataFrame(spatial_results)
+    df_spatial = pd.concat(spatial_results, ignore_index=True)
     data_dir = datatools.get_data_dir()
     datatools.save_simulation_data(
         df_spatial,
         data_dir / "spatial_convergence.parquet",
         format="parquet"
     )
+
+# %%
+# Summary
+# -------
 
 if rank == 0:
     print("\n" + "=" * 60)

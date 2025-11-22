@@ -1,19 +1,19 @@
 """
-Generate Communication Method Data
-===================================
+Generate Decomposition Comparison Data
+========================================
 
-Compare Custom MPI datatypes vs NumPy array communication strategies.
+Compare Sliced (1D) vs Cubic (3D) domain decompositions.
 
-Tests communication overhead for both Sliced and Cubic decompositions.
-Run with mpiexec to test MPI implementations.
+Tests how communication and computation scale with problem size for different
+decomposition strategies. Run with mpiexec to test MPI implementations.
 """
 
 # %%
-# Communication Benchmarks
-# ------------------------
+# Decomposition Experiments
+# --------------------------
 #
-# Compare: Custom MPI datatypes vs NumPy array communication
-# Measure: total time, halo exchange time, communication overhead
+# Compare Sliced vs Cubic decompositions across problem sizes
+# Measure: compute time, communication time, halo exchange time
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 if rank == 0:
-    print(f"Communication Method Comparison with {size} processes")
+    print(f"Decomposition Comparison with {size} processes")
     print("=" * 60)
 
 # Test parameters (small sizes for now)
@@ -36,19 +36,17 @@ omega = 0.75
 max_iter = 1000
 tolerance = 1e-5
 
-# Test all combinations of decomposition and communicator
-methods = [
-    ("Sliced_CustomMPI", "sliced", "custom"),
-    ("Sliced_Numpy", "sliced", "numpy"),
-    ("Cubic_CustomMPI", "cubic", "custom"),
-    ("Cubic_Numpy", "cubic", "numpy"),
+# Decomposition strategies to test
+decompositions = [
+    ("Sliced", "sliced"),
+    ("Cubic", "cubic"),
 ]
 
 results = []
 
-for method_name, decomp, comm_type in methods:
+for decomp_name, decomp_type in decompositions:
     if rank == 0:
-        print(f"\n{method_name}")
+        print(f"\n{decomp_name} Decomposition")
         print("=" * 60)
 
     for N in problem_sizes:
@@ -56,10 +54,10 @@ for method_name, decomp, comm_type in methods:
             print(f"\nTesting N={N} (h={2.0/(N-1):.6f})")
             print("-" * 60)
 
-        # Create solver
+        # Create solver with decomposition
         solver = JacobiPoisson(
-            decomposition=decomp,
-            communicator=comm_type,
+            decomposition=decomp_type,
+            communicator="numpy",  # Use numpy communicator
             N=N,
             omega=omega,
             max_iter=max_iter,
@@ -77,37 +75,30 @@ for method_name, decomp, comm_type in methods:
                 solver._dataclass_to_df(solver.global_results)
             ], axis=1)
 
-            # Add communication-specific fields
-            df_result['method'] = method_name
-            df_result['decomposition'] = decomp
-            df_result['communicator'] = comm_type
+            # Add decomposition-specific fields
+            df_result['decomposition'] = decomp_name
             df_result['mpi_size'] = size
             df_result['compute_time'] = solver.global_results.compute_time
             df_result['mpi_comm_time'] = solver.global_results.mpi_comm_time
             df_result['halo_exchange_time'] = solver.global_results.halo_exchange_time
-            comm_overhead_pct = (
-                100 * solver.global_results.halo_exchange_time / solver.global_results.wall_time
-                if solver.global_results.wall_time > 0 else 0
-            )
-            df_result['comm_overhead_pct'] = comm_overhead_pct
 
             results.append(df_result)
 
             res = solver.global_results
             print(f"  Iterations: {res.iterations}")
+            print(f"  Converged: {res.converged}")
             print(f"  Wall time: {res.wall_time:.4f}s")
             print(f"  Compute time: {res.compute_time:.4f}s")
             print(f"  Halo exchange time: {res.halo_exchange_time:.4f}s")
-            print(f"  Comm overhead: {comm_overhead_pct:.1f}%")
 
 # Save results on rank 0
 if rank == 0:
     df = pd.concat(results, ignore_index=True)
     data_dir = datatools.get_data_dir()
-    output_path = data_dir / f"communication_comparison_np{size}.parquet"
+    output_path = data_dir / f"decomposition_comparison_np{size}.parquet"
 
     datatools.save_simulation_data(df, output_path, format="parquet")
 
     print("\n" + "=" * 60)
-    print("Communication comparison data generated successfully!")
+    print("Decomposition comparison data generated successfully!")
     print(f"Saved to: {output_path}")
