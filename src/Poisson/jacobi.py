@@ -111,11 +111,22 @@ class JacobiPoisson:
 
         # Setup strategies based on MPI size
         if self.size == 1:
-            # Single rank: always use sequential mode
+            # Single rank: use sequential execution but preserve strategy names for metadata
+            if decomposition is not None:
+                # Store actual strategy names provided by user (for validation/testing)
+                self.config.decomposition = decomposition.__class__.__name__.lower().replace('decomposition', '')
+                self.config.communicator = (
+                    communicator.__class__.__name__.lower().replace('communicator', '').replace('mpi', '')
+                    if communicator is not None else 'numpy'
+                )
+            else:
+                # True sequential mode - no strategies provided
+                self.config.decomposition = "none"
+                self.config.communicator = "none"
+
+            # Always use NoDecomposition internally for single rank
             self.decomposition = NoDecomposition()
-            self.communicator = NumpyCommunicator()
-            self.config.decomposition = "none"
-            self.config.communicator = "none"
+            self.communicator = communicator if communicator is not None else NumpyCommunicator()
         else:
             # Multi-rank: require decomposition strategy
             if decomposition is None:
@@ -368,7 +379,8 @@ class JacobiPoisson:
 
         Notes
         -----
-        Gathers distributed solution to rank 0, which writes the complete file.
+        Gathers distributed solution to rank 0, which writes the file.
+        Note: Parallel HDF5 I/O is available but has known issues on macOS.
 
         File structure:
         - /config: Runtime configuration
@@ -381,11 +393,11 @@ class JacobiPoisson:
 
         N = self.config.N
 
-        # Gather solution to rank 0 and write (simpler and more reliable than parallel I/O)
+        # Gather solution to rank 0
         if not hasattr(self, 'u_global'):
             self._gather_solution(self.u2_local if hasattr(self, 'u2_local') else self.u1_local)
 
-        # Only rank 0 writes the file
+        # Only rank 0 writes
         if self.rank != 0:
             return
 
@@ -405,7 +417,7 @@ class JacobiPoisson:
             for key, value in asdict(self.results).items():
                 results_grp.attrs[key] = value
 
-            # Write timing data (rank 0 only for now)
+            # Write timing data (rank 0 only)
             rank_grp = f.create_group(f'timings/rank_{self.rank}')
             rank_grp.create_dataset('compute_times', data=self.timeseries.compute_times)
             rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times)
