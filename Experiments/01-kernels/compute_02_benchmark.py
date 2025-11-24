@@ -6,7 +6,6 @@ Benchmark NumPy vs Numba kernels with fixed iteration count across different
 problem sizes and thread configurations.
 
 """
-import time
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -41,17 +40,7 @@ for old_file in data_dir.glob("kernel_benchmark*.parquet"):
     old_file.unlink()
     print(f"  Deleted: {old_file.name}")
 
-data = {
-    'N': [],
-    'omega': [],
-    'max_iter': [],
-    'kernel': [],
-    'use_numba': [],
-    'num_threads': [],
-    'iterations': [],
-    'compute_time': [],
-    'avg_iter_time': [],
-}
+records = []
 
 # %%
 # NumPy Baseline
@@ -71,27 +60,25 @@ for N in problem_sizes:
 
     # Benchmark iterations
     print("  Running iterations...")
-    start_time = time.perf_counter()
-
     for iteration in range(max_iter):
         kernel.step(u_old, u, f)
         u, u_old = u_old, u  # Swap buffers
 
-    compute_time = time.perf_counter() - start_time
-    avg_iter_time = compute_time / max_iter
+    # Kernel automatically tracked everything
+    records.append({
+        'N': N,
+        'omega': omega,
+        'max_iter': max_iter,
+        'kernel': 'numpy',
+        'use_numba': False,
+        'num_threads': 0,
+        'iterations': kernel.metrics.iterations,
+        'compute_time': kernel.metrics.total_compute_time,
+        'avg_iter_time': kernel.metrics.total_compute_time / kernel.metrics.iterations,
+    })
 
-    data['N'].append(N)
-    data['omega'].append(omega)
-    data['max_iter'].append(max_iter)
-    data['kernel'].append('numpy')
-    data['use_numba'].append(False)
-    data['num_threads'].append(0)
-    data['iterations'].append(max_iter)
-    data['compute_time'].append(compute_time)
-    data['avg_iter_time'].append(avg_iter_time)
-
-    print(f"  Total time: {compute_time:.4f}s")
-    print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
+    print(f"  Total time: {kernel.metrics.total_compute_time:.4f}s")
+    print(f"  Avg iteration time: {(kernel.metrics.total_compute_time / kernel.metrics.iterations)*1000:.3f}ms")
 
 # %%
 # Numba Thread Scaling
@@ -121,33 +108,31 @@ for num_threads in thread_counts:
 
         # Benchmark iterations
         print("  Running iterations...")
-        start_time = time.perf_counter()
-
         for iteration in range(max_iter):
             kernel.step(u_old, u, f)
             u, u_old = u_old, u  # Swap buffers
 
-        compute_time = time.perf_counter() - start_time
-        avg_iter_time = compute_time / max_iter
+        # Kernel automatically tracked everything
+        records.append({
+            'N': N,
+            'omega': omega,
+            'max_iter': max_iter,
+            'kernel': 'numba',
+            'use_numba': True,
+            'num_threads': num_threads,
+            'iterations': kernel.metrics.iterations,
+            'compute_time': kernel.metrics.total_compute_time,
+            'avg_iter_time': kernel.metrics.total_compute_time / kernel.metrics.iterations,
+        })
 
-        data['N'].append(N)
-        data['omega'].append(omega)
-        data['max_iter'].append(max_iter)
-        data['kernel'].append('numba')
-        data['use_numba'].append(True)
-        data['num_threads'].append(num_threads)
-        data['iterations'].append(max_iter)
-        data['compute_time'].append(compute_time)
-        data['avg_iter_time'].append(avg_iter_time)
-
-        print(f"  Total time: {compute_time:.4f}s")
-        print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
+        print(f"  Total time: {kernel.metrics.total_compute_time:.4f}s")
+        print(f"  Avg iteration time: {(kernel.metrics.total_compute_time / kernel.metrics.iterations)*1000:.3f}ms")
 
 # %%
 # Save Results
 # ------------
 
-df = pd.DataFrame(data)
+df = pd.DataFrame(records)
 output_path = data_dir / "kernel_benchmark.parquet"
 df.to_parquet(output_path, index=False)
 print(f"Saved to: {output_path}")

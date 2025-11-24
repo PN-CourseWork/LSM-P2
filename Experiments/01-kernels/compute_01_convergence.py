@@ -37,15 +37,7 @@ tolerance = 1e-12             # Convergence criterion
 # For each problem size and kernel, we iterate until convergence and track
 # both the iterative residual and physical error at each iteration.
 
-data = {
-    'kernel': [],
-    'iteration': [],
-    'physical_error': [],
-    'iterative_residual': [],
-    'N': [],
-    'omega': [],
-    'tolerance': [],
-}
+all_results = []
 
 for N in problem_sizes:
     print('='*60)
@@ -82,23 +74,16 @@ for N in problem_sizes:
 
         # Iterate until convergence
         for iteration in range(max_iter):
-            # Perform one Jacobi iteration
+            # Perform one Jacobi iteration (kernel tracks residual internally)
             iterative_residual = kernel.step(u_old, u, f)
 
             # Compute physical error against exact solution
             physical_error = np.sqrt(np.sum((u - u_exact) ** 2)) / N**3
-
-            # Store result for this iteration
-            data['kernel'].append(kernel_name)
-            data['iteration'].append(iteration)
-            data['physical_error'].append(physical_error)
-            data['iterative_residual'].append(iterative_residual)
-            data['N'].append(N)
-            data['omega'].append(omega)
-            data['tolerance'].append(tolerance)
+            kernel.timeseries.physical_errors.append(physical_error)
 
             # Check convergence (iterative residual)
             if iterative_residual < tolerance:
+                kernel.metrics.converged = True
                 print(f"  Converged at iteration {iteration}")
                 print(f"    Iterative residual: {iterative_residual:.4e}")
                 print(f"    Physical error: {physical_error:.4e}")
@@ -111,11 +96,23 @@ for N in problem_sizes:
             print(f"    Final iterative residual: {iterative_residual:.4e}")
             print(f"    Final physical error: {physical_error:.4e}")
 
+        # Extract all iterations into result records
+        for i in range(len(kernel.timeseries.residuals)):
+            all_results.append({
+                'kernel': kernel_name,
+                'iteration': i,
+                'physical_error': kernel.timeseries.physical_errors[i],
+                'iterative_residual': kernel.timeseries.residuals[i],
+                'N': N,
+                'omega': omega,
+                'tolerance': tolerance,
+            })
+
 # %%
 # Save Results
 # ------------
 
-df = pd.DataFrame(data)
+df = pd.DataFrame(all_results)
 
 # Get the data directory
 data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"

@@ -5,7 +5,6 @@ Convergence-Based Performance Benchmark
 Benchmark NumPy vs Numba kernels with fixed tolerance to measure time-to-convergence
 across different problem sizes and thread configurations.
 """
-import time
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -39,20 +38,7 @@ for old_file in data_dir.glob("tolerance_benchmark*.parquet"):
     old_file.unlink()
     print(f"  Deleted: {old_file.name}")
 
-data = {
-    'N': [],
-    'omega': [],
-    'tolerance': [],
-    'max_iter': [],
-    'kernel': [],
-    'use_numba': [],
-    'num_threads': [],
-    'iterations': [],
-    'converged': [],
-    'final_error': [],
-    'total_time': [],
-    'avg_iter_time': [],
-}
+records = []
 
 # %%
 # NumPy Baseline
@@ -74,38 +60,34 @@ for N in problem_sizes:
     f = np.ones((N, N, N), dtype=np.float64)
 
     print("  Solving until convergence...")
-    start_time = time.perf_counter()
-
-    converged = False
-    iterations = 0
     for iteration in range(max_iter):
         residual = kernel.step(u_old, u, f)
-        iterations = iteration + 1
 
         if residual < tolerance:
-            converged = True
+            kernel.metrics.converged = True
             break
 
         u, u_old = u_old, u
 
-    total_time = time.perf_counter() - start_time
-    avg_iter_time = total_time / iterations if iterations > 0 else 0
+    avg_iter_time = kernel.metrics.total_compute_time / kernel.metrics.iterations if kernel.metrics.iterations > 0 else 0
 
-    data['N'].append(N)
-    data['omega'].append(omega)
-    data['tolerance'].append(tolerance)
-    data['max_iter'].append(max_iter)
-    data['kernel'].append('numpy')
-    data['use_numba'].append(False)
-    data['num_threads'].append(0)
-    data['iterations'].append(iterations)
-    data['converged'].append(converged)
-    data['final_error'].append(float(residual))
-    data['total_time'].append(total_time)
-    data['avg_iter_time'].append(avg_iter_time)
+    records.append({
+        'N': N,
+        'omega': omega,
+        'tolerance': tolerance,
+        'max_iter': max_iter,
+        'kernel': 'numpy',
+        'use_numba': False,
+        'num_threads': 0,
+        'iterations': kernel.metrics.iterations,
+        'converged': kernel.metrics.converged,
+        'final_error': float(kernel.metrics.final_residual),
+        'total_time': kernel.metrics.total_compute_time,
+        'avg_iter_time': avg_iter_time,
+    })
 
-    print(f"  Iterations: {iterations}, Converged: {converged}")
-    print(f"  Total time: {total_time:.4f}s")
+    print(f"  Iterations: {kernel.metrics.iterations}, Converged: {kernel.metrics.converged}")
+    print(f"  Total time: {kernel.metrics.total_compute_time:.4f}s")
     print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
 # %%
@@ -134,45 +116,41 @@ for num_threads in thread_counts:
         f = np.ones((N, N, N), dtype=np.float64)
 
         print("  Solving until convergence...")
-        start_time = time.perf_counter()
-
-        converged = False
-        iterations = 0
         for iteration in range(max_iter):
             residual = kernel.step(u_old, u, f)
-            iterations = iteration + 1
 
             if residual < tolerance:
-                converged = True
+                kernel.metrics.converged = True
                 break
 
             u, u_old = u_old, u
 
-        total_time = time.perf_counter() - start_time
-        avg_iter_time = total_time / iterations if iterations > 0 else 0
+        avg_iter_time = kernel.metrics.total_compute_time / kernel.metrics.iterations if kernel.metrics.iterations > 0 else 0
 
-        data['N'].append(N)
-        data['omega'].append(omega)
-        data['tolerance'].append(tolerance)
-        data['max_iter'].append(max_iter)
-        data['kernel'].append('numba')
-        data['use_numba'].append(True)
-        data['num_threads'].append(num_threads)
-        data['iterations'].append(iterations)
-        data['converged'].append(converged)
-        data['final_error'].append(float(residual))
-        data['total_time'].append(total_time)
-        data['avg_iter_time'].append(avg_iter_time)
+        records.append({
+            'N': N,
+            'omega': omega,
+            'tolerance': tolerance,
+            'max_iter': max_iter,
+            'kernel': 'numba',
+            'use_numba': True,
+            'num_threads': num_threads,
+            'iterations': kernel.metrics.iterations,
+            'converged': kernel.metrics.converged,
+            'final_error': float(kernel.metrics.final_residual),
+            'total_time': kernel.metrics.total_compute_time,
+            'avg_iter_time': avg_iter_time,
+        })
 
-        print(f"  Iterations: {iterations}, Converged: {converged}")
-        print(f"  Total time: {total_time:.4f}s")
+        print(f"  Iterations: {kernel.metrics.iterations}, Converged: {kernel.metrics.converged}")
+        print(f"  Total time: {kernel.metrics.total_compute_time:.4f}s")
         print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
 # %%
 # Save Results
 # ------------
 
-df = pd.DataFrame(data)
+df = pd.DataFrame(records)
 output_path = data_dir / "tolerance_benchmark.parquet"
 df.to_parquet(output_path, index=False)
 
