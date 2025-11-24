@@ -107,8 +107,8 @@ html_css_files = ["custom.css"]  # Custom CSS for hiding download buttons
 
 html_theme_options = {
     "github_url": "https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2",
-    "show_nav_level": 2,  # Show two levels in navigation sidebar
-    "show_toc_level": 2,  # Show two levels in page TOC (right sidebar)
+    "show_nav_level": 1,  # Show only top level in navigation sidebar (collapsed by default)
+    "show_toc_level": 1,  # Show only top level in page TOC (right sidebar, collapsed by default)
     "navigation_depth": 3,  # Allow up to 3 levels of navigation depth
     "collapse_navigation": False,  # Allow expanding/collapsing navigation
     "back_to_top_button": True,  # Enable back-to-top button on long pages

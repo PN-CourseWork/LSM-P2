@@ -12,15 +12,15 @@ Experiment Overview
 
    * - Experiment
      - Description
-   * - :doc:`01-kernels/index`
+   * - `01: Kernel Benchmarks <01-kernels/index.html>`_
      - Compare NumPy vs Numba JIT kernels for 7-point stencil operations without MPI.
-   * - :doc:`02-decomposition/index`
+   * - `02: Domain Decomposition <02-decomposition/index.html>`_
      - Compare 1D sliced vs 3D cubic domain partitioning strategies.
-   * - :doc:`03-communication/index`
+   * - `03: Communication Methods <03-communication/index.html>`_
      - Compare MPI datatypes vs NumPy arrays for ghost exchange.
-   * - :doc:`04-validation/index`
+   * - `04: Solver Validation <04-validation/index.html>`_
      - End-to-end correctness verification against analytical solutions. **Quality Gate.**
-   * - :doc:`05-scaling/index`
+   * - `05: Scaling Analysis <05-scaling/index.html>`_
      - Strong and weak scaling analysis of the validated solver.
 
 
