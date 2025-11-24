@@ -8,9 +8,6 @@ docs/reports/TexReport/
 
 # Generated data (keep README.md)
 data/*
-!data/README.md
-!data/.gitkeep
-!data/post_processed
 
 # Uv stuff 
 uv.lock
