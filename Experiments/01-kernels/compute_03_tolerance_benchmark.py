@@ -2,51 +2,85 @@
 Convergence-Based Performance Benchmark
 ========================================
 
-Benchmark NumPy vs Numba with fixed tolerance across different problem sizes.
+Benchmark NumPy vs Numba kernels with fixed tolerance to measure time-to-convergence
+across different problem sizes and thread configurations.
 
-This measures time-to-convergence (not just kernel performance) by using
-a fixed tolerance and allowing problems to converge naturally.
+This measures practical solver performance by allowing natural convergence to a
+strict tolerance, combining both kernel speed and convergence behavior.
 """
 
-import os
+# %%
+# Introduction
+# ------------
+#
+# This benchmark measures **time-to-convergence** rather than raw kernel speed.
+# Unlike the fixed-iteration benchmark, here we set a strict tolerance
+# (:math:`10^{-10}`) and measure how long each kernel takes to converge.
+#
+# This approach captures:
+#
+# * **Kernel computational speed** - How fast each iteration executes
+# * **Convergence behavior** - How many iterations are needed
+# * **Practical performance** - Total time to reach solution
+#
+# The combination of these factors determines the practical performance of the
+# solver for real problems where we need accurate solutions.
+
 import numpy as np
 import pandas as pd
 
 from Poisson import JacobiPoisson
 from utils import datatools
 
-print("Convergence-Based Performance Benchmark")
-print("=" * 60)
+# %%
+# Test Configuration
+# ------------------
+#
+# We use a strict tolerance to ensure high-quality solutions. The maximum
+# iteration limit is set high enough that convergence should always be reached.
 
-# Test parameters
-problem_sizes = [25, 50, 75, 100]
-omega = 0.75
-max_iter = 10000
-tolerance = 1e-10  # Very low tolerance - strict convergence
+problem_sizes = [25, 50, 75, 100]  # Grid sizes: N×N×N
+omega = 0.75                        # Relaxation parameter
+max_iter = 10000                    # Maximum iterations
+tolerance = 1e-10                   # Strict convergence criterion
 
-# Thread counts to test
+# Thread counts to test for Numba
 thread_counts = [1, 4, 6, 8, 10]
 
-# Get data directory and clean old files
+print("Convergence-Based Performance Benchmark")
+print("=" * 60)
+print(f"Problem sizes: {problem_sizes}")
+print(f"Convergence tolerance: {tolerance:.2e}")
+print(f"Maximum iterations: {max_iter:,}")
+print(f"Numba thread counts: {thread_counts}")
+
+# %%
+# Initialize Storage
+# ------------------
+#
+# Clean up old tolerance benchmark files and prepare storage for results.
+
 data_dir = datatools.get_data_dir()
 print("\nCleaning up old tolerance benchmark files...")
 for old_file in data_dir.glob("tolerance_benchmark*.parquet"):
     old_file.unlink()
     print(f"  Deleted: {old_file.name}")
 
-# Storage for all results
 all_results = []
 
-# ============================================================================
+# %%
 # NumPy Baseline
-# ============================================================================
+# --------------
+#
+# Establish NumPy baseline by measuring time-to-convergence for each problem
+# size. This provides the reference for computing Numba speedups.
 
 print("\n" + "=" * 60)
 print("NumPy Baseline")
 print("=" * 60)
 
 for N in problem_sizes:
-    print(f"\nTesting N={N}, kernel=numpy")
+    print(f"\nTesting N={N} ({N**3:,} grid points), kernel=numpy")
     print("-" * 60)
 
     solver = JacobiPoisson(
@@ -57,9 +91,8 @@ for N in problem_sizes:
         use_numba=False,
     )
 
-    print("  Solving...")
+    print("  Solving until convergence...")
     solver.solve()
-    solver.summary()
 
     # Extract results
     res = solver.results
@@ -83,14 +116,17 @@ for N in problem_sizes:
 
     all_results.append(result_dict)
 
-    print(f"  Iterations: {res.iterations}")
+    print(f"  Iterations to convergence: {res.iterations:,}")
     print(f"  Converged: {res.converged}")
     print(f"  Total time: {total_time:.4f}s")
-    print(f"  Avg iteration time: {avg_iter_time:.6f}s")
+    print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
-# ============================================================================
-# Numba with Different Thread Counts
-# ============================================================================
+# %%
+# Numba Thread Scaling
+# ---------------------
+#
+# Test Numba kernel performance with different thread counts. For each thread
+# configuration, measure time-to-convergence across all problem sizes.
 
 for num_threads in thread_counts:
     print("\n" + "=" * 60)
@@ -98,7 +134,7 @@ for num_threads in thread_counts:
     print("=" * 60)
 
     for N in problem_sizes:
-        print(f"\nTesting N={N}, kernel=numba, threads={num_threads}")
+        print(f"\nTesting N={N} ({N**3:,} grid points), kernel=numba, threads={num_threads}")
         print("-" * 60)
 
         solver = JacobiPoisson(
@@ -115,9 +151,8 @@ for num_threads in thread_counts:
             print("  Warming up Numba JIT...")
             solver.warmup(N=10)
 
-        print("  Solving...")
+        print("  Solving until convergence...")
         solver.solve()
-        solver.summary()
 
         # Extract results
         res = solver.results
@@ -141,14 +176,16 @@ for num_threads in thread_counts:
 
         all_results.append(result_dict)
 
-        print(f"  Iterations: {res.iterations}")
+        print(f"  Iterations to convergence: {res.iterations:,}")
         print(f"  Converged: {res.converged}")
         print(f"  Total time: {total_time:.4f}s")
-        print(f"  Avg iteration time: {avg_iter_time:.6f}s")
+        print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
-# ============================================================================
+# %%
 # Save Results
-# ============================================================================
+# ------------
+#
+# Store convergence-based benchmark results for analysis by the plotting script.
 
 print("\n" + "=" * 60)
 print("Saving Results")
@@ -160,6 +197,8 @@ datatools.save_simulation_data(df, output_path, format="parquet")
 
 print(f"\nBenchmark results saved to: {output_path}")
 print(f"Total records: {len(df)}")
+print(f"Configurations tested: NumPy + {len(thread_counts)} Numba configs")
+print(f"Problem sizes: {sorted(df['N'].unique())}")
 print("\n" + "=" * 60)
 print("Tolerance-based benchmarks completed!")
 print("=" * 60)
