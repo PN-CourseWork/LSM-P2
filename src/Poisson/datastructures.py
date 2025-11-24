@@ -53,7 +53,7 @@ class KernelSeries:
     """
     residuals: list[float] = field(default_factory=list)
     compute_times: list[float] = field(default_factory=list)
-    physical_errors: list[float] = field(default_factory=list)  # Optional
+    physical_errors: list[float] | None = None
 
 
 # ============================================================================
@@ -88,7 +88,7 @@ class GlobalMetrics:
     """Final convergence metrics (computed/stored on rank 0 only)."""
     iterations: int = 0
     converged: bool = False
-    final_error: float = 0.0  # Optional
+    final_error: float | None = None
 
 
 # ============================================================================
