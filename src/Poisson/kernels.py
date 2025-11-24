@@ -5,7 +5,7 @@ import numpy as np
 import numba
 from numba import njit, prange
 
-from .datastructures import KernelParameters, KernelMetrics, KernelTimeseries
+from .datastructures import KernelParams, KernelMetrics, KernelSeries
 
 
 @njit(parallel=True)
@@ -50,12 +50,12 @@ class NumPyKernel:
         Parameters
         ----------
         **kwargs
-            Keyword arguments passed to KernelParameters
+            Keyword arguments passed to KernelParams
             (N, omega, tolerance, max_iter, num_threads)
         """
-        self.parameters = KernelParameters(**kwargs)
+        self.parameters = KernelParams(**kwargs)
         self.metrics = KernelMetrics()
-        self.timeseries = KernelTimeseries()
+        self.timeseries = KernelSeries()
 
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
         """Perform one Jacobi iteration step.
