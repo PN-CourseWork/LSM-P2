@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from dataclasses import asdict
+from scipy.ndimage import laplace
 
 from Poisson import problems
 from Poisson.kernels import NumPyKernel, NumbaKernel
@@ -23,11 +24,11 @@ from Poisson.kernels import NumPyKernel, NumbaKernel
 data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"
 data_dir.mkdir(parents=True, exist_ok=True)
 
-# Problem sizes
-problem_sizes = [25, 50, 75]
+# Problem sizes (smaller for convergence to machine epsilon)
+problem_sizes = [25]
 
 # Kernel configurations
-omega = 0.99
+omega = 1.0
 thread_counts = [1, 4, 6, 8]
 
 # Clean up old files
@@ -37,17 +38,16 @@ for old_file in data_dir.glob("*.parquet"):
 # %%
 # Experiment 1: Convergence Validation
 # =====================================
-# Compare NumPy vs Numba convergence with analytical solution
+# Compare NumPy vs Numba convergence by tracking iterative residual
 
 print("EXPERIMENT 1: Convergence Validation")
 
 all_dfs = []
-tolerance = 1e-10
-max_iter = 20000
+tolerance = 0.0  # Near machine epsilon (2.22e-16 for float64)
+max_iter = 5000  # More iterations to reach machine precision
 
 for N in problem_sizes:
-    # Setup problem with analytical solution
-    u_exact = problems.sinusoidal_exact_solution(N)
+    # Setup problem with source term
     f = problems.sinusoidal_source_term(N)
 
     # Create kernels
@@ -65,16 +65,22 @@ for N in problem_sizes:
         u = np.zeros((N, N, N), dtype=np.float64)
         u_old = np.zeros((N, N, N), dtype=np.float64)
 
-        # Initialize physical errors list
+        # Initialize algebraic residuals list
         if kernel.timeseries.physical_errors is None:
             kernel.timeseries.physical_errors = []
+
+        h = kernel.parameters.h
+        h2 = h * h
 
         for iteration in range(max_iter):
             residual = kernel.step(u_old, u, f)
 
-            # Compute physical error against exact solution
-            physical_error = np.sqrt(np.sum((u - u_exact) ** 2)) / N**3
-            kernel.timeseries.physical_errors.append(physical_error)
+            # Compute algebraic residual ||Au - f||_inf where Au = -∇²u
+            # Only compute on interior points (where the PDE holds)
+            Au = -laplace(u) / h2
+            interior_residual = Au[1:-1, 1:-1, 1:-1] - f[1:-1, 1:-1, 1:-1]
+            algebraic_residual = np.max(np.abs(interior_residual))
+            kernel.timeseries.physical_errors.append(algebraic_residual)
 
             if residual < tolerance:
                 kernel.metrics.converged = True
@@ -103,8 +109,9 @@ df_conv.to_parquet(output_path, index=False)
 
 print("EXPERIMENT 2: Fixed Iteration Benchmark")
 
+problem_sizes = [25, 50, 75, 100, 125, 150]
 all_dfs = []
-max_iter = 100
+max_iter = 200
 tolerance = 0.0  # Never converge
 
 # NumPy baseline
@@ -165,8 +172,3 @@ df_bench = pd.concat(all_dfs, ignore_index=True)
 output_path = data_dir / "kernel_benchmark.parquet"
 df_bench.to_parquet(output_path, index=False)
 
-# %%
-# Summary
-# -------
-
-print(f"\nCompleted: {len(df_conv):,} + {len(df_bench):,} = {len(df_conv) + len(df_bench):,} records")

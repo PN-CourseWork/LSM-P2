@@ -36,14 +36,17 @@ if convergence_file.exists():
         y='physical_errors',
         col='N',
         hue='kernel',
+        style="kernel",
         kind='line',
+        dashes=True,
+        markers=False,
         facet_kws={'sharey': True, 'sharex': False}
     )
 
-    g.set(yscale='log')
-    g.set_axis_labels('Iteration', r'Physical Error $||u - u_{exact}||_2 / N^3$')
+    g.set(xscale='log', yscale='log')
+    g.set_axis_labels('Iteration', r'Algebraic Residual $||Au - f||_\infty$')
     g.set_titles(col_template='N={col_name}')
-    g.fig.suptitle(r'Kernel Convergence Validation (tolerance = $\epsilon_{machine}$)', y=1.02)
+    g.fig.suptitle(r'Kernel Convergence Validation', y=1.02)
 
     # Save figure
     g.savefig(fig_dir / "01_convergence_validation.pdf")
@@ -53,49 +56,38 @@ if convergence_file.exists():
 # --------------------------------
 
 benchmark_file = data_dir / "kernel_benchmark.parquet"
-df_raw = pd.read_parquet(benchmark_file)
+df = pd.read_parquet(benchmark_file)
 
-# Aggregate per-iteration data to get average iteration time
-df = df_raw.groupby(['N', 'kernel', 'use_numba', 'num_threads']).agg({
-    'compute_times': 'mean'
-}).reset_index()
-df = df.rename(columns={'compute_times': 'avg_iter_time'})
+# Convert to milliseconds
+df['time_ms'] = df['compute_times'] * 1000
 
-# Create NumPy baseline for speedup calculations
-df_numpy = df[df['kernel'] == 'numpy'][['N', 'avg_iter_time']].rename(
-    columns={'avg_iter_time': 'numpy_baseline'}
+# Prepare configuration labels
+df['config'] = df.apply(
+    lambda row: 'NumPy' if row['kernel'] == 'numpy'
+    else f"Numba ({int(row['num_threads'])} threads)",
+    axis=1
 )
-
-# Merge baseline into all rows and compute speedup
-df = df.merge(df_numpy, on='N', how='left')
-df['speedup'] = df['numpy_baseline'] / df['avg_iter_time']
 
 # %%
 # Plot 2: Performance Comparison
 # -------------------------------
 
-# Prepare data for plotting
-df_plot = df.copy()
-df_plot['config'] = df_plot.apply(
-    lambda row: 'NumPy' if row['kernel'] == 'numpy'
-    else f"Numba ({int(row['num_threads'])} threads)",
-    axis=1
-)
-df_plot['time_ms'] = df_plot['avg_iter_time'] * 1000
-
-# Create plot
+# Create plot - seaborn will automatically compute mean and confidence intervals
 fig, ax = plt.subplots()
 sns.lineplot(
-    data=df_plot,
+    data=df,
     x='N',
     y='time_ms',
     hue='config',
     style='config',
     markers=True,
     dashes=False,
+    errorbar='ci',  # Show confidence intervals
     ax=ax
 )
 
+ax.set_xscale('log')
+ax.set_yscale('log')
 ax.set_xlabel('Problem Size (N)')
 ax.set_ylabel('Time per Iteration (ms)')
 ax.set_title('Kernel Performance Comparison')
@@ -106,11 +98,15 @@ fig.savefig(fig_dir / "02_performance.pdf")
 # Plot 3: Speedup Analysis
 # -------------------------
 
-# Filter to Numba only and prepare labels
-df_speedup = df[df['kernel'] == 'numba'].copy()
+# Compute numpy baseline for each N and iteration
+df_numpy = df[df['kernel'] == 'numpy'][['N', 'iteration', 'compute_times']].rename(
+    columns={'compute_times': 'numpy_time'}
+)
+df_speedup = df[df['kernel'] == 'numba'].merge(df_numpy, on=['N', 'iteration'], how='left')
+df_speedup['speedup'] = df_speedup['numpy_time'] / df_speedup['compute_times']
 df_speedup['thread_label'] = df_speedup['num_threads'].astype(int).astype(str) + ' threads'
 
-# Create speedup plot
+# Create speedup plot - seaborn will compute mean and error bars
 fig, ax = plt.subplots()
 sns.lineplot(
     data=df_speedup,
@@ -120,47 +116,13 @@ sns.lineplot(
     style='thread_label',
     markers=True,
     dashes=False,
+    errorbar='ci',
     ax=ax
 )
 
-# Add reference line at speedup=1 (NumPy baseline)
 ax.set_xlabel('Problem Size (N)')
 ax.set_ylabel('Speedup vs NumPy')
-ax.set_title('Fixed Iteration Speedup (100 iterations)')
+ax.set_title('Fixed Iteration Speedup (200 iterations)')
 
 fig.savefig(fig_dir / "03_speedup_fixed_iter.pdf")
-
-# %%
-# Plot 4: Time to Convergence
-# ----------------------------
-
-# Compute total time to convergence from convergence validation data
-df_time_conv = df_conv.groupby(['N', 'kernel']).agg({
-    'compute_times': 'sum',
-    'iteration': 'max'
-}).reset_index()
-df_time_conv = df_time_conv.rename(columns={
-    'compute_times': 'total_time',
-    'iteration': 'iterations'
-})
-df_time_conv['iterations'] += 1  # iteration is 0-indexed
-
-# Create plot
-fig, ax = plt.subplots()
-sns.lineplot(
-    data=df_time_conv,
-    x='N',
-    y='total_time',
-    hue='kernel',
-    style='kernel',
-    markers=True,
-    dashes=False,
-    ax=ax
-)
-
-ax.set_xlabel('Problem Size (N)')
-ax.set_ylabel('Time to Convergence (s)')
-ax.set_title(f'Time to Convergence (tolerance={df_conv["tolerance"].iloc[0]:.0e})')
-
-fig.savefig(fig_dir / "04_time_to_convergence.pdf")
 
