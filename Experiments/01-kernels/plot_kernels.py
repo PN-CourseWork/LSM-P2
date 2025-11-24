@@ -5,6 +5,7 @@ Kernel Performance Analysis
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
 """
 import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from pathlib import Path
 # Setup
 # -----
 
-sns.set_theme(style="whitegrid", context="notebook", palette="deep")
+sns.set_theme()
 
 # Get paths
 repo_root = Path(__file__).resolve().parent.parent.parent
@@ -35,12 +36,7 @@ if convergence_file.exists():
         y='physical_errors',
         col='N',
         hue='kernel',
-        style='kernel',
         kind='line',
-        markers=True,
-        dashes=False,
-        height=6,
-        aspect=0.8,
         facet_kws={'sharey': True, 'sharex': False}
     )
 
@@ -50,7 +46,7 @@ if convergence_file.exists():
     g.fig.suptitle(r'Kernel Convergence Validation (tolerance = $\epsilon_{machine}$)', y=1.02)
 
     # Save figure
-    g.savefig(fig_dir / "01_convergence_validation.pdf", bbox_inches='tight')
+    g.savefig(fig_dir / "01_convergence_validation.pdf")
 
 # %%
 # Load and Prepare Benchmark Data
@@ -88,24 +84,23 @@ df_plot['config'] = df_plot.apply(
 df_plot['time_ms'] = df_plot['avg_iter_time'] * 1000
 
 # Create plot
-g = sns.relplot(
+fig, ax = plt.subplots()
+sns.lineplot(
     data=df_plot,
     x='N',
     y='time_ms',
     hue='config',
     style='config',
-    kind='line',
     markers=True,
     dashes=False,
-    height=6,
-    aspect=1.33
+    ax=ax
 )
 
-g.set_axis_labels('Problem Size (N)', 'Time per Iteration (ms)')
-g.fig.suptitle('Kernel Performance Comparison', y=1.02)
-g.ax.legend(title='Configuration', loc='best')
+ax.set_xlabel('Problem Size (N)')
+ax.set_ylabel('Time per Iteration (ms)')
+ax.set_title('Kernel Performance Comparison')
 
-g.savefig(fig_dir / "02_performance.pdf", bbox_inches='tight')
+fig.savefig(fig_dir / "02_performance.pdf")
 
 # %%
 # Plot 3: Speedup Analysis
@@ -116,24 +111,56 @@ df_speedup = df[df['kernel'] == 'numba'].copy()
 df_speedup['thread_label'] = df_speedup['num_threads'].astype(int).astype(str) + ' threads'
 
 # Create speedup plot
-g = sns.relplot(
+fig, ax = plt.subplots()
+sns.lineplot(
     data=df_speedup,
     x='N',
     y='speedup',
     hue='thread_label',
     style='thread_label',
-    kind='line',
     markers=True,
     dashes=False,
-    height=6,
-    aspect=1.33
+    ax=ax
 )
 
 # Add reference line at speedup=1 (NumPy baseline)
-g.ax.axhline(1, color='k', linestyle='-', alpha=0.2, linewidth=0.8)
-g.set_axis_labels('Problem Size (N)', 'Speedup vs NumPy')
-g.fig.suptitle('Fixed Iteration Speedup (100 iterations)', y=1.02)
-g.ax.legend(title='Numba Configuration', loc='best')
+ax.set_xlabel('Problem Size (N)')
+ax.set_ylabel('Speedup vs NumPy')
+ax.set_title('Fixed Iteration Speedup (100 iterations)')
 
-g.savefig(fig_dir / "03_speedup_fixed_iter.pdf", bbox_inches='tight')
+fig.savefig(fig_dir / "03_speedup_fixed_iter.pdf")
+
+# %%
+# Plot 4: Time to Convergence
+# ----------------------------
+
+# Compute total time to convergence from convergence validation data
+df_time_conv = df_conv.groupby(['N', 'kernel']).agg({
+    'compute_times': 'sum',
+    'iteration': 'max'
+}).reset_index()
+df_time_conv = df_time_conv.rename(columns={
+    'compute_times': 'total_time',
+    'iteration': 'iterations'
+})
+df_time_conv['iterations'] += 1  # iteration is 0-indexed
+
+# Create plot
+fig, ax = plt.subplots()
+sns.lineplot(
+    data=df_time_conv,
+    x='N',
+    y='total_time',
+    hue='kernel',
+    style='kernel',
+    markers=True,
+    dashes=False,
+    ax=ax
+)
+
+ax.set_xlabel('Problem Size (N)')
+ax.set_ylabel('Time to Convergence (s)')
+ax.set_title(f'Time to Convergence (tolerance={df_conv["tolerance"].iloc[0]:.0e})')
+
+fig.savefig(fig_dir / "04_time_to_convergence.pdf")
 

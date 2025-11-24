@@ -27,7 +27,7 @@ data_dir.mkdir(parents=True, exist_ok=True)
 problem_sizes = [25, 50, 75]
 
 # Kernel configurations
-omega = 0.75
+omega = 0.99
 thread_counts = [1, 4, 6, 8]
 
 # Clean up old files
@@ -42,7 +42,7 @@ for old_file in data_dir.glob("*.parquet"):
 print("EXPERIMENT 1: Convergence Validation")
 
 all_dfs = []
-tolerance = 1e-12
+tolerance = 1e-10
 max_iter = 20000
 
 for N in problem_sizes:
@@ -132,7 +132,7 @@ for N in problem_sizes:
     all_dfs.append(df)
 
 # Numba thread scaling
-for num_threads in thread_counts + [10]:  # Include 10 threads for benchmark
+for num_threads in thread_counts :
     for idx, N in enumerate(problem_sizes):
         kernel = NumbaKernel(N=N, omega=omega, tolerance=tolerance, max_iter=max_iter, numba_threads=num_threads)
 
@@ -166,92 +166,7 @@ output_path = data_dir / "kernel_benchmark.parquet"
 df_bench.to_parquet(output_path, index=False)
 
 # %%
-# Experiment 3: Tolerance-Based Benchmark
-# ========================================
-# Measure time-to-convergence with strict tolerance
-
-print("EXPERIMENT 3: Tolerance-Based Benchmark")
-
-all_dfs = []
-max_iter = 10000
-tolerance = 1e-10
-
-# NumPy baseline
-for N in problem_sizes:
-    kernel = NumPyKernel(N=N, omega=omega, tolerance=tolerance, max_iter=max_iter)
-
-    # Initialize arrays
-    u = np.zeros((N, N, N), dtype=np.float64)
-    u_old = np.zeros((N, N, N), dtype=np.float64)
-    f = np.ones((N, N, N), dtype=np.float64)
-
-    for iteration in range(max_iter):
-        residual = kernel.step(u_old, u, f)
-
-        if residual < tolerance:
-            kernel.metrics.converged = True
-            break
-
-        u, u_old = u_old, u
-
-    # Convert to DataFrame
-    df = pd.DataFrame(asdict(kernel.timeseries))
-    df['iteration'] = range(len(df))
-    df['kernel'] = 'numpy'
-    df['N'] = N
-    df['omega'] = omega
-    df['tolerance'] = tolerance
-    df['max_iter'] = max_iter
-    df['use_numba'] = False
-    df['num_threads'] = 0
-    df['converged'] = kernel.metrics.converged
-    df['final_error'] = float(kernel.metrics.final_residual)
-    all_dfs.append(df)
-
-# Numba thread scaling
-for num_threads in thread_counts:
-    for idx, N in enumerate(problem_sizes):
-        kernel = NumbaKernel(N=N, omega=omega, tolerance=tolerance, max_iter=max_iter, numba_threads=num_threads)
-
-        # Warm up on first problem size
-        if idx == 0:
-            kernel.warmup()
-
-        # Initialize arrays
-        u = np.zeros((N, N, N), dtype=np.float64)
-        u_old = np.zeros((N, N, N), dtype=np.float64)
-        f = np.ones((N, N, N), dtype=np.float64)
-
-        for iteration in range(max_iter):
-            residual = kernel.step(u_old, u, f)
-
-            if residual < tolerance:
-                kernel.metrics.converged = True
-                break
-
-            u, u_old = u_old, u
-
-        # Convert to DataFrame
-        df = pd.DataFrame(asdict(kernel.timeseries))
-        df['iteration'] = range(len(df))
-        df['kernel'] = 'numba'
-        df['N'] = N
-        df['omega'] = omega
-        df['tolerance'] = tolerance
-        df['max_iter'] = max_iter
-        df['use_numba'] = True
-        df['num_threads'] = num_threads
-        df['converged'] = kernel.metrics.converged
-        df['final_error'] = float(kernel.metrics.final_residual)
-        all_dfs.append(df)
-
-# Save tolerance benchmark results
-df_tol = pd.concat(all_dfs, ignore_index=True)
-output_path = data_dir / "tolerance_benchmark.parquet"
-df_tol.to_parquet(output_path, index=False)
-
-# %%
 # Summary
 # -------
 
-print(f"\nCompleted: {len(df_conv):,} + {len(df_bench):,} + {len(df_tol):,} = {len(df_conv) + len(df_bench) + len(df_tol):,} records")
+print(f"\nCompleted: {len(df_conv):,} + {len(df_bench):,} = {len(df_conv) + len(df_bench):,} records")
