@@ -7,10 +7,11 @@ Description
 End-to-end validation of the complete Poisson solver across all implementation permutations. 
 This experiment tests **the fully assembled solver** - Decomposition from experiment 02, and communication from experiment 03.
 
-The correctness is asserted by comparing the obtained solution with the analytical solution in a grid refinement study 
+The correctness is asserted by comparing the obtained solution with the analytical solution in a grid refinement study
 and verifying the theoretical order of spatial accuracy.
 
-Note: We only use a single kernel-configuration here since the kernel correctness has already been established in experiment 01. 
+.. note::
+   We only use a single kernel-configuration here since the kernel correctness has already been established in experiment 01. 
 
 
 Purpose
