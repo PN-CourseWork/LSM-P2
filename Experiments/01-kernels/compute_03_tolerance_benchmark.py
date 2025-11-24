@@ -23,7 +23,7 @@ max_iter = 10000                    # Maximum iterations
 tolerance = 1e-10                   # Strict convergence criterion
 
 # Thread counts to test for Numba
-thread_counts = [1, 4, 6, 8, 10]
+thread_counts = [1, 4, 6, 8]
 
 # %%
 # Initialize Storage

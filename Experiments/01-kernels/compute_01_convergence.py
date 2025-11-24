@@ -1,4 +1,4 @@
-"""
+r"""
 Kernel Convergence Validation
 ==============================
 
