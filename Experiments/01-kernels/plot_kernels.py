@@ -10,16 +10,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-from utils import datatools
-
 # %%
 # Setup
 # -----
 
 sns.set_theme(style="whitegrid", context="notebook", palette="deep")
 
-data_dir = datatools.get_data_dir()
-repo_root = datatools.get_repo_root()
+# Get paths
+repo_root = Path(__file__).resolve().parent.parent.parent
+data_dir = repo_root / "data" / "01-kernels"
 fig_dir = repo_root / "figures" / "kernels"
 fig_dir.mkdir(parents=True, exist_ok=True)
 

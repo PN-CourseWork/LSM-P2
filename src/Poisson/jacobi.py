@@ -107,10 +107,11 @@ class JacobiPoisson:
             self.results = Results()
 
         # Kernel selection
+        N = self.config.N
         if self.config.use_numba:
-            self.kernel = NumbaKernel(num_threads=self.config.num_threads)
+            self.kernel = NumbaKernel(N=N, omega=self.config.omega, num_threads=self.config.num_threads)
         else:
-            self.kernel = NumPyKernel()
+            self.kernel = NumPyKernel(N=N, omega=self.config.omega)
         self._step = self.kernel.step
 
         # Setup strategies based on MPI size
@@ -191,13 +192,6 @@ class JacobiPoisson:
         np.ndarray
             Final solution array (local domain)
         """
-        # Get problem parameters
-        N = self.config.N
-        h = 2.0 / (N - 1)
-
-        # Configure kernel with problem parameters
-        self.kernel.configure(h=h, omega=self.config.omega)
-
         # Initialize buffer pointers for ping-pong
         uold_local = self.u1_local
         u_local = self.u2_local
@@ -326,15 +320,15 @@ class JacobiPoisson:
     # Public utility methods
     # ========================================================================
 
-    def warmup(self, N=10):
+    def warmup(self, warmup_size=10):
         """Warmup the solver (trigger JIT compilation for Numba).
 
         Parameters
         ----------
-        N : int, optional
+        warmup_size : int, optional
             Small grid size for warmup (default: 10)
         """
-        self.kernel.warmup(N=N, omega=self.config.omega)
+        self.kernel.warmup(warmup_size=warmup_size)
 
     def summary(self, exact_solution=None):
         """Compute summary statistics and error against exact solution.

@@ -7,9 +7,9 @@ across different problem sizes and thread configurations.
 """
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from Poisson import JacobiPoisson
-from utils import datatools
 
 # %%
 # Test Configuration
@@ -17,7 +17,7 @@ from utils import datatools
 #
 # We use a strict tolerance to avoid premature convergence.  
 
-problem_sizes = [25, 50, 75, 100]  # Grid sizes: N×N×N
+problem_sizes = [25, 50, 75]  # Grid sizes: N×N×N
 omega = 0.75                        # Relaxation parameter
 max_iter = 10000                    # Maximum iterations
 tolerance = 1e-10                   # Strict convergence criterion
@@ -29,14 +29,16 @@ thread_counts = [1, 4, 6, 8, 10]
 # Initialize Storage
 # ------------------
 
-data_dir = datatools.get_data_dir()
+# Get the data directory
+data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"
+data_dir.mkdir(parents=True, exist_ok=True)
+
 print("\nCleaning up old tolerance benchmark files...")
 for old_file in data_dir.glob("tolerance_benchmark*.parquet"):
     old_file.unlink()
     print(f"  Deleted: {old_file.name}")
 
 all_results = []
-# TODO: Just use pandas directly and avoid using .datatools
 
 # %%
 # NumPy Baseline
@@ -145,5 +147,6 @@ print("=" * 60)
 
 df = pd.DataFrame(all_results)
 output_path = data_dir / "tolerance_benchmark.parquet"
-datatools.save_simulation_data(df, output_path, format="parquet")
+df.to_parquet(output_path, index=False)
+print(f"Saved to: {output_path}")
 

@@ -3,8 +3,8 @@ Kernel Convergence Validation
 ==============================
 
 Compare NumPy vs Numba kernel convergence behavior to validate that both
-implementations produce identical results when solving the Poisson equation by 
-measuring the physical residual :math:`||u - u_{exact}||_2` using a known analytical solution: 
+implementations produce identical results when solving the Poisson equation by
+measuring the physical residual :math:`||u - u_{exact}||_2` using a known analytical solution:
 
 .. math::
 
@@ -13,10 +13,10 @@ measuring the physical residual :math:`||u - u_{exact}||_2` using a known analyt
 """
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from Poisson import problems
 from Poisson.kernels import NumPyKernel, NumbaKernel
-from utils import datatools
 
 # %%
 # Test Configuration
@@ -31,22 +31,13 @@ max_iter = 20000              # Maximum iterations
 tolerance = 1e-12             # Convergence criterion
 
 # %%
-# Initialize Kernels
-# ------------------
-#
-# Create instances of both kernel implementations. 
+# Warm up Numba
+# -------------
 
-numpy_kernel = NumPyKernel()
-numba_kernel = NumbaKernel()
-
-kernels = [
-    ('numpy', numpy_kernel),
-    ('numba', numba_kernel),
-]
-
-# Warm up the Numba kernel to trigger JIT compilation. 
-print("\nWarming up Numba kernel...")
-numba_kernel.warmup(N=10, omega=omega)
+# Warm up the Numba kernel to trigger JIT compilation.
+print("Warming up Numba kernel...")
+warmup_kernel = NumbaKernel(N=10, omega=omega, num_threads=4)
+warmup_kernel.warmup()
 
 # %%
 # Run Convergence Tests
@@ -56,34 +47,35 @@ numba_kernel.warmup(N=10, omega=omega)
 # both the iterative residual and physical error at each iteration.
 
 results = []
-#TODO: Just use pandas directly and avoid using .datatools 
+
 for N in problem_sizes:
     print('='*60)
     print(f"Problem size N={N}")
     print('='*60)
 
     # Setup problem with analytical solution
-    h = 2.0 / (N - 1)
     u_exact = problems.sinusoidal_exact_solution(N)
     f = problems.sinusoidal_source_term(N)
+
+    # Create kernels for this problem size
+    kernels = [
+        ('numpy', NumPyKernel(N=N, omega=omega)),
+        ('numba', NumbaKernel(N=N, omega=omega, num_threads=4)),
+    ]
 
     for kernel_name, kernel in kernels:
         print(f"\nTesting {kernel_name} kernel...")
         print("-" * 60)
 
-        # Configure kernel
-        kernel.configure(h=h, omega=omega)
-
-        # Initialize solution with zero initial guess
+        # Initialize arrays
         u = np.zeros((N, N, N), dtype=np.float64)
-        u_old = u.copy()
+        u_old = np.zeros((N, N, N), dtype=np.float64)
 
         print("  Iterating...")
 
         # Iterate until convergence
         for iteration in range(max_iter):
             # Perform one Jacobi iteration
-            u_old[:] = u
             iterative_residual = kernel.step(u_old, u, f)
 
             # Compute physical error against exact solution
@@ -106,6 +98,9 @@ for N in problem_sizes:
                 print(f"    Iterative residual: {iterative_residual:.4e}")
                 print(f"    Physical error: {physical_error:.4e}")
                 break
+
+            # Swap buffers for next iteration
+            u, u_old = u_old, u
         else:
             print(f"  Did not converge in {max_iter} iterations")
             print(f"    Final iterative residual: {iterative_residual:.4e}")
@@ -119,7 +114,12 @@ for N in problem_sizes:
 # This data will be used by the plotting script to generate convergence curves.
 
 df = pd.DataFrame(results)
-data_dir = datatools.get_data_dir()
+
+# Get the data directory
+data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"
+data_dir.mkdir(parents=True, exist_ok=True)
+
 output_path = data_dir / "kernel_convergence.parquet"
-datatools.save_simulation_data(df, output_path, format="parquet")
+df.to_parquet(output_path, index=False)
+print(f"Saved to: {output_path}")
 

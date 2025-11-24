@@ -41,31 +41,21 @@ def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float,
 class NumPyKernel:
     """NumPy-based Jacobi kernel."""
 
-    def __init__(self, h: float = None, omega: float = None):
+    def __init__(self, N: int, omega: float, h: float = None):
         """Initialize NumPy kernel.
 
         Parameters
         ----------
-        h : float, optional
-            Grid spacing (can be set later via configure)
-        omega : float, optional
-            Relaxation parameter (can be set later via configure)
-        """
-        self.h = h
-        self.omega = omega
-
-    def configure(self, h: float, omega: float):
-        """Configure kernel parameters.
-
-        Parameters
-        ----------
-        h : float
-            Grid spacing
+        N : int
+            Grid size (number of points in each dimension)
         omega : float
             Relaxation parameter
+        h : float, optional
+            Grid spacing. If None, assumes domain [-1, 1]³ and computes h = 2.0 / (N - 1)
         """
-        self.h = h
+        self.N = N
         self.omega = omega
+        self.h = h if h is not None else 2.0 / (N - 1)
 
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
         """Perform one Jacobi iteration step.
@@ -73,7 +63,7 @@ class NumPyKernel:
         Parameters
         ----------
         uold : np.ndarray
-            Previous solution
+            Previous solution (including ghost zones for MPI)
         u : np.ndarray
             Current solution (will be updated in-place)
         f : np.ndarray
@@ -103,46 +93,42 @@ class NumPyKernel:
 
         return np.sqrt(np.sum((u - uold) ** 2)) / N**3
 
-    def warmup(self, N: int = 10, omega: float = 0.75):
-        """Warmup kernel (no-op for NumPy)."""
+    def warmup(self, warmup_size: int = 10):
+        """Warmup kernel (no-op for NumPy).
+
+        Parameters
+        ----------
+        warmup_size : int, optional
+            Small grid size for warmup (default: 10, unused for NumPy)
+        """
         pass
 
 
 class NumbaKernel:
     """Numba JIT-compiled Jacobi kernel."""
 
-    def __init__(self, h: float = None, omega: float = None, num_threads: int = None):
+    def __init__(self, N: int, omega: float, num_threads: int = None, h: float = None):
         """Initialize Numba kernel.
 
         Parameters
         ----------
-        h : float, optional
-            Grid spacing (can be set later via configure)
-        omega : float, optional
-            Relaxation parameter (can be set later via configure)
+        N : int
+            Grid size (number of points in each dimension)
+        omega : float
+            Relaxation parameter
         num_threads : int, optional
             Number of threads for parallel execution. If None, uses Numba default.
+        h : float, optional
+            Grid spacing. If None, assumes domain [-1, 1]³ and computes h = 2.0 / (N - 1)
         """
-        self.h = h
+        self.N = N
         self.omega = omega
+        self.h = h if h is not None else 2.0 / (N - 1)
         self.num_threads = num_threads
 
         # Set thread count if specified
         if num_threads is not None:
             numba.set_num_threads(num_threads)
-
-    def configure(self, h: float, omega: float):
-        """Configure kernel parameters.
-
-        Parameters
-        ----------
-        h : float
-            Grid spacing
-        omega : float
-            Relaxation parameter
-        """
-        self.h = h
-        self.omega = omega
 
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
         """Perform one Jacobi iteration step.
@@ -150,7 +136,7 @@ class NumbaKernel:
         Parameters
         ----------
         uold : np.ndarray
-            Previous solution
+            Previous solution (including ghost zones for MPI)
         u : np.ndarray
             Current solution (will be updated in-place)
         f : np.ndarray
@@ -163,22 +149,20 @@ class NumbaKernel:
         """
         return _jacobi_step_numba(uold, u, f, self.h, self.omega)
 
-    def warmup(self, N: int = 10, omega: float = 0.75):
+    def warmup(self, warmup_size: int = 10):
         """Trigger JIT compilation with a small problem.
 
         Parameters
         ----------
-        N : int, optional
+        warmup_size : int, optional
             Small grid size for warmup (default: 10)
-        omega : float, optional
-            Relaxation parameter (default: 0.75)
         """
-        h = 2.0 / (N - 1)
-        u1 = np.zeros((N, N, N), dtype=np.float64)
-        u2 = np.zeros((N, N, N), dtype=np.float64)
-        f = np.random.randn(N, N, N)
+        h_warmup = 2.0 / (warmup_size - 1)
+        u1 = np.zeros((warmup_size, warmup_size, warmup_size), dtype=np.float64)
+        u2 = np.zeros((warmup_size, warmup_size, warmup_size), dtype=np.float64)
+        f = np.random.randn(warmup_size, warmup_size, warmup_size)
 
         # Run 5 iterations to trigger compilation
         for _ in range(5):
-            _jacobi_step_numba(u1, u2, f, h, omega)
+            _jacobi_step_numba(u1, u2, f, h_warmup, self.omega)
             u1, u2 = u2, u1

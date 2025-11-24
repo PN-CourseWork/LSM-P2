@@ -6,11 +6,12 @@ Benchmark NumPy vs Numba kernels with fixed iteration count across different
 problem sizes and thread configurations.
 
 """
+import time
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
-from Poisson import JacobiPoisson
-from utils import datatools
+from Poisson.kernels import NumPyKernel, NumbaKernel
 
 # %%
 # Test Configuration
@@ -19,7 +20,7 @@ from utils import datatools
 # We benchmark across four problem sizes with multiple thread configurations
 # for Numba. The tolerance is set to 0.0 to ensure exactly 100 iterations run.
 
-problem_sizes = [25, 50, 75, 100]  # Grid sizes: N×N×N
+problem_sizes = [25, 50, 75]  # Grid sizes: N×N×N
 omega = 0.75                        # Relaxation parameter
 max_iter = 100                      # Fixed iterations for benchmark
 tolerance = 0.0                     # Never converge - run all iterations
@@ -30,11 +31,11 @@ thread_counts = [1, 4, 6, 8, 10]
 # %%
 # Initialize Storage
 # ------------------
-#
-# Clean up old benchmark files and prepare storage for results.
 
-#TODO: avoid using datatools here...
-data_dir = datatools.get_data_dir()
+# Get the data directory
+data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"
+data_dir.mkdir(parents=True, exist_ok=True)
+
 print("\nCleaning up old benchmark files...")
 for old_file in data_dir.glob("kernel_benchmark*.parquet"):
     old_file.unlink()
@@ -45,111 +46,102 @@ all_results = []
 # %%
 # NumPy Baseline
 # --------------
-#
-# First, establish the NumPy baseline performance across all problem sizes.
-# This provides the reference for computing Numba speedups.
-#TODO: use the kernel class directly instead of the JacobiPoisson...
-#TODO: use dataframe directly
 
 for N in problem_sizes:
     print(f"\nTesting N={N}, kernel=numpy")
     print("-" * 60)
 
-    solver = JacobiPoisson(
-        N=N,
-        omega=omega,
-        max_iter=max_iter,
-        tolerance=tolerance,
-        use_numba=False,
-    )
+    # Setup problem
+    kernel = NumPyKernel(N=N, omega=omega)
 
-    print("  Solving...")
-    solver.solve()
+    # Initialize arrays
+    u = np.zeros((N, N, N), dtype=np.float64)
+    u_old = np.zeros((N, N, N), dtype=np.float64)
+    f = np.ones((N, N, N), dtype=np.float64)
 
-    # Extract results
-    res = solver.results
-    compute_time = sum(solver.timeseries.compute_times)
-    avg_iter_time = compute_time / res.iterations if res.iterations > 0 else 0
+    # Benchmark iterations
+    print("  Running iterations...")
+    start_time = time.perf_counter()
 
-    result_dict = {
+    for iteration in range(max_iter):
+        kernel.step(u_old, u, f)
+        u, u_old = u_old, u  # Swap buffers
+
+    compute_time = time.perf_counter() - start_time
+    avg_iter_time = compute_time / max_iter
+
+    all_results.append({
         'N': N,
         'omega': omega,
-        'tolerance': tolerance,
         'max_iter': max_iter,
         'kernel': 'numpy',
         'use_numba': False,
         'num_threads': 0,
-        'iterations': res.iterations,
-        'converged': res.converged,
-        'final_error': res.final_error,
+        'iterations': max_iter,
         'compute_time': compute_time,
         'avg_iter_time': avg_iter_time,
-    }
+    })
 
-    all_results.append(result_dict)
+    print(f"  Total time: {compute_time:.4f}s")
+    print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
 # %%
 # Numba Thread Scaling
 # ---------------------
-#
-# Test Numba kernel performance with different thread counts. For each thread
-# configuration, we benchmark across all problem sizes.
 
 for num_threads in thread_counts:
+    # Warm up Numba for this thread configuration
+    print(f"\n{'='*60}")
+    print(f"Numba ({num_threads} threads)")
+    print('='*60)
+    print("Warming up Numba JIT...")
+    warmup_kernel = NumbaKernel(N=10, omega=omega, num_threads=num_threads)
+    warmup_kernel.warmup()
+
     for N in problem_sizes:
         print(f"\nTesting N={N}, kernel=numba, threads={num_threads}")
         print("-" * 60)
 
-        solver = JacobiPoisson(
-            N=N,
-            omega=omega,
-            max_iter=max_iter,
-            tolerance=tolerance,
-            use_numba=True,
-            num_threads=num_threads,
-        )
+        # Setup problem
+        kernel = NumbaKernel(N=N, omega=omega, num_threads=num_threads)
 
-        # Warmup for first problem size only
-        if N == problem_sizes[0]:
-            print("  Warming up Numba JIT...")
-            solver.warmup(N=10)
+        # Initialize arrays
+        u = np.zeros((N, N, N), dtype=np.float64)
+        u_old = np.zeros((N, N, N), dtype=np.float64)
+        f = np.ones((N, N, N), dtype=np.float64)
 
-        print("  Solving...")
-        solver.solve()
+        # Benchmark iterations
+        print("  Running iterations...")
+        start_time = time.perf_counter()
 
-        # Extract results
-        res = solver.results
-        compute_time = sum(solver.timeseries.compute_times)
-        avg_iter_time = compute_time / res.iterations if res.iterations > 0 else 0
+        for iteration in range(max_iter):
+            kernel.step(u_old, u, f)
+            u, u_old = u_old, u  # Swap buffers
 
-        result_dict = {
+        compute_time = time.perf_counter() - start_time
+        avg_iter_time = compute_time / max_iter
+
+        all_results.append({
             'N': N,
             'omega': omega,
-            'tolerance': tolerance,
             'max_iter': max_iter,
             'kernel': 'numba',
             'use_numba': True,
             'num_threads': num_threads,
-            'iterations': res.iterations,
-            'converged': res.converged,
-            'final_error': res.final_error,
+            'iterations': max_iter,
             'compute_time': compute_time,
             'avg_iter_time': avg_iter_time,
-        }
+        })
 
-        all_results.append(result_dict)
-
-        print(f"  Iterations: {res.iterations}")
-        print(f"  Total compute time: {compute_time:.4f}s")
+        print(f"  Total time: {compute_time:.4f}s")
         print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
 
 # %%
 # Save Results
 # ------------
-#
-# Store benchmark results for analysis by the plotting script.
 
 df = pd.DataFrame(all_results)
 output_path = data_dir / "kernel_benchmark.parquet"
-datatools.save_simulation_data(df, output_path, format="parquet")
+df.to_parquet(output_path, index=False)
+print(f"Saved to: {output_path}")
 
