@@ -56,6 +56,38 @@ class Config:
 
 
 # ============================================================================
+# Kernel Metadata
+# ============================================================================
+
+@dataclass
+class KernelMetadata:
+    """Metadata for kernel configuration and runtime state.
+
+    Holds all scalar information (configuration, derived values, runtime state)
+    but not the solution arrays (which need ghost zones for MPI).
+    """
+    # Problem configuration
+    N: int
+    omega: float
+    tolerance: float = 1e-10
+    max_iter: int = 100000
+    num_threads: int = None  # None for NumPy
+
+    # Derived values (computed in __post_init__)
+    h: float = field(init=False)
+
+    # Runtime state (updated during execution)
+    converged: bool = False
+    iterations: int = 0
+    final_residual: float = None
+    compute_time: float = None
+
+    def __post_init__(self):
+        """Compute derived values after initialization."""
+        self.h = 2.0 / (self.N - 1)
+
+
+# ============================================================================
 # Local fields (per-rank arrays)
 # ============================================================================
 

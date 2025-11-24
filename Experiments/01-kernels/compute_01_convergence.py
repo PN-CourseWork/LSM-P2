@@ -31,22 +31,21 @@ max_iter = 20000              # Maximum iterations
 tolerance = 1e-12             # Convergence criterion
 
 # %%
-# Warm up Numba
-# -------------
-
-# Warm up the Numba kernel to trigger JIT compilation.
-print("Warming up Numba kernel...")
-warmup_kernel = NumbaKernel(N=10, omega=omega, num_threads=4)
-warmup_kernel.warmup()
-
-# %%
 # Run Convergence Tests
 # ---------------------
 #
 # For each problem size and kernel, we iterate until convergence and track
 # both the iterative residual and physical error at each iteration.
 
-results = []
+data = {
+    'kernel': [],
+    'iteration': [],
+    'physical_error': [],
+    'iterative_residual': [],
+    'N': [],
+    'omega': [],
+    'tolerance': [],
+}
 
 for N in problem_sizes:
     print('='*60)
@@ -58,9 +57,17 @@ for N in problem_sizes:
     f = problems.sinusoidal_source_term(N)
 
     # Create kernels for this problem size
+    numpy_kernel = NumPyKernel(N=N, omega=omega, tolerance=tolerance, max_iter=max_iter)
+    numba_kernel = NumbaKernel(N=N, omega=omega, tolerance=tolerance, max_iter=max_iter, num_threads=4)
+
+    # Warm up Numba on first iteration
+    if N == problem_sizes[0]:
+        print("Warming up Numba kernel...")
+        numba_kernel.warmup()
+
     kernels = [
-        ('numpy', NumPyKernel(N=N, omega=omega)),
-        ('numba', NumbaKernel(N=N, omega=omega, num_threads=4)),
+        ('numpy', numpy_kernel),
+        ('numba', numba_kernel),
     ]
 
     for kernel_name, kernel in kernels:
@@ -82,15 +89,13 @@ for N in problem_sizes:
             physical_error = np.sqrt(np.sum((u - u_exact) ** 2)) / N**3
 
             # Store result for this iteration
-            results.append({
-                'kernel': kernel_name,
-                'iteration': iteration,
-                'physical_error': physical_error,
-                'iterative_residual': iterative_residual,
-                'N': N,
-                'omega': omega,
-                'tolerance': tolerance,
-            })
+            data['kernel'].append(kernel_name)
+            data['iteration'].append(iteration)
+            data['physical_error'].append(physical_error)
+            data['iterative_residual'].append(iterative_residual)
+            data['N'].append(N)
+            data['omega'].append(omega)
+            data['tolerance'].append(tolerance)
 
             # Check convergence (iterative residual)
             if iterative_residual < tolerance:
@@ -109,11 +114,8 @@ for N in problem_sizes:
 # %%
 # Save Results
 # ------------
-#
-# Store the convergence history for both kernels across all problem sizes.
-# This data will be used by the plotting script to generate convergence curves.
 
-df = pd.DataFrame(results)
+df = pd.DataFrame(data)
 
 # Get the data directory
 data_dir = Path(__file__).resolve().parent.parent.parent / "data" / "01-kernels"
