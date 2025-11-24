@@ -32,14 +32,14 @@ N = 32  # Problem size for visualization (smaller for clarity)
 
 
 # Define colormap for ranks
-cmap = plt.cm.tab10
+cmap = plt.cm.viridis
 
 # %%
 # Sliced Decomposition Visualization
 # -----------------------------------
 
 plotter_sliced = pv.Plotter(window_size=[3000, 3000], off_screen=True)
-da_sliced = DomainDecomposition(N=N, size=4, stencil_type='sliced', analyze_only=True)
+da_sliced = DomainDecomposition(N=N, size=4, strategy='sliced')
 
 for rank in range(4):
     info = da_sliced.get_rank_info(rank)
@@ -70,9 +70,9 @@ print(f"Sliced decomposition saved to: {output_sliced}")
 # ----------------------------------
 
 plotter_cubic = pv.Plotter(window_size=[3000, 3000], off_screen=True)
-da_cubic = DomainDecomposition(N=N, size=8, stencil_type='cubic', analyze_only=True)
+da_cubic = DomainDecomposition(N=N, size=27, strategy='cubic')
 
-for rank in range(8):
+for rank in range(27):
     info = da_cubic.get_rank_info(rank)
     x_start, y_start, z_start = info.global_start
     x_end, y_end, z_end = info.global_end
@@ -81,7 +81,7 @@ for rank in range(8):
     box = pv.Box(bounds=[x_start, x_end, y_start, y_end, z_start, z_end])
 
     # Get color for this rank
-    color = cmap(rank / 8)[:3]  # RGB only
+    color = cmap(rank / 27)[:3]  # RGB only
 
     # Add the box (more transparent with thick edges)
     plotter_cubic.add_mesh(box, opacity=0.4, color=color, show_edges=True,
