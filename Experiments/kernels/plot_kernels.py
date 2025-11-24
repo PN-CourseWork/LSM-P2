@@ -30,36 +30,37 @@ print("=" * 60)
 # 1. Convergence Validation
 # ============================================================================
 
-print("\n[1/2] Plotting convergence validation...")
+print("\n[1/3] Plotting convergence validation...")
 
 convergence_file = data_dir / "kernel_convergence.parquet"
 if convergence_file.exists():
     df_conv = pd.read_parquet(convergence_file)
 
-    # Use seaborn relplot
+    # Use seaborn relplot with problem size as columns, kernel as hue/style
     g = sns.relplot(
         data=df_conv,
         x='iteration',
         y='physical_error',
+        col='N',
         hue='kernel',
         style='kernel',
         kind='line',
         markers=True,
         dashes=False,
         height=6,
-        aspect=1.33
+        aspect=0.8,
+        facet_kws={'sharey': True, 'sharex': False}
     )
 
     g.set(yscale='log')
     g.set_axis_labels('Iteration', r'Physical Error $||u - u_{exact}||_2 / N^3$')
-    g.fig.suptitle('Kernel Convergence Validation', y=1.02)
+    g.set_titles(col_template='N={col_name}')
+    g.fig.suptitle(r'Kernel Convergence Validation (tolerance = $\epsilon_{machine}$)', y=1.02)
 
     # Save
     g.savefig(fig_dir / "01_convergence_validation.pdf", bbox_inches='tight')
-    g.savefig(fig_dir / "01_convergence_validation.png", dpi=300, bbox_inches='tight')
     plt.close()
     print(f"  Saved: 01_convergence_validation.pdf")
-    print(f"  Saved: 01_convergence_validation.png")
 else:
     print(f"  Warning: {convergence_file} not found, skipping convergence plot")
 
@@ -67,7 +68,7 @@ else:
 # 2. Performance Benchmarking
 # ============================================================================
 
-print("\n[2/2] Plotting kernel performance comparison...")
+print("\n[2/3] Plotting kernel performance comparison...")
 
 benchmark_file = data_dir / "kernel_benchmark.parquet"
 if not benchmark_file.exists():
@@ -124,23 +125,52 @@ g = sns.relplot(
     aspect=1.33
 )
 
-g.set(yscale='log')
 g.set_axis_labels('Problem Size (N)', 'Time per Iteration (ms)')
 g.fig.suptitle('Kernel Performance Comparison', y=1.02)
 g.ax.legend(title='Configuration', loc='best')
 
 g.savefig(fig_dir / "02_performance.pdf", bbox_inches='tight')
-g.savefig(fig_dir / "02_performance.png", dpi=300, bbox_inches='tight')
 plt.close()
 print(f"  Saved: 02_performance.pdf")
-print(f"  Saved: 02_performance.png")
+
+# ============================================================================
+# 3. Fixed Iteration Speedup
+# ============================================================================
+
+print("\n[3/3] Plotting fixed iteration speedup...")
+
+# Speedup plot for fixed iterations
+df_speedup = df_numba.copy()
+df_speedup['thread_label'] = df_speedup['num_threads'].astype(str) + ' threads'
+
+g = sns.relplot(
+    data=df_speedup,
+    x='N',
+    y='speedup',
+    hue='thread_label',
+    style='thread_label',
+    kind='line',
+    markers=True,
+    dashes=False,
+    height=6,
+    aspect=1.33
+)
+
+g.ax.axhline(1, color='k', linestyle='-', alpha=0.2, linewidth=0.8)
+g.set_axis_labels('Problem Size (N)', 'Speedup vs NumPy')
+g.fig.suptitle('Fixed Iteration Speedup (100 iterations)', y=1.02)
+g.ax.legend(title='Numba Configuration', loc='best')
+
+g.savefig(fig_dir / "03_speedup_fixed_iter.pdf", bbox_inches='tight')
+plt.close()
+print(f"  Saved: 03_speedup_fixed_iter.pdf")
 
 # ============================================================================
 # Summary Statistics
 # ============================================================================
 
 print("\n" + "=" * 60)
-print("Summary Statistics")
+print("Fixed Iteration Benchmark Summary")
 print("=" * 60)
 
 # Use pandas groupby for summary statistics
