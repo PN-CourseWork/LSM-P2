@@ -11,15 +11,15 @@ from numba import get_num_threads
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import (
-    Config,
-    Results,
-    Timeseries,
-    sinusoidal_exact_solution,
+    GlobalParams,
+    GlobalMetrics,
+    LocalSeries,
 )
 from .strategies import (
     NoDecomposition,
     NumpyCommunicator,
 )
+from .problems import sinusoidal_exact_solution
 
 
 # ============================================================================
@@ -95,21 +95,21 @@ class JacobiPoisson:
         self.size = comm.Get_size()
 
         # Configuration (all ranks)
-        self.config = Config(**kwargs)
-        self.config.num_threads = get_num_threads()
+        self.config = GlobalParams(**kwargs)
+        self.config.numba_threads = get_num_threads()
         self.config.mpi_size = self.size
 
         # Timeseries (all ranks)
-        self.timeseries = Timeseries()
+        self.timeseries = LocalSeries()
 
         # Results (rank 0 only)
         if self.rank == 0:
-            self.results = Results()
+            self.results = GlobalMetrics()
 
         # Kernel selection
         N = self.config.N
         if self.config.use_numba:
-            self.kernel = NumbaKernel(N=N, omega=self.config.omega, num_threads=self.config.num_threads)
+            self.kernel = NumbaKernel(N=N, omega=self.config.omega, numba_threads=self.config.numba_threads)
         else:
             self.kernel = NumPyKernel(N=N, omega=self.config.omega)
         self._step = self.kernel.step

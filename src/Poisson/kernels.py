@@ -123,16 +123,16 @@ class NumbaKernel:
         Parameters
         ----------
         **kwargs
-            Keyword arguments passed to KernelParameters
-            (N, omega, tolerance, max_iter, num_threads)
+            Keyword arguments passed to KernelParams
+            (N, omega, tolerance, max_iter, numba_threads)
         """
-        self.parameters = KernelParameters(**kwargs)
+        self.parameters = KernelParams(**kwargs)
         self.metrics = KernelMetrics()
-        self.timeseries = KernelTimeseries()
+        self.timeseries = KernelSeries()
 
         # Set thread count if specified
-        if self.parameters.num_threads is not None:
-            numba.set_num_threads(self.parameters.num_threads)
+        if self.parameters.numba_threads is not None:
+            numba.set_num_threads(self.parameters.numba_threads)
 
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
         """Perform one Jacobi iteration step.

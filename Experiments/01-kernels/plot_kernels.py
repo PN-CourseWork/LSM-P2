@@ -4,9 +4,7 @@ Kernel Performance Analysis
 
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
 """
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
@@ -34,7 +32,7 @@ if convergence_file.exists():
     g = sns.relplot(
         data=df_conv,
         x='iteration',
-        y='physical_error',
+        y='physical_errors',
         col='N',
         hue='kernel',
         style='kernel',
@@ -59,7 +57,14 @@ if convergence_file.exists():
 # --------------------------------
 
 benchmark_file = data_dir / "kernel_benchmark.parquet"
-df = pd.read_parquet(benchmark_file)
+df_raw = pd.read_parquet(benchmark_file)
+
+# Aggregate per-iteration data to get average iteration time
+df = df_raw.groupby(['N', 'kernel', 'use_numba', 'num_threads', 'omega', 'max_iter']).agg({
+    'compute_times': 'mean',
+    'residuals': 'mean'
+}).reset_index()
+df = df.rename(columns={'compute_times': 'avg_iter_time'})
 
 # Compute NumPy baseline for speedup calculations
 numpy_baseline = df[df['kernel'] == 'numpy'].set_index('N')['avg_iter_time'].to_dict()

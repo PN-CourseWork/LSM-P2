@@ -1,6 +1,15 @@
 """Large Scale Modeling package."""
 
-from .datastructures import Config, LocalFields, Results, Timeseries
+from .datastructures import (
+    GlobalParams,
+    GlobalMetrics,
+    LocalParams,
+    LocalFields,
+    LocalSeries,
+    KernelParams,
+    KernelMetrics,
+    KernelSeries,
+)
 from .kernels import NumPyKernel, NumbaKernel
 from .jacobi import JacobiPoisson
 from .strategies import (
@@ -14,11 +23,16 @@ from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_sour
 from .postprocessing import PostProcessor
 
 __all__ = [
-    # Data structures
-    "Config",
+    # Data structures - Kernel
+    "KernelParams",
+    "KernelMetrics",
+    "KernelSeries",
+    # Data structures - Solver
+    "GlobalParams",
+    "GlobalMetrics",
+    "LocalParams",
     "LocalFields",
-    "Results",
-    "Timeseries",
+    "LocalSeries",
     # Kernels
     "NumPyKernel",
     "NumbaKernel",
