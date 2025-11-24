@@ -4,7 +4,7 @@ Kernel Convergence Validation
 
 Compare NumPy vs Numba kernel convergence behavior to validate that both
 implementations produce identical results when solving the Poisson equation by 
-measuring the physical residual :math:`||u - u_{exact}||_2` using a known analytical solution.  
+measuring the physical residual :math:`||u - u_{exact}||_2` using a known analytical solution: 
 
 .. math::
 
@@ -22,7 +22,7 @@ from utils import datatools
 # Test Configuration
 # ------------------
 #
-# We test three problem sizes to verify convergence behavior scales correctly.
+# We test three problem sizes. 
 # The omega parameter controls the relaxation in Jacobi iteration.
 
 problem_sizes = [25, 50, 75]  # Grid sizes: N×N×N
@@ -30,19 +30,11 @@ omega = 0.75                  # Relaxation parameter
 max_iter = 20000              # Maximum iterations
 tolerance = 1e-12             # Convergence criterion
 
-print("Kernel Convergence Validation")
-print("=" * 60)
-print(f"Problem sizes: {problem_sizes}")
-print(f"Relaxation parameter (ω): {omega}")
-print(f"Convergence tolerance: {tolerance:.2e}")
-print(f"Maximum iterations: {max_iter}")
-
 # %%
 # Initialize Kernels
 # ------------------
 #
-# Create instances of both kernel implementations. The Numba kernel requires
-# a warmup phase to compile the JIT functions before accurate timing.
+# Create instances of both kernel implementations. 
 
 numpy_kernel = NumPyKernel()
 numba_kernel = NumbaKernel()
@@ -52,9 +44,9 @@ kernels = [
     ('numba', numba_kernel),
 ]
 
+# Warm up the Numba kernel to trigger JIT compilation. 
 print("\nWarming up Numba kernel...")
 numba_kernel.warmup(N=10, omega=omega)
-print("Warmup complete!")
 
 # %%
 # Run Convergence Tests
@@ -64,10 +56,10 @@ print("Warmup complete!")
 # both the iterative residual and physical error at each iteration.
 
 results = []
-
+#TODO: Just use pandas directly and avoid using .datatools 
 for N in problem_sizes:
-    print(f"\n{'='*60}")
-    print(f"Problem size N={N} ({N**3:,} grid points)")
+    print('='*60)
+    print(f"Problem size N={N}")
     print('='*60)
 
     # Setup problem with analytical solution
@@ -130,13 +122,4 @@ df = pd.DataFrame(results)
 data_dir = datatools.get_data_dir()
 output_path = data_dir / "kernel_convergence.parquet"
 datatools.save_simulation_data(df, output_path, format="parquet")
-
-print("\n" + "=" * 60)
-print("Convergence validation completed!")
-print("=" * 60)
-print(f"Saved to: {output_path}")
-print(f"Total data points: {len(df):,}")
-print(f"Kernels tested: {df['kernel'].nunique()}")
-print(f"Problem sizes: {sorted(df['N'].unique())}")
-
 

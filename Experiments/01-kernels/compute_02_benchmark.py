@@ -5,28 +5,7 @@ Kernel Performance Benchmark
 Benchmark NumPy vs Numba kernels with fixed iteration count across different
 problem sizes and thread configurations.
 
-This measures pure computational performance by running exactly 100 iterations
-without convergence checking, isolating kernel execution time from iterative
-solver behavior.
 """
-
-# %%
-# Introduction
-# ------------
-#
-# This benchmark measures the raw computational performance of NumPy and Numba
-# kernels by running a **fixed number of iterations** (100) without checking
-# for convergence. This approach isolates kernel performance from the iterative
-# convergence behavior measured in other experiments.
-#
-# We test:
-#
-# * **NumPy baseline** - Pure NumPy implementation (single-threaded)
-# * **Numba with varying thread counts** - JIT-compiled parallel execution
-#
-# The goal is to identify the optimal thread configuration and quantify the
-# speedup that Numba JIT compilation provides over NumPy.
-
 import numpy as np
 import pandas as pd
 
@@ -48,18 +27,13 @@ tolerance = 0.0                     # Never converge - run all iterations
 # Thread counts to test for Numba
 thread_counts = [1, 4, 6, 8, 10]
 
-print("Kernel Performance Benchmark")
-print("=" * 60)
-print(f"Problem sizes: {problem_sizes}")
-print(f"Fixed iterations: {max_iter}")
-print(f"Numba thread counts: {thread_counts}")
-
 # %%
 # Initialize Storage
 # ------------------
 #
 # Clean up old benchmark files and prepare storage for results.
 
+#TODO: avoid using datatools here...
 data_dir = datatools.get_data_dir()
 print("\nCleaning up old benchmark files...")
 for old_file in data_dir.glob("kernel_benchmark*.parquet"):
@@ -74,13 +48,11 @@ all_results = []
 #
 # First, establish the NumPy baseline performance across all problem sizes.
 # This provides the reference for computing Numba speedups.
-
-print("\n" + "=" * 60)
-print("NumPy Baseline")
-print("=" * 60)
+#TODO: use the kernel class directly instead of the JacobiPoisson...
+#TODO: use dataframe directly
 
 for N in problem_sizes:
-    print(f"\nTesting N={N} ({N**3:,} grid points), kernel=numpy")
+    print(f"\nTesting N={N}, kernel=numpy")
     print("-" * 60)
 
     solver = JacobiPoisson(
@@ -116,10 +88,6 @@ for N in problem_sizes:
 
     all_results.append(result_dict)
 
-    print(f"  Iterations: {res.iterations}")
-    print(f"  Total compute time: {compute_time:.4f}s")
-    print(f"  Avg iteration time: {avg_iter_time*1000:.3f}ms")
-
 # %%
 # Numba Thread Scaling
 # ---------------------
@@ -128,12 +96,8 @@ for N in problem_sizes:
 # configuration, we benchmark across all problem sizes.
 
 for num_threads in thread_counts:
-    print("\n" + "=" * 60)
-    print(f"Numba ({num_threads} threads)")
-    print("=" * 60)
-
     for N in problem_sizes:
-        print(f"\nTesting N={N} ({N**3:,} grid points), kernel=numba, threads={num_threads}")
+        print(f"\nTesting N={N}, kernel=numba, threads={num_threads}")
         print("-" * 60)
 
         solver = JacobiPoisson(
@@ -185,18 +149,7 @@ for num_threads in thread_counts:
 #
 # Store benchmark results for analysis by the plotting script.
 
-print("\n" + "=" * 60)
-print("Saving Results")
-print("=" * 60)
-
 df = pd.DataFrame(all_results)
 output_path = data_dir / "kernel_benchmark.parquet"
 datatools.save_simulation_data(df, output_path, format="parquet")
 
-print(f"\nBenchmark results saved to: {output_path}")
-print(f"Total records: {len(df)}")
-print(f"Configurations tested: NumPy + {len(thread_counts)} Numba configs")
-print(f"Problem sizes: {sorted(df['N'].unique())}")
-print("\n" + "=" * 60)
-print("Kernel benchmarks completed!")
-print("=" * 60)
