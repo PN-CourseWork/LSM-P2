@@ -4,7 +4,8 @@
 Description
 -----------
 
-Compare custom MPI datatypes vs NumPy array communication for ghost zone exchange operations. This experiment tests **communication implementation details** - how data is transferred between ranks during halo exchanges - independent of decomposition strategy or kernel implementation.
+Compare custom MPI datatypes vs NumPy array communication for halo exchange operations. 
+This experiment tests **communication implementation details** - how data is transferred between ranks during halo exchanges.
 
 **Custom MPI Datatypes:** Zero-copy communication using ``MPI.Create_contiguous()`` and ``MPI.Create_subarray()``.
 
@@ -17,6 +18,5 @@ Determine whether custom MPI datatypes provide measurable performance improvemen
 
 * **Communication overhead** - Demonstrate whether custom datatypes reduce overhead compared to NumPy arrays
 * **Scaling behavior** - Analyze how each method scales with problem size and rank count
-* **Performance trade-offs** - Document trade-offs between implementation complexity and communication efficiency
+* **Scaling order analysis** - Use log-log plots with reference lines to derive computational complexity
 
-**Decision Point:** Choose communication method (MPI datatypes or NumPy arrays) for experiments 04-05.

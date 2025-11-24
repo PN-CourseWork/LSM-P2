@@ -4,7 +4,8 @@
 Description
 -----------
 
-Compare 1D sliced decomposition vs 3D cubic decomposition strategies for parallel domain partitioning. This experiment tests **domain decomposition logic** - how the grid is partitioned across MPI ranks, how local indices map to global coordinates, and how ghost zones are structured - independent of the specific communication method.
+Compare 1D sliced decomposition and 3D cubic decomposition strategies for parallel domain partitioning. 
+This experiment tests **domain decomposition logic** -  partitioning across MPI ranks, local to global indice mapping, and how ghost zones are structured.
 
 **Sliced (1D):** Splits domain along Z-axis with horizontal slices, exchanging 2 ghost planes.
 
@@ -14,11 +15,11 @@ Purpose
 -------
 
 Determine which decomposition strategy provides better performance for different problem sizes and rank counts by analyzing:
+Get an understanding of how the type of domain decomposition impacts the size of the data that needs to be communicated between ranks along
+with the 'connectivity' of different ranks. 
+
 
 * **Visual comparison** - Illustrate how the domain is partitioned for each method
-* **Compute time scaling** - Measure computation cost with fixed iteration count (optionally: fixed tolerance)
-* **Communication time scaling** - Compare communication overhead between decomposition methods
-* **Scaling order analysis** - Use log-log plots with reference lines to derive computational complexity
-* **Surface-area-to-volume ratios** - Understand communication/computation trade-offs
 
-**Decision Point:** Choose decomposition strategy (sliced or cubic) for experiments 04-05.
+* **Surface-area-to-volume ratios** - investigate how much data needs to be communicated between ranks depending on the decomposition strategy 
+

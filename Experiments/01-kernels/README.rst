@@ -1,19 +1,21 @@
-01 - Kernel Benchmarks
+01 - Choise of Kernel: Numpy vs Numba 
 ======================
 
 Description
 -----------
 
-Compare Numba JIT-compiled kernels vs pure NumPy implementations for the 7-point stencil update operation. This experiment tests **only the computational kernel** in isolation - without MPI, domain decomposition, or parallel communication - to understand pure computational performance before introducing distributed computing complexity.
+Here we compare Numba JIT-compiled kernels vs pure NumPy implementations.  This experiment tests **only the computational kernel** in isolation - without MPI, domain decomposition, or parallel communication.
 
 Purpose
 -------
 
-Identify the optimal kernel configuration (NumPy vs Numba, thread count) for subsequent experiments by evaluating:
+Identify impacts of the choice of kernel implementations and parameters like thread-count. 
 
-* **Performance with fixed iterations** - Compare execution time for NumPy vs Numba with different thread counts across various problem sizes
-* **Performance with fixed tolerance** - Analyze convergence behavior and speedup as a function of problem size
-* **Speedup analysis** - Generate plots comparing different Numba thread configurations against NumPy baseline
 * **Kernel correctness** - Verify both implementations produce identical results
+* **Performance pr. iteration** - Compare execution time for NumPy vs Numba with different thread counts across various problem sizes
+* **Speedup analysis** - Comparing different Numba thread configurations against a NumPy baseline. 
 
-**Decision Point:** Choose optimal kernel (NumPy or Numba) and thread count for experiments 02-05.
+
+* **Compute time scaling** - Measure computation cost with fixed iteration count and also fixed tolerance.
+
+**Decision Point:** Choose optimal kernel (NumPy or Numba) and thread count for subsequent experiments.  
