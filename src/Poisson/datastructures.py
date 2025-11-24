@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import numpy as np
+from mpi4py import MPI
 
 
 # ============================================================================
-# Kernel (standalone, MPI-free)
+# Kernel 
 # ============================================================================
 
 @dataclass
@@ -25,7 +26,7 @@ class KernelParams:
     omega: float
     tolerance: float = 1e-10
     max_iter: int = 100000
-    num_threads: int = None  # None for NumPy
+    numba_threads: int | None = None  # None for NumPy
 
     # Derived values (computed in __post_init__)
     h: float = field(init=False)
@@ -40,7 +41,7 @@ class KernelMetrics:
     """Final convergence metrics (updated during kernel execution)."""
     converged: bool = False
     iterations: int = 0
-    final_residual: float = None
+    final_residual: float | None = None
     total_compute_time: float = 0.0
 
 
@@ -102,15 +103,21 @@ class LocalParams:
     Each rank has its own LocalParams with rank-specific values including
     the kernel configuration for that rank's local domain size.
     """
-    rank: int
     N_local: int  # Local grid size including ghost zones
 
     # Domain coordinates in global grid
     local_start: tuple[int, int, int]  # (i_start, j_start, k_start)
     local_end: tuple[int, int, int]    # (i_end, j_end, k_end)
 
-    # Kernel configuration 
+    # Kernel configuration
     kernel: KernelParams
+
+    # Auto-populated from MPI
+    rank: int = field(init=False)
+
+    def __post_init__(self):
+        """Auto-populate rank from MPI."""
+        self.rank = MPI.COMM_WORLD.Get_rank()
 
 
 @dataclass
@@ -131,6 +138,5 @@ class LocalSeries:
     compute_times: list[float] = field(default_factory=list)
     mpi_comm_times: list[float] = field(default_factory=list)
     halo_times: list[float] = field(default_factory=list)
-    res_his: list[float] = field(default_factory=list)  # Rank 0 only
 
 
