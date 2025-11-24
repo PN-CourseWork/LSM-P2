@@ -20,6 +20,7 @@ from .strategies import (
     NumpyCommunicator,
 )
 from .decomposition import DomainDecomposition, RankInfo
+from .communicators import NumpyCommunicator as NumpyHaloExchange, DatatypeCommunicator
 from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
 from .postprocessing import PostProcessor
 
@@ -48,6 +49,9 @@ __all__ = [
     # Decomposition (DMDA-style)
     "DomainDecomposition",
     "RankInfo",
+    # Communicators
+    "NumpyHaloExchange",
+    "DatatypeCommunicator",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",
