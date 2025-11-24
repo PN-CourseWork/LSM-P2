@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.888** total execution time for 20 files **from all galleries**:
+**00:00.000** total execution time for 22 files **from all galleries**:
 
 .. container::
 
@@ -32,63 +32,69 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_example_gallery_validation_plot_validation.py` (``../../Experiments/validation/plot_validation.py``)
-     - 00:02.888
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_baseline_compute_sequential.py` (``../../Experiments/baseline/compute_sequential.py``)
+   * - :ref:`sphx_glr_example_gallery_01-kernels_compute_01_convergence.py` (``../../Experiments/01-kernels/compute_01_convergence.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_baseline_plot_01_sequential_baseline.py` (``../../Experiments/baseline/plot_01_sequential_baseline.py``)
+   * - :ref:`sphx_glr_example_gallery_01-kernels_compute_02_benchmark.py` (``../../Experiments/01-kernels/compute_02_benchmark.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_communication_compute_communication.py` (``../../Experiments/communication/compute_communication.py``)
+   * - :ref:`sphx_glr_example_gallery_01-kernels_compute_03_tolerance_benchmark.py` (``../../Experiments/01-kernels/compute_03_tolerance_benchmark.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_communication_plot_07_custom_mpi_datatypes.py` (``../../Experiments/communication/plot_07_custom_mpi_datatypes.py``)
+   * - :ref:`sphx_glr_example_gallery_01-kernels_plot_kernels.py` (``../../Experiments/01-kernels/plot_kernels.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_communication_plot_08_numpy_arrays.py` (``../../Experiments/communication/plot_08_numpy_arrays.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_compute_cubic.py` (``../../Experiments/02-decomposition/compute_cubic.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_communication_plot_09_communication_overhead.py` (``../../Experiments/communication/plot_09_communication_overhead.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_compute_decomposition.py` (``../../Experiments/02-decomposition/compute_decomposition.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_compute_cubic.py` (``../../Experiments/decomposition/compute_cubic.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_compute_sliced.py` (``../../Experiments/02-decomposition/compute_sliced.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_compute_sliced.py` (``../../Experiments/decomposition/compute_sliced.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_plot_04_sliced_decomposition.py` (``../../Experiments/02-decomposition/plot_04_sliced_decomposition.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_04_sliced_decomposition.py` (``../../Experiments/decomposition/plot_04_sliced_decomposition.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_plot_05_cubic_decomposition.py` (``../../Experiments/02-decomposition/plot_05_cubic_decomposition.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_05_cubic_decomposition.py` (``../../Experiments/decomposition/plot_05_cubic_decomposition.py``)
+   * - :ref:`sphx_glr_example_gallery_02-decomposition_plot_06_sliced_vs_cubic_comparison.py` (``../../Experiments/02-decomposition/plot_06_sliced_vs_cubic_comparison.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_decomposition_plot_06_sliced_vs_cubic_comparison.py` (``../../Experiments/decomposition/plot_06_sliced_vs_cubic_comparison.py``)
+   * - :ref:`sphx_glr_example_gallery_03-communication_compute_communication.py` (``../../Experiments/03-communication/compute_communication.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_kernels_compute_kernels.py` (``../../Experiments/kernels/compute_kernels.py``)
+   * - :ref:`sphx_glr_example_gallery_03-communication_plot_07_custom_mpi_datatypes.py` (``../../Experiments/03-communication/plot_07_custom_mpi_datatypes.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_kernels_plot_02_numba_vs_numpy.py` (``../../Experiments/kernels/plot_02_numba_vs_numpy.py``)
+   * - :ref:`sphx_glr_example_gallery_03-communication_plot_08_numpy_arrays.py` (``../../Experiments/03-communication/plot_08_numpy_arrays.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_kernels_plot_03_thread_scaling.py` (``../../Experiments/kernels/plot_03_thread_scaling.py``)
+   * - :ref:`sphx_glr_example_gallery_03-communication_plot_09_communication_overhead.py` (``../../Experiments/03-communication/plot_09_communication_overhead.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_compute_scaling.py` (``../../Experiments/scaling/compute_scaling.py``)
+   * - :ref:`sphx_glr_example_gallery_04-validation_compute_kernel_validation.py` (``../../Experiments/04-validation/compute_kernel_validation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_10_strong_scaling.py` (``../../Experiments/scaling/plot_10_strong_scaling.py``)
+   * - :ref:`sphx_glr_example_gallery_04-validation_compute_validation.py` (``../../Experiments/04-validation/compute_validation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_11_weak_scaling.py` (``../../Experiments/scaling/plot_11_weak_scaling.py``)
+   * - :ref:`sphx_glr_example_gallery_04-validation_plot_kernel_validation.py` (``../../Experiments/04-validation/plot_kernel_validation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_scaling_plot_12_parallel_efficiency.py` (``../../Experiments/scaling/plot_12_parallel_efficiency.py``)
+   * - :ref:`sphx_glr_example_gallery_04-validation_plot_validation.py` (``../../Experiments/04-validation/plot_validation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_validation_compute_validation.py` (``../../Experiments/validation/compute_validation.py``)
+   * - :ref:`sphx_glr_example_gallery_05-scaling_compute_scaling.py` (``../../Experiments/05-scaling/compute_scaling.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_05-scaling_plot_10_strong_scaling.py` (``../../Experiments/05-scaling/plot_10_strong_scaling.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_05-scaling_plot_11_weak_scaling.py` (``../../Experiments/05-scaling/plot_11_weak_scaling.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_05-scaling_plot_12_parallel_efficiency.py` (``../../Experiments/05-scaling/plot_12_parallel_efficiency.py``)
      - 00:00.000
      - 0.0

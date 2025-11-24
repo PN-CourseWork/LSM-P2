@@ -27,6 +27,7 @@ extensions = [
     "numpydoc",
     "sphinx_copybutton",
     "sphinx_gallery.gen_gallery",
+    "sphinxcontrib.mermaid",
 ]
 
 root_doc = "index"
@@ -69,7 +70,7 @@ sphinx_gallery_conf = {
     "download_all_examples": False,  # No download buttons
     "remove_config_comments": True,  # Clean up notebook outputs
     "abort_on_example_error": False,  # Continue if examples fail
-    "plot_gallery": True,  # Enable plot gallery generation
+    "plot_gallery": False,  # Disable plot execution for now - TODO: fix plot scripts
     "capture_repr": ("_repr_html_", "__repr__"),  # Capture output representations
     "matplotlib_animations": True,  # Support matplotlib animations
     # Remove Jupyter cell markers (# %%) from rendered output

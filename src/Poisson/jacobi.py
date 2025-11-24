@@ -9,7 +9,7 @@ import numpy as np
 from mpi4py import MPI
 from numba import get_num_threads
 
-from .kernels import jacobi_step_numpy, jacobi_step_numba
+from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import (
     Config,
     Results,
@@ -107,7 +107,11 @@ class JacobiPoisson:
             self.results = Results()
 
         # Kernel selection
-        self._step = jacobi_step_numba if self.config.use_numba else jacobi_step_numpy
+        if self.config.use_numba:
+            self.kernel = NumbaKernel(num_threads=self.config.num_threads)
+        else:
+            self.kernel = NumPyKernel()
+        self._step = self.kernel.step
 
         # Setup strategies based on MPI size
         if self.size == 1:
@@ -191,6 +195,9 @@ class JacobiPoisson:
         N = self.config.N
         h = 2.0 / (N - 1)
 
+        # Configure kernel with problem parameters
+        self.kernel.configure(h=h, omega=self.config.omega)
+
         # Initialize buffer pointers for ping-pong
         uold_local = self.u1_local
         u_local = self.u2_local
@@ -198,7 +205,7 @@ class JacobiPoisson:
         # Main iteration loop
         for i in range(self.config.max_iter):
             # Perform one Jacobi iteration
-            global_residual = self._perform_iteration(uold_local, u_local, h)
+            global_residual = self._perform_iteration(uold_local, u_local)
 
             # Check convergence
             if global_residual < self.config.tolerance:
@@ -212,7 +219,7 @@ class JacobiPoisson:
             self._record_convergence(self.config.max_iter, converged=False)
             return u_local
 
-    def _perform_iteration(self, uold_local, u_local, h):
+    def _perform_iteration(self, uold_local, u_local):
         """Perform a single Jacobi iteration.
 
         Parameters
@@ -221,8 +228,6 @@ class JacobiPoisson:
             Previous solution (local domain with ghosts)
         u_local : np.ndarray
             New solution array (local domain with ghosts)
-        h : float
-            Grid spacing
 
         Returns
         -------
@@ -237,7 +242,7 @@ class JacobiPoisson:
 
         # Jacobi step on local domain
         local_residual = _time_operation(
-            lambda: self._step(uold_local, u_local, self.f_local, h, self.config.omega),
+            lambda: self._step(uold_local, u_local, self.f_local),
             self.timeseries.compute_times
         )
 
@@ -329,14 +334,7 @@ class JacobiPoisson:
         N : int, optional
             Small grid size for warmup (default: 10)
         """
-        h = 2.0 / (N - 1)
-        u1 = np.zeros((N, N, N))
-        u2 = np.zeros((N, N, N))
-        f = np.random.randn(N, N, N)
-
-        for _ in range(5):
-            self._step(u1, u2, f, h, self.config.omega)
-            u1, u2 = u2, u1
+        self.kernel.warmup(N=N, omega=self.config.omega)
 
     def summary(self, exact_solution=None):
         """Compute summary statistics and error against exact solution.

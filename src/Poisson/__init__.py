@@ -1,7 +1,7 @@
 """Large Scale Modeling package."""
 
 from .datastructures import Config, LocalFields, Results, Timeseries
-from .kernels import jacobi_step_numpy, jacobi_step_numba
+from .kernels import NumPyKernel, NumbaKernel
 from .jacobi import JacobiPoisson
 from .strategies import (
     NoDecomposition,
@@ -20,8 +20,8 @@ __all__ = [
     "Results",
     "Timeseries",
     # Kernels
-    "jacobi_step_numpy",
-    "jacobi_step_numba",
+    "NumPyKernel",
+    "NumbaKernel",
     # Solver
     "JacobiPoisson",
     # Strategies

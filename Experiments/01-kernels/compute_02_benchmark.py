@@ -1,37 +1,36 @@
 """
-Convergence-Based Performance Benchmark
-========================================
+Kernel Performance Benchmark
+=============================
 
-Benchmark NumPy vs Numba with fixed tolerance across different problem sizes.
+Benchmark NumPy vs Numba kernels across different problem sizes and thread counts.
 
-This measures time-to-convergence (not just kernel performance) by using
-a fixed tolerance and allowing problems to converge naturally.
+This measures pure computational performance by running a fixed number of iterations
+(no convergence check) to compare kernel implementations and thread scaling.
 """
 
 import os
 import numpy as np
 import pandas as pd
-import numba
 
 from Poisson import JacobiPoisson
 from utils import datatools
 
-print("Convergence-Based Performance Benchmark")
+print("Kernel Performance Benchmarks")
 print("=" * 60)
 
 # Test parameters
 problem_sizes = [25, 50, 75, 100]
 omega = 0.75
-max_iter = 10000
-tolerance = 1e-10  # Very low tolerance - strict convergence
+max_iter = 100  # Fixed iterations for pure kernel benchmark
+tolerance = 0.0  # Never converge - run all iterations
 
 # Thread counts to test
 thread_counts = [1, 4, 6, 8, 10]
 
 # Get data directory and clean old files
 data_dir = datatools.get_data_dir()
-print("\nCleaning up old tolerance benchmark files...")
-for old_file in data_dir.glob("tolerance_benchmark*.parquet"):
+print("\nCleaning up old benchmark files...")
+for old_file in data_dir.glob("kernel_benchmark*.parquet"):
     old_file.unlink()
     print(f"  Deleted: {old_file.name}")
 
@@ -64,8 +63,8 @@ for N in problem_sizes:
 
     # Extract results
     res = solver.results
-    total_time = sum(solver.timeseries.compute_times)
-    avg_iter_time = total_time / res.iterations if res.iterations > 0 else 0
+    compute_time = sum(solver.timeseries.compute_times)
+    avg_iter_time = compute_time / res.iterations if res.iterations > 0 else 0
 
     result_dict = {
         'N': N,
@@ -78,7 +77,7 @@ for N in problem_sizes:
         'iterations': res.iterations,
         'converged': res.converged,
         'final_error': res.final_error,
-        'total_time': total_time,
+        'compute_time': compute_time,
         'avg_iter_time': avg_iter_time,
     }
 
@@ -86,7 +85,7 @@ for N in problem_sizes:
 
     print(f"  Iterations: {res.iterations}")
     print(f"  Converged: {res.converged}")
-    print(f"  Total time: {total_time:.4f}s")
+    print(f"  Compute time: {compute_time:.4f}s")
     print(f"  Avg iteration time: {avg_iter_time:.6f}s")
 
 # ============================================================================
@@ -98,9 +97,6 @@ for num_threads in thread_counts:
     print(f"Numba ({num_threads} threads)")
     print("=" * 60)
 
-    # Set thread count
-    numba.set_num_threads(num_threads)
-
     for N in problem_sizes:
         print(f"\nTesting N={N}, kernel=numba, threads={num_threads}")
         print("-" * 60)
@@ -111,6 +107,7 @@ for num_threads in thread_counts:
             max_iter=max_iter,
             tolerance=tolerance,
             use_numba=True,
+            num_threads=num_threads,
         )
 
         # Warmup for first problem size only
@@ -124,8 +121,8 @@ for num_threads in thread_counts:
 
         # Extract results
         res = solver.results
-        total_time = sum(solver.timeseries.compute_times)
-        avg_iter_time = total_time / res.iterations if res.iterations > 0 else 0
+        compute_time = sum(solver.timeseries.compute_times)
+        avg_iter_time = compute_time / res.iterations if res.iterations > 0 else 0
 
         result_dict = {
             'N': N,
@@ -138,7 +135,7 @@ for num_threads in thread_counts:
             'iterations': res.iterations,
             'converged': res.converged,
             'final_error': res.final_error,
-            'total_time': total_time,
+            'compute_time': compute_time,
             'avg_iter_time': avg_iter_time,
         }
 
@@ -146,7 +143,7 @@ for num_threads in thread_counts:
 
         print(f"  Iterations: {res.iterations}")
         print(f"  Converged: {res.converged}")
-        print(f"  Total time: {total_time:.4f}s")
+        print(f"  Compute time: {compute_time:.4f}s")
         print(f"  Avg iteration time: {avg_iter_time:.6f}s")
 
 # ============================================================================
@@ -158,11 +155,11 @@ print("Saving Results")
 print("=" * 60)
 
 df = pd.DataFrame(all_results)
-output_path = data_dir / "tolerance_benchmark.parquet"
+output_path = data_dir / "kernel_benchmark.parquet"
 datatools.save_simulation_data(df, output_path, format="parquet")
 
 print(f"\nBenchmark results saved to: {output_path}")
 print(f"Total records: {len(df)}")
 print("\n" + "=" * 60)
-print("Tolerance-based benchmarks completed!")
+print("Kernel benchmarks completed!")
 print("=" * 60)

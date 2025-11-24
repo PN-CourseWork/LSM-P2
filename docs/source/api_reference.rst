@@ -229,11 +229,10 @@ Results
    :template: class.rst
 
    Results
-   TimingResults
 
 **Results:** Convergence information (iterations, converged)
 
-**TimingResults:** Per-rank timing summary (compute_time, mpi_comm_time, halo_exchange_time)
+.. **TimingResults:** Per-rank timing summary (compute_time, mpi_comm_time, halo_exchange_time)
 
 Time Series (Optional)
 ----------------------
@@ -309,16 +308,16 @@ The :class:`PostProcessor` class handles analysis, aggregation, and export of si
 Computational Kernels
 =====================
 
-The package provides two implementations of the Jacobi iteration kernel:
+The package provides two implementations of the Jacobi iteration kernel through the :mod:`Poisson.kernels` module.
 
-.. autosummary::
-   :toctree: generated
+.. .. autosummary::
+..    :toctree: generated
+..
+..    jacobi_step_numpy
+..    jacobi_step_numba
 
-   jacobi_step_numpy
-   jacobi_step_numba
-
-:func:`jacobi_step_numpy` uses pure NumPy operations for portability and debugging.
-:func:`jacobi_step_numba` uses Numba JIT compilation for high performance.
+NumPy and Numba kernel implementations are available through the :class:`NumPyKernel` and :class:`NumbaKernel` classes.
+See the :doc:`generated/Poisson.kernels` module documentation for details.
 
 Problem Setup
 =============
