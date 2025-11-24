@@ -97,3 +97,69 @@ plotter_cubic.screenshot(output_cubic, transparent_background=True)
 #plotter_cubic.close()
 
 print(f"Cubic decomposition saved to: {output_cubic}")
+
+# %%
+# Cubic Decomposition Visualization (18 ranks)
+# ---------------------------------------------
+
+plotter_cubic_18 = pv.Plotter(window_size=[3000, 3000], off_screen=True)
+da_cubic_18 = DomainDecomposition(N=N, size=18, strategy='cubic')
+
+for rank in range(18):
+    info = da_cubic_18.get_rank_info(rank)
+    x_start, y_start, z_start = info.global_start
+    x_end, y_end, z_end = info.global_end
+
+    # Create box mesh for this rank's subdomain
+    box = pv.Box(bounds=[x_start, x_end, y_start, y_end, z_start, z_end])
+
+    # Get color for this rank
+    color = cmap(rank / 18)[:3]  # RGB only
+
+    # Add the box (more transparent with thick edges)
+    plotter_cubic_18.add_mesh(box, opacity=0.4, color=color, show_edges=True,
+                              edge_color='black', line_width=8)
+
+
+plotter_cubic_18.add_axes()
+#plotter_cubic_18.camera_position = 'iso'
+
+# Save cubic decomposition (18 ranks)
+output_cubic_18 = fig_dir / "01c_cubic_decomposition_18.png"
+plotter_cubic_18.screenshot(output_cubic_18, transparent_background=True)
+#plotter_cubic_18.close()
+
+print(f"Cubic decomposition (18 ranks) saved to: {output_cubic_18}")
+
+# %%
+# Cubic Decomposition Visualization (11 ranks - poor factorization)
+# ------------------------------------------------------------------
+
+plotter_cubic_11 = pv.Plotter(window_size=[3000, 3000], off_screen=True)
+da_cubic_11 = DomainDecomposition(N=N, size=11, strategy='cubic')
+
+for rank in range(11):
+    info = da_cubic_11.get_rank_info(rank)
+    x_start, y_start, z_start = info.global_start
+    x_end, y_end, z_end = info.global_end
+
+    # Create box mesh for this rank's subdomain
+    box = pv.Box(bounds=[x_start, x_end, y_start, y_end, z_start, z_end])
+
+    # Get color for this rank
+    color = cmap(rank / 11)[:3]  # RGB only
+
+    # Add the box (more transparent with thick edges)
+    plotter_cubic_11.add_mesh(box, opacity=0.4, color=color, show_edges=True,
+                              edge_color='black', line_width=8)
+
+
+plotter_cubic_11.add_axes()
+#plotter_cubic_11.camera_position = 'iso'
+
+# Save cubic decomposition (11 ranks)
+output_cubic_11 = fig_dir / "01d_cubic_decomposition_11.png"
+plotter_cubic_11.screenshot(output_cubic_11, transparent_background=True)
+#plotter_cubic_11.close()
+
+print(f"Cubic decomposition (11 ranks) saved to: {output_cubic_11}")
