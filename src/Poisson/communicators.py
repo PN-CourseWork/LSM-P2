@@ -139,16 +139,31 @@ class DatatypeCommunicator:
                          recvbuf=[u[n0-1, :, :], 1, self._datatypes['axis0']],
                          source=neighbors['x_upper'], recvtag=0)
 
-        # Y direction (cubic only) - not implemented for this benchmark
-        # Would require proper handling of non-contiguous subarrays
-        if neighbors.get('y_lower') is not None or neighbors.get('y_upper') is not None:
-            raise NotImplementedError(
-                "Datatype communicator only supports contiguous (axis 0) exchanges. "
-                "Use NumPy communicator for cubic decomposition."
-            )
+        # Y direction (cubic only) - use subarray datatype for zero-copy
+        # Pass full array u, but datatypes describe which planes to send/recv
+        if neighbors.get('y_lower') is not None:
+            # Create datatypes describing Y-planes at different indices
+            send_type = self._create_y_plane_type(u.shape, 1)
+            recv_type = self._create_y_plane_type(u.shape, 0)
+
+            comm.Sendrecv([u, 1, send_type], dest=neighbors['y_lower'], sendtag=2,
+                         recvbuf=[u, 1, recv_type], source=neighbors['y_lower'], recvtag=3)
+
+            send_type.Free()
+            recv_type.Free()
+
+        if neighbors.get('y_upper') is not None:
+            send_type = self._create_y_plane_type(u.shape, n1-2)
+            recv_type = self._create_y_plane_type(u.shape, n1-1)
+
+            comm.Sendrecv([u, 1, send_type], dest=neighbors['y_upper'], sendtag=3,
+                         recvbuf=[u, 1, recv_type], source=neighbors['y_upper'], recvtag=2)
+
+            send_type.Free()
+            recv_type.Free()
 
     def _create_datatypes(self, shape):
-        """Create MPI datatypes for all face directions.
+        """Create MPI datatypes for contiguous face directions.
 
         Parameters
         ----------
@@ -158,26 +173,46 @@ class DatatypeCommunicator:
         Returns
         -------
         dict
-            Datatypes for each axis
+            Datatypes for axis 0 (contiguous planes)
         """
         n0, n1, n2 = shape
         datatypes = {}
 
         # Axis 0 (first dimension) - contiguous in memory
-        plane_01 = MPI.DOUBLE.Create_contiguous(n1 * n2)
-        plane_01.Commit()
-        datatypes['axis0'] = plane_01
-
-        # Axis 1 (second dimension) - non-contiguous, use subarray
-        sizes = [n0, n1, n2]
-        subsizes = [n0, 1, n2]
-        starts = [0, 0, 0]
-        plane_02 = MPI.DOUBLE.Create_subarray(sizes, subsizes, starts,
-                                              order=MPI.ORDER_C)
-        plane_02.Commit()
-        datatypes['axis1'] = plane_02
+        # u[i, :, :] is contiguous: n1*n2 elements
+        plane_0 = MPI.DOUBLE.Create_contiguous(n1 * n2)
+        plane_0.Commit()
+        datatypes['axis0'] = plane_0
 
         return datatypes
+
+    def _create_y_plane_type(self, shape, j_index):
+        """Create MPI subarray datatype for Y-plane at specific index.
+
+        This describes the non-contiguous memory pattern for u[:, j, :].
+
+        Parameters
+        ----------
+        shape : tuple
+            Array shape (n0, n1, n2)
+        j_index : int
+            Index along Y-axis to extract
+
+        Returns
+        -------
+        MPI.Datatype
+            Committed datatype (caller must Free() after use)
+        """
+        n0, n1, n2 = shape
+
+        # Describe subarray: extract plane at [:, j_index, :]
+        sizes = [n0, n1, n2]        # Full array dimensions
+        subsizes = [n0, 1, n2]      # Extract one Y-plane
+        starts = [0, j_index, 0]    # Starting position
+
+        dtype = MPI.DOUBLE.Create_subarray(sizes, subsizes, starts, order=MPI.ORDER_C)
+        dtype.Commit()
+        return dtype
 
     def _free_datatypes(self):
         """Free allocated MPI datatypes."""

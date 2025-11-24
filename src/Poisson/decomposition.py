@@ -276,3 +276,34 @@ class DomainDecomposition:
                     best_score = score
 
         return best
+
+
+class NoDecomposition:
+    """Stub decomposition for single-rank (sequential) execution."""
+
+    def initialize_local_arrays_distributed(self, N, rank, comm):
+        """Initialize arrays for single-rank execution.
+
+        Parameters
+        ----------
+        N : int
+            Grid size
+        rank : int
+            MPI rank
+        comm : MPI.Comm
+            MPI communicator
+
+        Returns
+        -------
+        tuple
+            (u1, u2, f) arrays for rank 0, None for other ranks
+        """
+        if rank == 0:
+            # Root rank gets full arrays
+            u1 = np.zeros((N, N, N))
+            u2 = np.zeros((N, N, N))
+            f = np.zeros((N, N, N))
+            return u1, u2, f
+        else:
+            # Non-root ranks get None
+            return None, None, None

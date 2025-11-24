@@ -12,17 +12,10 @@ from .datastructures import (
 )
 from .kernels import NumPyKernel, NumbaKernel
 from .jacobi import JacobiPoisson
-from .strategies import (
-    NoDecomposition,
-    SlicedDecomposition,
-    CubicDecomposition,
-    CustomMPICommunicator,
-    NumpyCommunicator,
-)
-from .decomposition import DomainDecomposition, RankInfo
+from .decomposition import DomainDecomposition, RankInfo, NoDecomposition
 from .communicators import NumpyCommunicator as NumpyHaloExchange, DatatypeCommunicator
 from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
-from .postprocessing import PostProcessor
+# from .postprocessing import PostProcessor  # Not available
 
 __all__ = [
     # Data structures - Kernel
@@ -40,13 +33,8 @@ __all__ = [
     "NumbaKernel",
     # Solver
     "JacobiPoisson",
-    # Strategies (legacy)
-    "NoDecomposition",
-    "SlicedDecomposition",
-    "CubicDecomposition",
-    "CustomMPICommunicator",
-    "NumpyCommunicator",
     # Decomposition (DMDA-style)
+    "NoDecomposition",
     "DomainDecomposition",
     "RankInfo",
     # Communicators
@@ -57,6 +45,4 @@ __all__ = [
     "sinusoidal_exact_solution",
     "sinusoidal_source_term",
     "setup_sinusoidal_problem",
-    # Post-processing
-    "PostProcessor",
 ]

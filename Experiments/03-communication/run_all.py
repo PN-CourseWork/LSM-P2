@@ -52,16 +52,18 @@ def run_plotting():
 
 if __name__ == '__main__':
     # Rank counts to test
-    # 2, 4: sliced decomposition (contiguous planes, both methods work)
-    # 8: cubic decomposition (non-contiguous, only NumPy tested)
-    rank_counts = [2, 4, 8]
+    # 8: Both sliced and cubic decomposition for direct comparison
+    # 2, 4: Additional sliced data points
+    rank_counts = [8]
 
     print("Communication Benchmark Suite")
     print("=" * 60)
     print(f"Will run experiments with: {rank_counts} ranks")
-    print(f"Sliced (2, 4 ranks): MPI datatypes vs NumPy arrays")
-    print(f"Cubic (8 ranks): NumPy arrays only")
-    print(f"Running 20 repetitions per configuration for statistics")
+    print(f"8 ranks: Both sliced and cubic decomposition")
+    print(f"  - Sliced: NumPy vs MPI datatypes")
+    print(f"  - Cubic: NumPy only (6-face vs 2-plane comparison)")
+    print(f"Running 100 repetitions per configuration for 95% CI")
+    print(f"Testing 10 problem sizes: 20, 40, 60, 80, 100, 140, 180, 220, 260, 300")
     print("=" * 60)
 
     # Run all experiments

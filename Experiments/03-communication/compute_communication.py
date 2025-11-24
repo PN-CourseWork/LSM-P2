@@ -53,7 +53,7 @@ def benchmark_communicator(communicator, u, rank_info, comm, n_iterations=100):
     return (t_end - t_start) / n_iterations
 
 
-def run_benchmark(N, size, strategy, n_repetitions=20):
+def run_benchmark(N, size, strategy, n_repetitions=100):
     """Run communication benchmark with multiple repetitions.
 
     Parameters
@@ -99,12 +99,11 @@ def run_benchmark(N, size, strategy, n_repetitions=20):
             {'N': N, 'size': size, 'strategy': strategy, 'rank': rank, 'repetition': rep, 'method': 'numpy', 'time': time_numpy}
         )
 
-        # Benchmark datatype method (only for sliced, which uses contiguous planes)
-        if strategy == 'sliced':
-            time_datatype = benchmark_communicator(datatype_comm, u.copy(), rank_info, comm, n_iterations)
-            all_local_results.append(
-                {'N': N, 'size': size, 'strategy': strategy, 'rank': rank, 'repetition': rep, 'method': 'datatype', 'time': time_datatype}
-            )
+        # Benchmark datatype method (both strategies now supported!)
+        time_datatype = benchmark_communicator(datatype_comm, u.copy(), rank_info, comm, n_iterations)
+        all_local_results.append(
+            {'N': N, 'size': size, 'strategy': strategy, 'rank': rank, 'repetition': rep, 'method': 'datatype', 'time': time_datatype}
+        )
 
     # Gather all results to rank 0
     all_results = comm.gather(all_local_results, root=0)
@@ -120,37 +119,46 @@ if __name__ == '__main__':
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # Configuration
-    problem_sizes = [32, 64, 128]
+    # Configuration - 10 problem sizes up to N=300
+    problem_sizes = [20, 40, 60, 80, 100, 140, 180, 220, 260, 300]
 
-    # Determine strategy
-    if size in [2, 4]:
-        strategy = 'sliced'
-    elif size in [8, 27]:
-        strategy = 'cubic'
+    # Determine strategies to test based on size
+    if size == 8:
+        # For 8 ranks, test both strategies for comparison
+        strategies = ['sliced', 'cubic']
+    elif size in [2, 4]:
+        strategies = ['sliced']
     else:
         if rank == 0:
-            print(f"Warning: size={size} not optimal, using cubic")
-        strategy = 'cubic'
+            print(f"Warning: size={size} not configured, using cubic")
+        strategies = ['cubic']
 
-    # Run benchmarks
+    # Run benchmarks for each strategy
     all_data = []
-    for N in problem_sizes:
-        if rank == 0:
-            print(f"Benchmarking N={N}, size={size}, strategy={strategy}...")
+    for strategy in strategies:
+        for N in problem_sizes:
+            if rank == 0:
+                print(f"Benchmarking N={N}, size={size}, strategy={strategy}...")
 
-        results = run_benchmark(N, size, strategy)
+            results = run_benchmark(N, size, strategy)
 
-        if rank == 0 and results is not None:
-            all_data.extend(results)
+            if rank == 0 and results is not None:
+                all_data.extend(results)
 
-            # Print summary
-            df_subset = pd.DataFrame(results)
-            numpy_mean = df_subset[df_subset['method'] == 'numpy']['time'].mean()
-            datatype_mean = df_subset[df_subset['method'] == 'datatype']['time'].mean()
-            print(f"  NumPy:     {numpy_mean*1e6:.2f} μs")
-            print(f"  Datatype:  {datatype_mean*1e6:.2f} μs")
-            print(f"  Speedup:   {numpy_mean/datatype_mean:.2f}x")
+                # Print summary
+                df_subset = pd.DataFrame(results)
+                numpy_mean = df_subset[df_subset['method'] == 'numpy']['time'].mean()
+
+                # Check if datatype results exist
+                datatype_results = df_subset[df_subset['method'] == 'datatype']
+                if len(datatype_results) > 0:
+                    datatype_mean = datatype_results['time'].mean()
+                    print(f"  NumPy:     {numpy_mean*1e6:.2f} μs")
+                    print(f"  Datatype:  {datatype_mean*1e6:.2f} μs")
+                    print(f"  Speedup:   {numpy_mean/datatype_mean:.2f}x")
+                else:
+                    print(f"  NumPy:     {numpy_mean*1e6:.2f} μs")
+                    print(f"  Datatype:  (not tested for {strategy})")
 
     # Save results as parquet
     if rank == 0:
@@ -160,7 +168,12 @@ if __name__ == '__main__':
         data_dir = repo_root / "data" / "communication"
         data_dir.mkdir(parents=True, exist_ok=True)
 
-        output_file = data_dir / f"communication_size{size}_{strategy}.parquet"
+        # Use descriptive filename
+        if len(strategies) > 1:
+            output_file = data_dir / f"communication_size{size}_both.parquet"
+        else:
+            output_file = data_dir / f"communication_size{size}_{strategies[0]}.parquet"
+
         df.to_parquet(output_file, index=False)
 
         print(f"\nResults saved to: {output_file}")

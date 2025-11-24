@@ -15,10 +15,8 @@ from .datastructures import (
     GlobalMetrics,
     LocalSeries,
 )
-from .strategies import (
-    NoDecomposition,
-    NumpyCommunicator,
-)
+from .communicators import NumpyCommunicator
+from .decomposition import NoDecomposition
 from .problems import sinusoidal_exact_solution
 
 
