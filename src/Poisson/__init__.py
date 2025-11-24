@@ -19,6 +19,7 @@ from .strategies import (
     CustomMPICommunicator,
     NumpyCommunicator,
 )
+from .decomposition import DomainDecomposition, RankInfo
 from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
 from .postprocessing import PostProcessor
 
@@ -38,12 +39,15 @@ __all__ = [
     "NumbaKernel",
     # Solver
     "JacobiPoisson",
-    # Strategies
+    # Strategies (legacy)
     "NoDecomposition",
     "SlicedDecomposition",
     "CubicDecomposition",
     "CustomMPICommunicator",
     "NumpyCommunicator",
+    # Decomposition (DMDA-style)
+    "DomainDecomposition",
+    "RankInfo",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",
