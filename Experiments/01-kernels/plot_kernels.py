@@ -60,38 +60,31 @@ benchmark_file = data_dir / "kernel_benchmark.parquet"
 df_raw = pd.read_parquet(benchmark_file)
 
 # Aggregate per-iteration data to get average iteration time
-df = df_raw.groupby(['N', 'kernel', 'use_numba', 'num_threads', 'omega', 'max_iter']).agg({
-    'compute_times': 'mean',
-    'residuals': 'mean'
+df = df_raw.groupby(['N', 'kernel', 'use_numba', 'num_threads']).agg({
+    'compute_times': 'mean'
 }).reset_index()
 df = df.rename(columns={'compute_times': 'avg_iter_time'})
 
-# Compute NumPy baseline for speedup calculations
-numpy_baseline = df[df['kernel'] == 'numpy'].set_index('N')['avg_iter_time'].to_dict()
-df['numpy_baseline'] = df['N'].map(numpy_baseline)
-df['speedup'] = df['numpy_baseline'] / df['avg_iter_time']
+# Create NumPy baseline for speedup calculations
+df_numpy = df[df['kernel'] == 'numpy'][['N', 'avg_iter_time']].rename(
+    columns={'avg_iter_time': 'numpy_baseline'}
+)
 
-# Compute thread efficiency for Numba
-df_numba = df[df['kernel'] == 'numba'].copy()
-baseline_1thread = df_numba[df_numba['num_threads'] == 1].set_index('N')['avg_iter_time'].to_dict()
-df_numba['baseline_1thread'] = df_numba['N'].map(baseline_1thread)
-df_numba['efficiency'] = (df_numba['baseline_1thread'] / df_numba['avg_iter_time']) / df_numba['num_threads'] * 100
+# Merge baseline into all rows and compute speedup
+df = df.merge(df_numpy, on='N', how='left')
+df['speedup'] = df['numpy_baseline'] / df['avg_iter_time']
 
 # %%
 # Plot 2: Performance Comparison
 # -------------------------------
 
 # Prepare data for plotting
-df_numpy = df[df['kernel'] == 'numpy'].copy()
-df_numpy['config'] = 'NumPy'
-
-df_numba_labeled = df_numba.copy()
-df_numba_labeled['config'] = 'Numba (' + df_numba_labeled['num_threads'].astype(str) + ' threads)'
-
-df_plot = pd.concat([df_numpy[['N', 'avg_iter_time', 'config']],
-                      df_numba_labeled[['N', 'avg_iter_time', 'config']]])
-
-# Convert to milliseconds for readability
+df_plot = df.copy()
+df_plot['config'] = df_plot.apply(
+    lambda row: 'NumPy' if row['kernel'] == 'numpy'
+    else f"Numba ({int(row['num_threads'])} threads)",
+    axis=1
+)
 df_plot['time_ms'] = df_plot['avg_iter_time'] * 1000
 
 # Create plot
@@ -118,9 +111,9 @@ g.savefig(fig_dir / "02_performance.pdf", bbox_inches='tight')
 # Plot 3: Speedup Analysis
 # -------------------------
 
-# Prepare speedup data
-df_speedup = df_numba.copy()
-df_speedup['thread_label'] = df_speedup['num_threads'].astype(str) + ' threads'
+# Filter to Numba only and prepare labels
+df_speedup = df[df['kernel'] == 'numba'].copy()
+df_speedup['thread_label'] = df_speedup['num_threads'].astype(int).astype(str) + ' threads'
 
 # Create speedup plot
 g = sns.relplot(
