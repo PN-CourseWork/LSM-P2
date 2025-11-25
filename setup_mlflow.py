@@ -1,5 +1,5 @@
 import mlflow
 
 # Login to Databricks 
-mlflow.login()
+mlflow.login(backend="databricks", interactive=True)
 
