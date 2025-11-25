@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/381725637536203531/2086f0e3317248b8b39014c5784745d1/artifacts
+end_time: 1764064870757
+entry_point_name: ''
+experiment_id: '381725637536203531'
+lifecycle_stage: active
+run_id: 2086f0e3317248b8b39014c5784745d1
+run_name: suave-ram-909
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764064870027
+status: 3
+tags: []
+user_id: philipnickel

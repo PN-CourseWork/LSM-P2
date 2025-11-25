@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/381725637536203531/b913bc8b4ae64e2994df8ce661f48ac4/artifacts
+end_time: 1764064625291
+entry_point_name: ''
+experiment_id: '381725637536203531'
+lifecycle_stage: active
+run_id: b913bc8b4ae64e2994df8ce661f48ac4
+run_name: rebellious-auk-827
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764064624944
+status: 3
+tags: []
+user_id: philipnickel
