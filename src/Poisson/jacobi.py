@@ -230,8 +230,8 @@ class JacobiPoisson:
             self.timeseries.halo_exchange_times
         )
 
-        # Jacobi step on local domain
-        local_residual = _time_operation(
+        # Jacobi step on local domain - returns sum of squared differences
+        local_diff_sum = _time_operation(
             lambda: self._step(uold_local, u_local, self.f_local),
             self.timeseries.compute_times
         )
@@ -239,9 +239,12 @@ class JacobiPoisson:
         # Apply Dirichlet BCs at physical boundaries (for cubic decomposition)
         self.decomposition.apply_boundary_conditions(u_local, self.rank)
 
-        # Compute global residual
+        # Compute global residual with proper normalization
+        # Sum squared differences across all ranks, then normalize by global interior points
+        N = self.config.N
+        global_n_interior = (N - 2) ** 3  # Total interior points in global domain
         global_residual = _time_operation(
-            lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
+            lambda: np.sqrt(self.comm.allreduce(local_diff_sum, op=MPI.SUM)) / global_n_interior,
             self.timeseries.mpi_comm_times
         )
 

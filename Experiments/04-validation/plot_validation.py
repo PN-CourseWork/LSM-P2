@@ -54,61 +54,44 @@ print(f"\nLoaded {len(df)} validation results")
 print(f"Strategies: {df['strategy'].unique()}")
 print(f"Problem sizes: {sorted(df['N'].unique())}")
 
-# Create method labels (without rank count)
-df['method'] = df['strategy'].str.capitalize() + ' + ' + df['communicator'].str.capitalize()
+# Create labels for plotting
+df['Strategy'] = df['strategy'].str.capitalize()
+df['Communicator'] = df['communicator'].str.capitalize()
+df['Ranks'] = df['size']
 
-# Create faceted plot - one column per rank count
-rank_counts = sorted(df['size'].unique())
-n_cols = len(rank_counts)
+# Use seaborn relplot with rank count in columns
+g = sns.relplot(
+    data=df,
+    x='N',
+    y='error',
+    hue='Strategy',
+    style='Communicator',
+    col='Ranks',
+    kind='line',
+    markers=True,
+    dashes=True,
+    facet_kws={'sharey': True},
+)
 
-fig, axes = plt.subplots(1, n_cols, figsize=(5*n_cols, 5), sharey=True)
-if n_cols == 1:
-    axes = [axes]
-
-# Compute O(N^-2) reference line
+# Add O(N^-2) reference line to each subplot
 N_vals = np.array(sorted(df['N'].unique()))
-N_ref = np.array([N_vals.min(), N_vals.max()])
+N_ref = np.linspace(N_vals.min(), N_vals.max(), 50)
 error_first = df[df['N'] == N_vals.min()]['error'].iloc[0]
 error_ref = error_first * (N_ref / N_vals.min()) ** (-2)
 
-# Plot each rank count in its own subplot
-for idx, rank_count in enumerate(rank_counts):
-    ax = axes[idx]
-    df_rank = df[df['size'] == rank_count]
-
-    # Plot each method
-    for method in sorted(df_rank['method'].unique()):
-        df_method = df_rank[df_rank['method'] == method].sort_values('N')
-
-        # Use different markers for strategy, different colors for communicator
-        marker = 'o' if 'Sliced' in method else 's'
-        linestyle = '-' if 'Numpy' in method else '--'
-
-        ax.plot(df_method['N'], df_method['error'],
-                marker=marker, markersize=8, linewidth=2,
-                linestyle=linestyle, label=method, alpha=0.8)
-
-    # Add O(N^-2) reference line
-    ax.plot(N_ref, error_ref, 'k:', linewidth=2, alpha=0.5,
-            label=r'$O(N^{-2})$ reference')
-
-    # Set scales and labels
+for ax in g.axes.flat:
+    ax.plot(N_ref, error_ref, 'k:', alpha=0.5, label=r'$O(N^{-2})$')
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel('Grid Size N', fontsize=12)
-    ax.set_title(f'np={rank_count}', fontsize=13, fontweight='bold')
-    ax.legend(fontsize=9, loc='best', framealpha=0.9)
     ax.grid(True, alpha=0.3)
 
-# Only label y-axis on leftmost subplot
-axes[0].set_ylabel('L2 Error', fontsize=12)
+# Set labels
+g.set_axis_labels(r'Grid Size N', 'L2 Error')
+g.figure.suptitle(r'Spatial Convergence: Solver Validation', y=1.02)
+g.add_legend(title='', fontsize=10)
 
-# Add overall title
-fig.suptitle('Spatial Convergence: Solver Validation', fontsize=14, fontweight='bold', y=1.02)
-
-plt.tight_layout()
 output_file = fig_dir / "validation_convergence.pdf"
-plt.savefig(output_file, bbox_inches='tight')
+g.savefig(output_file)
 print(f"\nSaved: {output_file}")
 
 # ============================================================================

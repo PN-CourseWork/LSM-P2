@@ -13,7 +13,6 @@ def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float,
     """Numba JIT implementation of Jacobi iteration step."""
     c = 1.0 / 6.0
     h2 = h * h
-    N = u.shape[0] - 2
 
     for i in prange(1, u.shape[0] - 1):
         for j in range(1, u.shape[1] - 1):
@@ -31,14 +30,16 @@ def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float,
                     + (1.0 - omega) * uold[i, j, k]
                 )
 
+    # Compute sum of squared differences over interior points only
+    # Return unnormalized sum - normalization done globally in solver
     diff_sum = 0.0
-    for i in prange(u.shape[0]):
-        for j in range(u.shape[1]):
-            for k in range(u.shape[2]):
+    for i in prange(1, u.shape[0] - 1):
+        for j in range(1, u.shape[1] - 1):
+            for k in range(1, u.shape[2] - 1):
                 diff = u[i, j, k] - uold[i, j, k]
                 diff_sum += diff * diff
 
-    return np.sqrt(diff_sum) / N**3
+    return diff_sum
 
 
 class _BaseKernel:
@@ -71,7 +72,6 @@ class NumPyKernel(_BaseKernel):
 
         c = 1.0 / 6.0
         h2 = self.parameters.h * self.parameters.h
-        N = u.shape[0] - 2
 
         u[1:-1, 1:-1, 1:-1] = (
             self.parameters.omega * c * (
@@ -86,9 +86,12 @@ class NumPyKernel(_BaseKernel):
             + (1.0 - self.parameters.omega) * uold[1:-1, 1:-1, 1:-1]
         )
 
-        residual = np.sqrt(np.sum((u - uold) ** 2)) / N**3
-        self._track(residual, time.perf_counter() - start)
-        return residual
+        # Compute sum of squared differences over interior points only
+        # Return unnormalized sum - normalization done globally in solver
+        diff = u[1:-1, 1:-1, 1:-1] - uold[1:-1, 1:-1, 1:-1]
+        diff_sum = np.sum(diff ** 2)
+        self._track(diff_sum, time.perf_counter() - start)
+        return diff_sum
 
 
 class NumbaKernel(_BaseKernel):
