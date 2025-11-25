@@ -74,7 +74,7 @@ def run_benchmark(N, size, strategy, n_repetitions=100):
     """
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    n_iterations = 100  # Repeat each timing run for accuracy
+    n_iterations = 50  # Repeat each timing run for accuracy
 
     # Setup decomposition
     decomp = DomainDecomposition(N=N, size=size, strategy=strategy)
@@ -119,8 +119,8 @@ if __name__ == '__main__':
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # Configuration - 10 problem sizes up to N=300
-    problem_sizes = [20, 40, 60, 80, 100, 140, 180, 220, 260, 300]
+    # Configuration 
+    problem_sizes = [20, 40, 60, 80, 100, 120,  140]
 
     # Determine strategies to test based on size
     if size == 8:

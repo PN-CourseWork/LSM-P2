@@ -137,6 +137,7 @@ class LocalSeries:
     """
     compute_times: list[float] = field(default_factory=list)
     mpi_comm_times: list[float] = field(default_factory=list)
-    halo_times: list[float] = field(default_factory=list)
+    halo_exchange_times: list[float] = field(default_factory=list)
+    residual_history: list[float] = field(default_factory=list)
 
 

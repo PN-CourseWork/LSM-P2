@@ -1,8 +1,11 @@
 """
-Communication Method Visualization
-====================================
+Communication Analysis Visualization
+=====================================
 
-Visualize communication overhead comparison between MPI datatypes and NumPy arrays.
+Visualizes:
+1. Communication overhead comparison between MPI datatypes and NumPy arrays
+2. Speedup relative to NumPy baseline
+3. Surface-to-volume ratio scaling analysis (analytical)
 """
 import numpy as np
 import pandas as pd
@@ -10,9 +13,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+from Poisson import DomainDecomposition
+
 # Setup
-sns.set_context("paper")
-sns.set_style("whitegrid")
+sns.set_style()
 
 # Get paths
 repo_root = Path(__file__).resolve().parent.parent.parent
@@ -35,19 +39,12 @@ df = pd.concat(dfs, ignore_index=True)
 # Convert time to microseconds for plotting
 df['time_us'] = df['time'] * 1e6
 
-print(f"Loaded {len(df)} measurements")
-print(f"Strategies: {df['strategy'].unique()}")
-print(f"Sizes: {sorted(df['size'].unique())}")
-print(f"Problem sizes N: {sorted(df['N'].unique())}")
-
 # %%
 # Plot 1: Communication Time vs Problem Size
 # --------------------------------------------
-# Combined plot: hue=method, style=strategy
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-# Plot with seaborn lineplot (automatically computes error bars across repetitions)
 sns.lineplot(
     data=df,
     x='N',
@@ -57,7 +54,7 @@ sns.lineplot(
     markers=True,
     dashes=False,
     ax=ax,
-    errorbar=('ci', 95),  # 95% confidence interval
+    errorbar=('ci', 95),
     markersize=8,
     linewidth=2
 )
@@ -74,39 +71,33 @@ plt.tight_layout()
 output_file = fig_dir / "01_communication_scaling.pdf"
 plt.savefig(output_file, bbox_inches='tight')
 print(f"Saved: {output_file}")
-plt.close()
 
 # %%
-# Plot 2: Speedup Relative to NumPy Baseline (with error bars)
-# ---------------------------------------------------------------
+# Plot 2: Speedup Relative to NumPy Baseline
+# -------------------------------------------
 
-# Compute normalized performance for each individual measurement
-# Normalized to each strategy's numpy baseline
 normalized_data = []
 
 for (N, strategy), group in df.groupby(['N', 'strategy']):
-    # Get mean numpy time for this configuration as baseline
     numpy_times = group[group['method'] == 'numpy']['time']
     if len(numpy_times) == 0:
         continue
 
     baseline_time = numpy_times.mean()
 
-    # Normalize all measurements to baseline
     for _, row in group.iterrows():
         normalized_data.append({
             'N': row['N'],
             'strategy': row['strategy'],
             'method': row['method'],
             'repetition': row['repetition'],
-            'speedup': baseline_time / row['time']  # >1 means faster than baseline
+            'speedup': baseline_time / row['time']
         })
 
 df_normalized = pd.DataFrame(normalized_data)
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-# Use relplot-style lineplot with hue and style
 sns.lineplot(
     data=df_normalized,
     x='N',
@@ -116,12 +107,11 @@ sns.lineplot(
     markers=True,
     dashes=False,
     ax=ax,
-    errorbar=('ci', 95),  # 95% confidence interval
+    errorbar=('ci', 95),
     markersize=8,
     linewidth=2
 )
 
-# Add reference line at speedup=1 (numpy baseline)
 ax.axhline(y=1.0, color='black', linestyle='--', alpha=0.4, linewidth=1.5, label='NumPy baseline')
 
 ax.set_xlabel('Grid Size N', fontsize=12)
@@ -135,6 +125,98 @@ plt.tight_layout()
 output_file = fig_dir / "02_speedup_vs_baseline.pdf"
 plt.savefig(output_file, bbox_inches='tight')
 print(f"Saved: {output_file}")
-plt.close()
 
-print("\nVisualization complete!")
+# %%
+# Plot 3: Surface-to-Volume Ratio Scaling Analysis
+# -------------------------------------------------
+# Analytical computation - no benchmarking needed
+
+N_values = [20, 40, 60, 80, 100, 140, 180, 220, 260, 300]
+P_values = [2, 4, 8, 16, 32, 64]
+strategies = ['sliced', 'cubic']
+
+sv_data = []
+
+for N in N_values:
+    for P in P_values:
+        for strategy in strategies:
+            try:
+                decomp = DomainDecomposition(N=N, size=P, strategy=strategy)
+
+                total_interior = 0
+                total_ghost = 0
+
+                for rank in range(P):
+                    info = decomp.get_rank_info(rank)
+                    interior_cells = np.prod(info.local_shape)
+                    ghost_cells = info.ghost_cells_total
+                    total_interior += interior_cells
+                    total_ghost += ghost_cells
+
+                avg_interior = total_interior / P
+                avg_ghost = total_ghost / P
+                sv_ratio = avg_ghost / avg_interior
+
+                sv_data.append({
+                    'N': N,
+                    'P': P,
+                    'strategy': strategy,
+                    'surface_to_volume': sv_ratio,
+                    'interior': avg_interior,
+                    'ghost': avg_ghost
+                })
+
+            except Exception as e:
+                print(f"Skipping N={N}, P={P}, {strategy}: {e}")
+
+df_sv = pd.DataFrame(sv_data)
+print(f"\nComputed {len(df_sv)} S/V configurations")
+
+# Plot scaling comparison at fixed N
+fig, ax = plt.subplots(figsize=(10, 6))
+
+N_fixed = 128
+df_fixed = df_sv[df_sv['N'] == N_fixed]
+
+# If N=128 not available, use closest
+if len(df_fixed) == 0:
+    closest_N = min(N_values, key=lambda x: abs(x - 128))
+    N_fixed = closest_N
+    df_fixed = df_sv[df_sv['N'] == N_fixed]
+
+sns.lineplot(
+    data=df_fixed,
+    x='P',
+    y='surface_to_volume',
+    hue='strategy',
+    style='strategy',
+    markers=True,
+    dashes=False,
+    ax=ax,
+    markersize=10,
+    linewidth=3
+)
+
+# Theoretical scaling
+P_range = np.linspace(2, 64, 100)
+sliced_theory = 2 * P_range / N_fixed
+cubic_theory = 6 * P_range**(2/3) / N_fixed
+
+ax.plot(P_range, sliced_theory, 'k--', alpha=0.4, linewidth=2,
+        label='Sliced theory: O(P)')
+ax.plot(P_range, cubic_theory, 'k:', alpha=0.4, linewidth=2,
+        label='Cubic theory: O(P^(2/3))')
+
+ax.set_xlabel('Number of Ranks (P)', fontsize=12)
+ax.set_ylabel('Surface-to-Volume Ratio', fontsize=12)
+ax.set_title(f'Strong Scaling: Sliced O(P) vs Cubic O(P^(2/3)) at N={N_fixed}', fontsize=14)
+ax.set_xscale('log', base=2)
+ax.set_yscale('log')
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+
+plt.tight_layout()
+output_file = fig_dir / "03_scaling_comparison.pdf"
+plt.savefig(output_file, bbox_inches='tight')
+print(f"Saved: {output_file}")
+

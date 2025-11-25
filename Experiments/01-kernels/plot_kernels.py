@@ -1,5 +1,5 @@
 """
-Kernel Performance Analysis
+Visualization of kernel experiments 
 ===========================
 
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.

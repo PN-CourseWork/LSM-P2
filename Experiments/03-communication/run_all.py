@@ -56,16 +56,6 @@ if __name__ == '__main__':
     # 2, 4: Additional sliced data points
     rank_counts = [8]
 
-    print("Communication Benchmark Suite")
-    print("=" * 60)
-    print(f"Will run experiments with: {rank_counts} ranks")
-    print(f"8 ranks: Both sliced and cubic decomposition")
-    print(f"  - Sliced: NumPy vs MPI datatypes")
-    print(f"  - Cubic: NumPy only (6-face vs 2-plane comparison)")
-    print(f"Running 100 repetitions per configuration for 95% CI")
-    print(f"Testing 10 problem sizes: 20, 40, 60, 80, 100, 140, 180, 220, 260, 300")
-    print("=" * 60)
-
     # Run all experiments
     success_count = 0
     for n_ranks in rank_counts:

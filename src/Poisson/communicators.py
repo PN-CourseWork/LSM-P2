@@ -6,7 +6,114 @@ import numpy as np
 from mpi4py import MPI
 
 
-class NumpyCommunicator:
+class _BaseCommunicator:
+    """Base class for halo exchange communicators."""
+
+    def exchange_ghosts(self, u, decomposition, rank, comm):
+        """Adapter method for solver interface.
+
+        Parameters
+        ----------
+        u : np.ndarray
+            Local array with ghost zones
+        decomposition : DomainDecomposition
+            Decomposition strategy (has get_neighbors method)
+        rank : int
+            Current MPI rank
+        comm : MPI.Comm
+            MPI communicator
+        """
+        neighbors = decomposition.get_neighbors(rank)
+        self.exchange_halos(u, neighbors, comm)
+
+
+def _exchange_cubic_numpy(u, neighbors, comm):
+    """Exchange ghost zones for cubic decomposition using NumPy arrays.
+
+    Uses MPI PROC_NULL pattern: all ranks participate in all exchanges.
+    Sendrecv to/from PROC_NULL is a no-op.
+    At physical boundaries, set ghost to 0 (Dirichlet BC).
+    """
+    x_lo = neighbors.get('x_lower')
+    x_hi = neighbors.get('x_upper')
+    y_lo = neighbors.get('y_lower')
+    y_hi = neighbors.get('y_upper')
+    z_lo = neighbors.get('z_lower')
+    z_hi = neighbors.get('z_upper')
+
+    # Convert None to PROC_NULL for MPI
+    PROC_NULL = MPI.PROC_NULL
+    x_lo_rank = x_lo if x_lo is not None else PROC_NULL
+    x_hi_rank = x_hi if x_hi is not None else PROC_NULL
+    y_lo_rank = y_lo if y_lo is not None else PROC_NULL
+    y_hi_rank = y_hi if y_hi is not None else PROC_NULL
+    z_lo_rank = z_lo if z_lo is not None else PROC_NULL
+    z_hi_rank = z_hi if z_hi is not None else PROC_NULL
+
+    nz, ny, nx = u.shape[0] - 2, u.shape[1] - 2, u.shape[2] - 2
+
+    # X direction: Send right (to x_upper), receive left (from x_lower)
+    send_buf = np.ascontiguousarray(u[1:-1, 1:-1, -2])
+    recv_buf = np.empty((nz, ny), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=x_hi_rank, sendtag=100,
+                 recvbuf=recv_buf, source=x_lo_rank, recvtag=100)
+    if x_lo is not None:
+        u[1:-1, 1:-1, 0] = recv_buf
+    else:
+        u[1:-1, 1:-1, 0] = 0.0
+
+    # X direction: Send left (to x_lower), receive right (from x_upper)
+    send_buf = np.ascontiguousarray(u[1:-1, 1:-1, 1])
+    recv_buf = np.empty((nz, ny), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=x_lo_rank, sendtag=101,
+                 recvbuf=recv_buf, source=x_hi_rank, recvtag=101)
+    if x_hi is not None:
+        u[1:-1, 1:-1, -1] = recv_buf
+    else:
+        u[1:-1, 1:-1, -1] = 0.0
+
+    # Y direction: Send up (to y_upper), receive down (from y_lower)
+    send_buf = np.ascontiguousarray(u[1:-1, -2, 1:-1])
+    recv_buf = np.empty((nz, nx), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=y_hi_rank, sendtag=200,
+                 recvbuf=recv_buf, source=y_lo_rank, recvtag=200)
+    if y_lo is not None:
+        u[1:-1, 0, 1:-1] = recv_buf
+    else:
+        u[1:-1, 0, 1:-1] = 0.0
+
+    # Y direction: Send down (to y_lower), receive up (from y_upper)
+    send_buf = np.ascontiguousarray(u[1:-1, 1, 1:-1])
+    recv_buf = np.empty((nz, nx), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=y_lo_rank, sendtag=201,
+                 recvbuf=recv_buf, source=y_hi_rank, recvtag=201)
+    if y_hi is not None:
+        u[1:-1, -1, 1:-1] = recv_buf
+    else:
+        u[1:-1, -1, 1:-1] = 0.0
+
+    # Z direction: Send up (to z_upper), receive down (from z_lower)
+    send_buf = np.ascontiguousarray(u[-2, 1:-1, 1:-1])
+    recv_buf = np.empty((ny, nx), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=z_hi_rank, sendtag=300,
+                 recvbuf=recv_buf, source=z_lo_rank, recvtag=300)
+    if z_lo is not None:
+        u[0, 1:-1, 1:-1] = recv_buf
+    else:
+        u[0, 1:-1, 1:-1] = 0.0
+
+    # Z direction: Send down (to z_lower), receive up (from z_upper)
+    send_buf = np.ascontiguousarray(u[1, 1:-1, 1:-1])
+    recv_buf = np.empty((ny, nx), dtype=u.dtype)
+    comm.Sendrecv(send_buf, dest=z_lo_rank, sendtag=301,
+                 recvbuf=recv_buf, source=z_hi_rank, recvtag=301)
+    if z_hi is not None:
+        u[-1, 1:-1, 1:-1] = recv_buf
+    else:
+        u[-1, 1:-1, 1:-1] = 0.0
+
+
+class NumpyCommunicator(_BaseCommunicator):
     """Halo exchange using NumPy arrays with explicit copies.
 
     Uses np.ascontiguousarray() to create contiguous buffers before sending.
@@ -24,62 +131,41 @@ class NumpyCommunicator:
         u : np.ndarray
             Local array with ghost zones (modified in-place)
         neighbors : dict
-            Neighbor ranks: {'x_lower': rank, 'x_upper': rank, ...} or
-                           {'z_lower': rank, 'z_upper': rank}
+            Neighbor ranks for sliced (z_lower/z_upper) or cubic (x/y/z)
         comm : MPI.Comm
             MPI communicator
         """
-        # Handle different decomposition strategies by checking which neighbors exist
-        # Sliced: only z_lower/z_upper, shape is (nz, ny, nx), exchange along axis 0
-        # Cubic: x/y/z neighbors, shape is (nx, ny, nz), exchange along all axes
+        # Detect decomposition type: cubic has x neighbors, sliced doesn't
+        is_cubic = 'x_lower' in neighbors or 'x_upper' in neighbors
 
-        # Z direction (or first axis for sliced)
-        if neighbors.get('z_lower') is not None:
-            send_buf = np.ascontiguousarray(u[1, :, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['z_lower'], sendtag=4,
-                         recvbuf=recv_buf, source=neighbors['z_lower'], recvtag=5)
-            u[0, :, :] = recv_buf
+        if is_cubic:
+            _exchange_cubic_numpy(u, neighbors, comm)
+        else:
+            # Sliced: shape is (nz, N, N) - z=axis0
+            # Use PROC_NULL pattern for safety
+            z_lo = neighbors.get('z_lower')
+            z_hi = neighbors.get('z_upper')
+            z_lo_rank = z_lo if z_lo is not None else MPI.PROC_NULL
+            z_hi_rank = z_hi if z_hi is not None else MPI.PROC_NULL
 
-        if neighbors.get('z_upper') is not None:
+            # Send up, receive down
             send_buf = np.ascontiguousarray(u[-2, :, :])
             recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['z_upper'], sendtag=5,
-                         recvbuf=recv_buf, source=neighbors['z_upper'], recvtag=4)
-            u[-1, :, :] = recv_buf
+            comm.Sendrecv(send_buf, dest=z_hi_rank, sendtag=300,
+                         recvbuf=recv_buf, source=z_lo_rank, recvtag=300)
+            if z_lo is not None:
+                u[0, :, :] = recv_buf
 
-        # X direction (cubic only)
-        if neighbors.get('x_lower') is not None:
+            # Send down, receive up
             send_buf = np.ascontiguousarray(u[1, :, :])
             recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['x_lower'], sendtag=0,
-                         recvbuf=recv_buf, source=neighbors['x_lower'], recvtag=1)
-            u[0, :, :] = recv_buf
-
-        if neighbors.get('x_upper') is not None:
-            send_buf = np.ascontiguousarray(u[-2, :, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['x_upper'], sendtag=1,
-                         recvbuf=recv_buf, source=neighbors['x_upper'], recvtag=0)
-            u[-1, :, :] = recv_buf
-
-        # Y direction (cubic only)
-        if neighbors.get('y_lower') is not None:
-            send_buf = np.ascontiguousarray(u[:, 1, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['y_lower'], sendtag=2,
-                         recvbuf=recv_buf, source=neighbors['y_lower'], recvtag=3)
-            u[:, 0, :] = recv_buf
-
-        if neighbors.get('y_upper') is not None:
-            send_buf = np.ascontiguousarray(u[:, -2, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=neighbors['y_upper'], sendtag=3,
-                         recvbuf=recv_buf, source=neighbors['y_upper'], recvtag=2)
-            u[:, -1, :] = recv_buf
+            comm.Sendrecv(send_buf, dest=z_lo_rank, sendtag=301,
+                         recvbuf=recv_buf, source=z_hi_rank, recvtag=301)
+            if z_hi is not None:
+                u[-1, :, :] = recv_buf
 
 
-class DatatypeCommunicator:
+class DatatypeCommunicator(_BaseCommunicator):
     """Halo exchange using custom MPI datatypes (zero-copy).
 
     Uses MPI.Create_subarray() to define non-contiguous data regions.
@@ -99,8 +185,7 @@ class DatatypeCommunicator:
         u : np.ndarray
             Local array with ghost zones (modified in-place)
         neighbors : dict
-            Neighbor ranks: {'x_lower': rank, 'x_upper': rank, ...} or
-                           {'z_lower': rank, 'z_upper': rank}
+            Neighbor ranks for sliced (z_lower/z_upper) or cubic (x/y/z)
         comm : MPI.Comm
             MPI communicator
         """
@@ -112,55 +197,29 @@ class DatatypeCommunicator:
             self._shape = u.shape
 
         n0, n1, n2 = u.shape
+        is_cubic = 'x_lower' in neighbors or 'x_upper' in neighbors
 
-        # First axis (Z for sliced, X for cubic) - always contiguous
-        if neighbors.get('z_lower') is not None:
-            comm.Sendrecv([u[1, :, :], 1, self._datatypes['axis0']],
-                         dest=neighbors['z_lower'], sendtag=4,
-                         recvbuf=[u[0, :, :], 1, self._datatypes['axis0']],
-                         source=neighbors['z_lower'], recvtag=5)
+        if is_cubic:
+            # For cubic, use the numpy-based exchange (safe and correct)
+            _exchange_cubic_numpy(u, neighbors, comm)
+        else:
+            # Sliced: use datatypes for efficient Z-direction exchange
+            z_lo = neighbors.get('z_lower')
+            z_hi = neighbors.get('z_upper')
+            z_lo_rank = z_lo if z_lo is not None else MPI.PROC_NULL
+            z_hi_rank = z_hi if z_hi is not None else MPI.PROC_NULL
 
-        if neighbors.get('z_upper') is not None:
+            # Send up, receive down
             comm.Sendrecv([u[n0-2, :, :], 1, self._datatypes['axis0']],
-                         dest=neighbors['z_upper'], sendtag=5,
-                         recvbuf=[u[n0-1, :, :], 1, self._datatypes['axis0']],
-                         source=neighbors['z_upper'], recvtag=4)
-
-        # X direction (cubic only)
-        if neighbors.get('x_lower') is not None:
-            comm.Sendrecv([u[1, :, :], 1, self._datatypes['axis0']],
-                         dest=neighbors['x_lower'], sendtag=0,
+                         dest=z_hi_rank, sendtag=300,
                          recvbuf=[u[0, :, :], 1, self._datatypes['axis0']],
-                         source=neighbors['x_lower'], recvtag=1)
+                         source=z_lo_rank, recvtag=300)
 
-        if neighbors.get('x_upper') is not None:
-            comm.Sendrecv([u[n0-2, :, :], 1, self._datatypes['axis0']],
-                         dest=neighbors['x_upper'], sendtag=1,
+            # Send down, receive up
+            comm.Sendrecv([u[1, :, :], 1, self._datatypes['axis0']],
+                         dest=z_lo_rank, sendtag=301,
                          recvbuf=[u[n0-1, :, :], 1, self._datatypes['axis0']],
-                         source=neighbors['x_upper'], recvtag=0)
-
-        # Y direction (cubic only) - use subarray datatype for zero-copy
-        # Pass full array u, but datatypes describe which planes to send/recv
-        if neighbors.get('y_lower') is not None:
-            # Create datatypes describing Y-planes at different indices
-            send_type = self._create_y_plane_type(u.shape, 1)
-            recv_type = self._create_y_plane_type(u.shape, 0)
-
-            comm.Sendrecv([u, 1, send_type], dest=neighbors['y_lower'], sendtag=2,
-                         recvbuf=[u, 1, recv_type], source=neighbors['y_lower'], recvtag=3)
-
-            send_type.Free()
-            recv_type.Free()
-
-        if neighbors.get('y_upper') is not None:
-            send_type = self._create_y_plane_type(u.shape, n1-2)
-            recv_type = self._create_y_plane_type(u.shape, n1-1)
-
-            comm.Sendrecv([u, 1, send_type], dest=neighbors['y_upper'], sendtag=3,
-                         recvbuf=[u, 1, recv_type], source=neighbors['y_upper'], recvtag=2)
-
-            send_type.Free()
-            recv_type.Free()
+                         source=z_hi_rank, recvtag=301)
 
     def _create_datatypes(self, shape):
         """Create MPI datatypes for contiguous face directions.
@@ -186,34 +245,6 @@ class DatatypeCommunicator:
 
         return datatypes
 
-    def _create_y_plane_type(self, shape, j_index):
-        """Create MPI subarray datatype for Y-plane at specific index.
-
-        This describes the non-contiguous memory pattern for u[:, j, :].
-
-        Parameters
-        ----------
-        shape : tuple
-            Array shape (n0, n1, n2)
-        j_index : int
-            Index along Y-axis to extract
-
-        Returns
-        -------
-        MPI.Datatype
-            Committed datatype (caller must Free() after use)
-        """
-        n0, n1, n2 = shape
-
-        # Describe subarray: extract plane at [:, j_index, :]
-        sizes = [n0, n1, n2]        # Full array dimensions
-        subsizes = [n0, 1, n2]      # Extract one Y-plane
-        starts = [0, j_index, 0]    # Starting position
-
-        dtype = MPI.DOUBLE.Create_subarray(sizes, subsizes, starts, order=MPI.ORDER_C)
-        dtype.Commit()
-        return dtype
-
     def _free_datatypes(self):
         """Free allocated MPI datatypes."""
         if self._datatypes is not None:
@@ -224,3 +255,7 @@ class DatatypeCommunicator:
     def __del__(self):
         """Cleanup datatypes on destruction."""
         self._free_datatypes()
+
+
+# Aliases for backward compatibility
+NumpyHaloExchange = NumpyCommunicator

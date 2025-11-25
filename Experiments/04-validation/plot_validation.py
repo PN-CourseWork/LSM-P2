@@ -21,8 +21,7 @@ from pathlib import Path
 # ============================================================================
 
 # Matplotlib setup
-sns.set_context("paper")
-sns.set_style("whitegrid")
+sns.set_style()
 
 # PyVista setup
 pv.set_plot_theme("paraview")
@@ -111,31 +110,6 @@ plt.tight_layout()
 output_file = fig_dir / "validation_convergence.pdf"
 plt.savefig(output_file, bbox_inches='tight')
 print(f"\nSaved: {output_file}")
-plt.close()
-
-# Print Summary Statistics
-print("\n" + "=" * 60)
-print("Validation Summary")
-print("=" * 60)
-
-# Group by rank count for cleaner output
-for size in sorted(df['size'].unique()):
-    print(f"\n{'='*60}")
-    print(f"Rank Count: {size}")
-    print(f"{'='*60}")
-
-    df_size = df[df['size'] == size]
-
-    for (strategy, comm_type), group in df_size.groupby(['strategy', 'communicator']):
-        method_name = f"{strategy.capitalize()} + {comm_type.capitalize()}"
-        group_sorted = group.sort_values('N')
-        print(f"\n{method_name}:")
-        for _, row in group_sorted.iterrows():
-            print(f"  N={row['N']:3d}: error = {row['error']:.4e}")
-
-print("\n" + "=" * 60)
-print("All methods show O(N^-2) convergence ✓")
-print("=" * 60)
 
 # ============================================================================
 # Part 2: 3D Solution Visualization
@@ -227,6 +201,3 @@ plotter.screenshot(output_file, transparent_background=True)
 print(f"Saved: {output_file}")
 plotter.close()
 
-print("\n" + "=" * 60)
-print("Validation plotting complete!")
-print("=" * 60)

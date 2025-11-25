@@ -17,7 +17,6 @@ Tests all combinations of:
 # Imports
 # -------
 
-import numpy as np
 import pandas as pd
 from pathlib import Path
 from mpi4py import MPI
@@ -48,11 +47,10 @@ data_dir.mkdir(parents=True, exist_ok=True)
 # Test Parameters
 # ---------------
 
-# Problem sizes for spatial convergence
-problem_sizes = [25, 50, 75, 100]
-omega = 0.75
-max_iter = 5000
-tol = 1e-8
+problem_sizes = [20, 40, 60]
+omega = 1.00
+max_iter = 10000
+tol = 1e-5
 
 if rank == 0:
     print("Spatial Convergence Validation")
@@ -65,10 +63,8 @@ if rank == 0:
 # Test All Configurations
 # -----------------------
 
-# Store results
 results = []
 
-# Test configurations: (strategy, communicator_type)
 configurations = [
     ('sliced', 'numpy'),
     ('sliced', 'datatype'),
@@ -98,15 +94,21 @@ for strategy, comm_type in configurations:
         # Create decomposition
         decomposition = DomainDecomposition(N=N, size=size, strategy=strategy)
 
-        # This would need actual JacobiPoisson integration
-        # For now, just create a placeholder result
-        # In full implementation, would call solver.solve() and get results
+        # Create and run solver
+        solver = JacobiPoisson(
+            N=N,
+            omega=omega,
+            max_iter=max_iter,
+            tolerance=tol,
+            decomposition=decomposition,
+            communicator=communicator,
+        )
+        solver.solve()
+        solver.summary()  # Computes L2 error against exact solution
 
         if rank == 0:
-            # Placeholder - in real implementation would get from solver
-            # For O(N^-2) convergence: error ~= C * h^2 = C * (2/(N-1))^2
-            C = 0.1  # Constant prefactor
-            error = C * h**2
+            error = solver.results.final_error
+            iterations = solver.results.iterations
 
             results.append({
                 'strategy': strategy,
@@ -114,6 +116,7 @@ for strategy, comm_type in configurations:
                 'N': N,
                 'h': h,
                 'error': error,
+                'iterations': iterations,
                 'size': size
             })
 

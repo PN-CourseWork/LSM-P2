@@ -163,8 +163,6 @@ class JacobiPoisson:
         # Run Jacobi iteration
         self._method_solve()
 
-        # Post-processing
-        self._post_solve(time_start)
 
     def _method_solve(self):
         """Solve using Jacobi iteration.
@@ -238,6 +236,9 @@ class JacobiPoisson:
             self.timeseries.compute_times
         )
 
+        # Apply Dirichlet BCs at physical boundaries (for cubic decomposition)
+        self.decomposition.apply_boundary_conditions(u_local, self.rank)
+
         # Compute global residual
         global_residual = _time_operation(
             lambda: np.sqrt(self.comm.allreduce(local_residual**2, op=MPI.SUM)),
@@ -278,23 +279,6 @@ class JacobiPoisson:
             # Non-root ranks just participate in gather
             local_interior = self.decomposition.extract_interior(u_local)
             self.comm.gather(local_interior, root=0)
-
-    def _post_solve(self, start_time):
-        """Record final timing after solve.
-
-        Parameters
-        ----------
-        start_time : float or None
-            Start time from MPI.Wtime() on rank 0, None on other ranks
-
-        Notes
-        -----
-        Timing aggregation is now handled by PostProcessor from HDF5 files.
-        This method is kept minimal - convergence info is already in self.results.
-        """
-        # Nothing to do here - results are already stored in self.results
-        # Timing data is in self.timeseries (per-rank)
-        pass
 
     # ========================================================================
     # Helper methods

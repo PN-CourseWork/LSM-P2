@@ -41,41 +41,32 @@ def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float,
     return np.sqrt(diff_sum) / N**3
 
 
-class NumPyKernel:
-    """NumPy-based Jacobi kernel."""
+class _BaseKernel:
+    """Base class for Jacobi kernels with common tracking logic."""
 
     def __init__(self, **kwargs):
-        """Initialize NumPy kernel.
-
-        Parameters
-        ----------
-        **kwargs
-            Keyword arguments passed to KernelParams
-            (N, omega, tolerance, max_iter, num_threads)
-        """
         self.parameters = KernelParams(**kwargs)
         self.metrics = KernelMetrics()
         self.timeseries = KernelSeries()
 
+    def _track(self, residual: float, compute_time: float):
+        """Update metrics and timeseries."""
+        self.metrics.iterations += 1
+        self.metrics.final_residual = residual
+        self.metrics.total_compute_time += compute_time
+        self.timeseries.residuals.append(residual)
+        self.timeseries.compute_times.append(compute_time)
+
+    def warmup(self):
+        """Warmup kernel (no-op by default)."""
+        pass
+
+
+class NumPyKernel(_BaseKernel):
+    """NumPy-based Jacobi kernel."""
+
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
-        """Perform one Jacobi iteration step.
-
-        Automatically tracks iteration count, residual, and compute time.
-
-        Parameters
-        ----------
-        uold : np.ndarray
-            Previous solution (including ghost zones for MPI)
-        u : np.ndarray
-            Current solution (will be updated in-place)
-        f : np.ndarray
-            Source term
-
-        Returns
-        -------
-        float
-            Iterative residual ||u - uold||_2 / N^3
-        """
+        """Perform one Jacobi iteration step."""
         start = time.perf_counter()
 
         c = 1.0 / 6.0
@@ -96,87 +87,32 @@ class NumPyKernel:
         )
 
         residual = np.sqrt(np.sum((u - uold) ** 2)) / N**3
-        compute_time = time.perf_counter() - start
-
-        # Track metrics
-        self.metrics.iterations += 1
-        self.metrics.final_residual = residual
-        self.metrics.total_compute_time += compute_time
-
-        # Track timeseries
-        self.timeseries.residuals.append(residual)
-        self.timeseries.compute_times.append(compute_time)
-
+        self._track(residual, time.perf_counter() - start)
         return residual
 
-    def warmup(self):
-        """Warmup kernel (no-op for NumPy)."""
-        pass
 
-
-class NumbaKernel:
+class NumbaKernel(_BaseKernel):
     """Numba JIT-compiled Jacobi kernel."""
 
     def __init__(self, **kwargs):
-        """Initialize Numba kernel.
-
-        Parameters
-        ----------
-        **kwargs
-            Keyword arguments passed to KernelParams
-            (N, omega, tolerance, max_iter, numba_threads)
-        """
-        self.parameters = KernelParams(**kwargs)
-        self.metrics = KernelMetrics()
-        self.timeseries = KernelSeries()
-
-        # Set thread count if specified
+        super().__init__(**kwargs)
         if self.parameters.numba_threads is not None:
             numba.set_num_threads(self.parameters.numba_threads)
 
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
-        """Perform one Jacobi iteration step.
-
-        Automatically tracks iteration count, residual, and compute time.
-
-        Parameters
-        ----------
-        uold : np.ndarray
-            Previous solution (including ghost zones for MPI)
-        u : np.ndarray
-            Current solution (will be updated in-place)
-        f : np.ndarray
-            Source term
-
-        Returns
-        -------
-        float
-            Iterative residual ||u - uold||_2 / N^3
-        """
+        """Perform one Jacobi iteration step."""
         start = time.perf_counter()
         residual = _jacobi_step_numba(uold, u, f, self.parameters.h, self.parameters.omega)
-        compute_time = time.perf_counter() - start
-
-        # Track metrics
-        self.metrics.iterations += 1
-        self.metrics.final_residual = residual
-        self.metrics.total_compute_time += compute_time
-
-        # Track timeseries
-        self.timeseries.residuals.append(residual)
-        self.timeseries.compute_times.append(compute_time)
-
+        self._track(residual, time.perf_counter() - start)
         return residual
 
     def warmup(self):
         """Trigger JIT compilation with a small problem."""
-        warmup_size = 10
-        h_warmup = 2.0 / (warmup_size - 1)
-        u1 = np.zeros((warmup_size, warmup_size, warmup_size), dtype=np.float64)
-        u2 = np.zeros((warmup_size, warmup_size, warmup_size), dtype=np.float64)
-        f = np.random.randn(warmup_size, warmup_size, warmup_size)
-
-        # Run 5 iterations to trigger compilation
+        size = 10
+        h = 2.0 / (size - 1)
+        u1 = np.zeros((size, size, size), dtype=np.float64)
+        u2 = np.zeros_like(u1)
+        f = np.random.randn(size, size, size)
         for _ in range(5):
-            _jacobi_step_numba(u1, u2, f, h_warmup, self.parameters.omega)
+            _jacobi_step_numba(u1, u2, f, h, self.parameters.omega)
             u1, u2 = u2, u1
