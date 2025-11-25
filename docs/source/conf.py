@@ -12,9 +12,9 @@ sys.path.insert(0, repo_root)
 
 # -- Project information -----------------------------------------------------
 
-project = "University Project Template"
-copyright = "2025, Your Name"
-author = "Your Name"
+project = "MPI 3D Poisson Solver"
+copyright = "2025, Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel, DTU Compute"
+author = "Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel"
 
 # -- General configuration ---------------------------------------------------
 
@@ -27,6 +27,7 @@ extensions = [
     "numpydoc",
     "sphinx_copybutton",
     "sphinx_gallery.gen_gallery",
+    "sphinxcontrib.mermaid",
 ]
 
 root_doc = "index"
@@ -62,13 +63,14 @@ numpydoc_use_plots = False  # Don't auto-generate plots from Examples
 # -- Sphinx Gallery configuration --------------------------------------------
 
 sphinx_gallery_conf = {
-    "examples_dirs": "../../Examples",  # Path to example scripts
+    "examples_dirs": "../../Experiments",  # Path to example scripts
     "gallery_dirs": "example_gallery",  # Output directory for gallery
     "filename_pattern": "/plot_",  # Pattern to match which scripts to execute
+    "ignore_pattern": r"/_",  # Ignore files starting with underscore
     "download_all_examples": False,  # No download buttons
     "remove_config_comments": True,  # Clean up notebook outputs
     "abort_on_example_error": False,  # Continue if examples fail
-    "plot_gallery": True,  # Enable plot gallery generation
+    "plot_gallery": False,  # Disable plot execution for now - TODO: fix plot scripts
     "capture_repr": ("_repr_html_", "__repr__"),  # Capture output representations
     "matplotlib_animations": True,  # Support matplotlib animations
     # Remove Jupyter cell markers (# %%) from rendered output
@@ -77,11 +79,11 @@ sphinx_gallery_conf = {
     "notebook_images": False,  # Don't embed images in notebooks
     # Cross-referencing: Create "Examples using X" in API docs
     "backreferences_dir": "gen_modules/backreferences",
-    "doc_module": ("numutils",),  # Generate backreferences for our package
+    "doc_module": ("Poisson",),  # Generate backreferences for our package
     "inspect_global_variables": True,  # Detect classes/functions used in examples
-    # Make code clickable: Link to API docs when code mentions numutils functions
+    # Make code clickable: Link to API docs when code mentions Poisson functions
     "reference_url": {
-        "numutils": None,  # None = use local docs (not external URL)
+        "Poisson": None,  # None = use local docs (not external URL)
     },
 }
 
@@ -92,23 +94,22 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/stable/", None),
 }
 
 # -- HTML output options -----------------------------------------------------
 
 html_theme = "pydata_sphinx_theme"
-html_title = "University Project Template"
+html_title = "MPI Poisson Solver"
 html_static_path = ["_static"]
 html_show_sourcelink = False  # Hide "Show Source" link
 html_css_files = ["custom.css"]  # Custom CSS for hiding download buttons
 
 html_theme_options = {
-    "github_url": "https://github.com/yourusername/yourproject",
-    "show_nav_level": 1,  # Only show top-level items expanded in sidebar
-    "navigation_depth": 2,  # Allow 2 levels but don't expand by default
-    "show_toc_level": 3,  # Show 3 levels in the page TOC (includes subsections)
-    "navbar_align": "left",
-    "header_links_before_dropdown": 5,
-    "collapse_navigation": True,  # Start with collapsed navigation
-    "secondary_sidebar_items": ["page-toc"],  # Only show page TOC, not section nav
+    "github_url": "https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2",
+    "show_nav_level": 1,  # Show only top level in navigation sidebar (collapsed by default)
+    "show_toc_level": 1,  # Show only top level in page TOC (right sidebar, collapsed by default)
+    "navigation_depth": 3,  # Allow up to 3 levels of navigation depth
+    "collapse_navigation": False,  # Allow expanding/collapsing navigation
+    "back_to_top_button": True,  # Enable back-to-top button on long pages
 }

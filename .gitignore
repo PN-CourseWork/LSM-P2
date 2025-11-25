@@ -1,14 +1,13 @@
 # Generated figures
 figures/
 # Report 
+.playwright-mcp
 
 docs/reports/TexReport/
 
 
 # Generated data (keep README.md)
 data/*
-!data/README.md
-!data/.gitkeep
 
 # Uv stuff 
 uv.lock
@@ -77,3 +76,4 @@ Thumbs.db
 
 .claude/ 
 .ruff_cache/
+
