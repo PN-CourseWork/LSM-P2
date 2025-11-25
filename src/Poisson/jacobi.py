@@ -10,6 +10,7 @@ from dataclasses import asdict
 from mpi4py import MPI
 from numba import get_num_threads
 import mlflow
+import h5py
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import (
@@ -19,7 +20,6 @@ from .datastructures import (
 )
 from .communicators import NumpyCommunicator
 from .decomposition import NoDecomposition
-from .problems import sinusoidal_exact_solution
 
 
 # ============================================================================
@@ -317,37 +317,6 @@ class JacobiPoisson:
         """
         self.kernel.warmup(warmup_size=warmup_size)
 
-    def summary(self, exact_solution=None):
-        """Compute summary statistics and error against exact solution.
-
-        Parameters
-        ----------
-        exact_solution : callable or np.ndarray, optional
-            Either a function that takes N and returns the exact solution,
-            or the exact solution array itself. If None, uses the default
-            sinusoidal exact solution.
-        """
-        if self.rank != 0:
-            return
-
-        N = self.config.N
-        h = 2.0 / (N - 1)
-
-        # Get the computed solution (gathered in _gather_solution)
-        u_computed = self.u_global
-
-        # Get exact solution
-        if exact_solution is None:
-            u_exact = sinusoidal_exact_solution(N)
-        elif callable(exact_solution):
-            u_exact = exact_solution(N)
-        else:
-            u_exact = exact_solution
-
-        # Compute L2 error (interior points only)
-        error_diff = u_computed[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
-        self.results.final_error = float(np.sqrt(h**3 * np.sum(error_diff**2)))
-
     def save_hdf5(self, path):
         """Save complete simulation state to HDF5.
 
@@ -367,7 +336,6 @@ class JacobiPoisson:
         - /results: Convergence information
         - /timings/rank_0/: Rank 0 timing data
         """
-        import h5py
 
         N = self.config.N
 
