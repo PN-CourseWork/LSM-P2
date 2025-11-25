@@ -6,8 +6,10 @@ is enabled by providing decomposition and communicator strategies.
 """
 
 import numpy as np
+from dataclasses import asdict
 from mpi4py import MPI
 from numba import get_num_threads
+import mlflow
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import (
@@ -366,7 +368,6 @@ class JacobiPoisson:
         - /timings/rank_0/: Rank 0 timing data
         """
         import h5py
-        from dataclasses import asdict
 
         N = self.config.N
 
@@ -400,3 +401,71 @@ class JacobiPoisson:
             rank_grp.create_dataset('mpi_comm_times', data=self.timeseries.mpi_comm_times)
             rank_grp.create_dataset('halo_exchange_times', data=self.timeseries.halo_exchange_times)
             rank_grp.create_dataset('residual_history', data=self.timeseries.residual_history)
+
+    # ========================================================================
+    # MLflow logging
+    # ========================================================================
+
+    def mlflow_start(self, experiment_name):
+        """Start MLflow logging for this solver run.
+
+        Parameters
+        ----------
+        experiment_name : str
+            Name of the MLflow experiment
+
+        Notes
+        -----
+        Only rank 0 performs MLflow operations. Logs all configuration
+        parameters at the start of the run.
+
+        Requires MLflow 2.15.0 or above for storing artifacts in a volume.
+        """
+        if self.rank != 0:
+            return
+
+        mlflow.login()
+
+        # Databricks requires absolute workspace paths for experiment names
+        if not experiment_name.startswith("/"):
+            # Use shared workspace location (no user directory needed)
+            experiment_name = f"/Shared/{experiment_name}"
+
+        if mlflow.get_experiment_by_name(experiment_name) is None:
+            mlflow.create_experiment(name=experiment_name)
+
+        mlflow.set_experiment(experiment_name)
+
+        mlflow.start_run()
+        mlflow.log_params(asdict(self.config))
+
+    def mlflow_end(self):
+        """End MLflow logging and record final metrics.
+
+        Notes
+        -----
+        Only rank 0 performs MLflow operations. Logs:
+        - Global metrics (iterations, converged, final_error)
+        - Residual history as step-by-step metrics
+        - Per-rank timing data as a table
+        """
+        if self.rank != 0:
+            return
+
+
+        # Log global results
+        #results_dict = asdict(self.results)
+        #mlflow.log_metrics({k: v for k, v in results_dict.items() if v is not None})
+
+        # Log residual history as step-by-step metrics
+            #for step, residual in enumerate(self.timeseries.residual_history):
+        #mlflow.log_metric("residual", residual, step=step)
+
+        # Log timing summary
+        mlflow.log_metrics({
+            "total_compute_time": sum(self.timeseries.compute_times),
+            "total_halo_time": sum(self.timeseries.halo_exchange_times),
+            "total_mpi_comm_time": sum(self.timeseries.mpi_comm_times),
+        })
+
+        mlflow.end_run()

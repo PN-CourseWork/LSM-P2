@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/381725637536203531/582f9bd12d4f4f178081329f91901f88/artifacts
+end_time: 1764064622103
+entry_point_name: ''
+experiment_id: '381725637536203531'
+lifecycle_stage: active
+run_id: 582f9bd12d4f4f178081329f91901f88
+run_name: chill-colt-122
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764064621683
+status: 3
+tags: []
+user_id: philipnickel

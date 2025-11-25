@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/381725637536203531/64e142b106ef42a89ee2dc1c8fdfb4be/artifacts
+end_time: 1764064615729
+entry_point_name: ''
+experiment_id: '381725637536203531'
+lifecycle_stage: active
+run_id: 64e142b106ef42a89ee2dc1c8fdfb4be
+run_name: skillful-cod-236
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764064615264
+status: 3
+tags: []
+user_id: philipnickel

@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/381725637536203531/9d5fcfdffcee425db80a2a8759bce572/artifacts
+end_time: 1764064868519
+entry_point_name: ''
+experiment_id: '381725637536203531'
+lifecycle_stage: active
+run_id: 9d5fcfdffcee425db80a2a8759bce572
+run_name: fortunate-whale-360
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764064868084
+status: 3
+tags: []
+user_id: philipnickel
