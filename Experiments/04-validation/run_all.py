@@ -34,7 +34,7 @@ def run_validation(n_ranks=4):
 def run_plotting():
     """Run plotting script to generate visualizations."""
     print(f"\n{'='*60}")
-    print(f"Generating convergence plots")
+    print(f"Generating validation plots and visualizations")
     print(f"{'='*60}\n")
 
     cmd = ["uv", "run", "python", "plot_validation.py"]
