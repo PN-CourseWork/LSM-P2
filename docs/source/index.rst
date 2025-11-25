@@ -1,41 +1,99 @@
-University Project Template
-===========================
+MPI Poisson Solver
+==================
 
-A template for numerical computing projects with documentation and examples.
+A modular framework for studying parallel performance of 3D Poisson equation solvers using MPI domain decomposition.
 
-**Authors:** Your Name
+**Authors:**
 
-This documentation provides both example scripts and API reference for the numerical utilities package.
+* Alexander Elbæk Nielsen (s214724)
+* Junriu Li (s242643)
+* Philip Korsager Nickel (s214960)
 
-For the full codebase, please visit the `GitHub repository <https://github.com/yourusername/yourproject>`.
+**Institution:** Technical University of Denmark, DTU Compute
 
-Contents
+This project implements and benchmarks different parallelization strategies for solving the 3D Poisson equation with Dirichlet boundary conditions using iterative Jacobi methods.
+
+Overview
 --------
 
-:doc:`example_gallery/index`
-   Gallery of example scripts demonstrating the use of the package.
-:doc:`api_reference`
-   Complete API reference for the ``numutils`` package.
+This project unifies multiple Poisson solver implementations under a common base class architecture with a **modular composition pattern**.
+The modular design allows us to independently study:
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :caption: Examples
+* **Kernels** (Numba vs Numpy)
+* **Decomposition strategies** (Cubic vs Sliced)
+* **Communication methods** (Custom MPI datatypes vs Numpy arrays)
 
-   example_gallery/index
+Investigation Goals
+-------------------
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :caption: Reference
+Benchmark Numba vs Numpy Kernels
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   api_reference
+* Different number of threads
+* Performance comparison for same problem size
+* Scalability with problem size N
+
+Different Types of Domain Decompositions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Cubic** (3D Cartesian decomposition)
+   3D domain decomposition that distributes the grid across all three spatial dimensions.
+
+**Sliced** (1D decomposition along Z-axis)
+   1D domain decomposition that splits only along the Z-axis, with each rank owning horizontal slices.
+
+**Key Questions:**
+
+* How does communication and computation scale with problem size?
+* Plot communication and computation timings as a function of N (fixed number of ranks)
+* Which decomposition is more efficient for different problem sizes?
+
+Different Types of Communication Methods
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Numpy-based** 
+   Uses explicit numpy array copies to create contiguous buffers before MPI communication.
+
+**Custom MPI datatypes**
+   Uses MPI's native datatype system for zero-copy communication.
+
+**Key Questions:**
+
+* Can we reduce communication overhead with custom MPI datatypes?
+
+Scaling Analysis
+^^^^^^^^^^^^^^^^
+
+**Strong Scaling**
+   Fixed problem size with increasing number of ranks. Measures parallel speedup.
+
+**Weak Scaling**
+   Problem size grows proportionally with ranks (constant work per rank). Measures parallel efficiency.
+
+**Key Questions:**
+
+* Can we relate decomposition/communication results to scaling behavior?
+* Where are the bottlenecks?
 
 Installation
 ------------
 
 The package requires Python 3.12+ and uses ``uv`` for dependency management::
 
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    uv sync
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   uv sync
+   uv run setup_mlflow.py
 
+For the full codebase, please visit the `GitHub repository <https://github.com/PhilipNickel-DTU-CourseWork/LSM-P2>`_.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Experiments
+
+   example_gallery/index
+
+.. toctree::
+   :maxdepth: 1
+   :caption: API Reference
+
+   api_reference

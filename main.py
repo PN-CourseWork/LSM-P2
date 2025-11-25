@@ -1,78 +1,135 @@
 #!/usr/bin/env python3
-"""Main script to run all examples."""
+"""Main script for project management."""
 
 import argparse
 import subprocess
 import sys
+import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def discover_scripts():
-    """Find all Python scripts in Examples/ directory."""
+# Repository root (main.py is at repo root)
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+def discover_plot_scripts():
+    """Find all plotting scripts in Experiments/ directory."""
+    experiments_dir = REPO_ROOT / "Experiments"
+
+    if not experiments_dir.exists():
+        return []
+
     scripts = [
         p
-        for p in Path("Examples").rglob("*.py")
-        if p.is_file() and p.name != "__init__.py"
+        for p in experiments_dir.rglob("*.py")
+        if p.is_file() and "plot" in p.name and p.name != "__init__.py"
     ]
 
-    compute_scripts = sorted([s for s in scripts if "compute" in s.name])
-    plot_scripts = sorted([s for s in scripts if "plot" in s.name])
-
-    return compute_scripts, plot_scripts
+    return sorted(scripts)
 
 
-def run_scripts(scripts):
-    """Run scripts sequentially and report results."""
+def _run_single_plot_script(script):
+    """Run a single plotting script and return its result.
+
+    Parameters
+    ----------
+    script : Path
+        Path to the script to run
+
+    Returns
+    -------
+    tuple
+        (display_path, success, error_message)
+    """
+    display_path = script.relative_to(REPO_ROOT)
+
+    try:
+        result = subprocess.run(
+            ["uv", "run", "python", str(script)],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=str(REPO_ROOT),
+        )
+
+        if result.returncode == 0:
+            return (display_path, True, None)
+        else:
+            error_msg = result.stderr[:200] if result.stderr else ""
+            return (display_path, False, f"exit {result.returncode}: {error_msg}")
+
+    except subprocess.TimeoutExpired:
+        return (display_path, False, "timeout")
+    except Exception as e:
+        return (display_path, False, str(e))
+
+
+def run_plot_scripts():
+    """Run plotting scripts in parallel and report results."""
+    scripts = discover_plot_scripts()
+
     if not scripts:
-        print("  No scripts to run")
+        print("  No plot scripts found")
         return
 
-    print(f"\nRunning {len(scripts)} scripts...\n")
+    print(f"\nRunning {len(scripts)} plot scripts in parallel...\n")
 
     success_count = 0
     fail_count = 0
 
-    for script in scripts:
-        try:
-            result = subprocess.run(
-                ["uv", "run", "python", str(script)],
-                capture_output=True,
-                text=True,
-                timeout=180,
-            )
+    # Run scripts in parallel using thread pool
+    with ThreadPoolExecutor() as executor:
+        # Submit all scripts
+        future_to_script = {
+            executor.submit(_run_single_plot_script, script): script
+            for script in scripts
+        }
 
-            if result.returncode == 0:
-                print(f"  ✓ {script.relative_to('Examples')}")
+        # Process results as they complete
+        for future in as_completed(future_to_script):
+            display_path, success, error_msg = future.result()
+
+            if success:
+                print(f"  ✓ {display_path}")
                 success_count += 1
             else:
-                print(
-                    f"  ✗ {script.relative_to('Examples')} (exit {result.returncode})"
-                )
-                if result.stderr:
-                    print(f"    Error: {result.stderr[:200]}")
+                print(f"  ✗ {display_path} ({error_msg})")
                 fail_count += 1
-
-        except subprocess.TimeoutExpired:
-            print(f"  ✗ {script.relative_to('Examples')} (timeout)")
-            fail_count += 1
-        except Exception as e:
-            print(f"  ✗ {script.relative_to('Examples')} ({e})")
-            fail_count += 1
 
     print(f"\n  Summary: {success_count} succeeded, {fail_count} failed\n")
 
 
+def copy_plots():
+    """Copy figures/ directory to docs/reports/TexReport/."""
+    source_dir = REPO_ROOT / "figures"
+    dest_dir = REPO_ROOT / "docs" / "reports" / "TexReport" / "figures"
+
+    print("\nCopying figures/ to docs/reports/TexReport/...")
+
+    if not source_dir.exists():
+        print("  No figures/ directory found")
+        return
+
+    try:
+        # Remove existing destination if it exists, then copy entire directory
+        if dest_dir.exists():
+            shutil.rmtree(dest_dir)
+        shutil.copytree(source_dir, dest_dir)
+        print(f"  ✓ Copied figures/ to docs/reports/TexReport/figures/")
+    except Exception as e:
+        print(f"  ✗ Failed to copy: {e}")
+
+    print()
+
+
 def build_docs():
     """Build Sphinx documentation."""
-    docs_dir = Path("docs")
+    docs_dir = REPO_ROOT / "docs"
     source_dir = docs_dir / "source"
     build_dir = docs_dir / "build"
 
     print("\nBuilding Sphinx documentation...")
-
-    if not source_dir.exists():
-        print(f"  Error: Documentation source directory not found: {source_dir}")
-        return False
 
     try:
         result = subprocess.run(
@@ -88,6 +145,7 @@ def build_docs():
             capture_output=True,
             text=True,
             timeout=300,
+            cwd=str(REPO_ROOT),
         )
 
         if result.returncode == 0:
@@ -111,199 +169,97 @@ def build_docs():
         return False
 
 
-def clean_docs():
-    """Clean built Sphinx documentation."""
-    import shutil
-
-    build_dir = Path("docs/build")
-
-    print("\nCleaning Sphinx documentation...")
-
-    if not build_dir.exists():
-        print(f"  No build directory found at {build_dir}")
-        return
-
-    try:
-        shutil.rmtree(build_dir)
-        print(f"  ✓ Cleaned {build_dir}\n")
-    except Exception as e:
-        print(f"  ✗ Failed to clean documentation: {e}\n")
-
-
 def clean_all():
     """Clean all generated files and caches."""
-    import shutil
-
     print("\nCleaning all generated files and caches...")
 
-    cleaned = []
-    failed = []
+    def remove_item(path):
+        """Remove file or directory, return (success, error)."""
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
-    # List of paths to clean
-    clean_targets = [
-        "docs/build",
-        "docs/source/example_gallery",
-        "docs/source/generated",
-        "build",
-        "dist",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".mypy_cache",
+    cleaned, failed = 0, 0
+
+    # Directories to clean
+    dirs = [
+        "docs/build", "docs/source/example_gallery", "docs/source/generated",
+        "docs/source/gen_modules", "plots", "build", "dist",
+        ".pytest_cache", ".ruff_cache", ".mypy_cache",
     ]
+    for d in dirs:
+        path = REPO_ROOT / d
+        if path.exists():
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    # Clean directories
-    for target in clean_targets:
-        target_path = Path(target)
-        if target_path.exists():
-            try:
-                shutil.rmtree(target_path)
-                cleaned.append(str(target_path))
-            except Exception as e:
-                failed.append(f"{target_path}: {e}")
+    # Specific files to clean
+    files = ["docs/source/sg_execution_times.rst"]
+    for f in files:
+        path = REPO_ROOT / f
+        if path.exists():
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    # Clean __pycache__ directories
-    for pycache in Path(".").rglob("__pycache__"):
-        try:
-            shutil.rmtree(pycache)
-            cleaned.append(str(pycache))
-        except Exception as e:
-            failed.append(f"{pycache}: {e}")
+    # Recursive patterns to clean
+    patterns = ["__pycache__", "*.pyc", ".DS_Store"]
+    for pattern in patterns:
+        for path in REPO_ROOT.rglob(pattern):
+            success, _ = remove_item(path)
+            cleaned += success
+            failed += not success
 
-    # Clean .pyc files
-    for pyc in Path(".").rglob("*.pyc"):
-        try:
-            pyc.unlink()
-            cleaned.append(str(pyc))
-        except Exception as e:
-            failed.append(f"{pyc}: {e}")
-
-    # Clean data directory (but keep README.md)
-    data_dir = Path("data")
+    # Clean data/ directory contents (preserve README.md and .gitkeep)
+    data_dir = REPO_ROOT / "data"
     if data_dir.exists():
         for item in data_dir.iterdir():
-            if item.name != "README.md" and item.name != ".gitkeep":
-                try:
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-                    cleaned.append(str(item))
-                except Exception as e:
-                    failed.append(f"{item}: {e}")
+            if item.name not in {"README.md", ".gitkeep"}:
+                success, _ = remove_item(item)
+                cleaned += success
+                failed += not success
+
+    # Clean Experiments/*/output directories
+    for output_dir in (REPO_ROOT / "Experiments").glob("*/output"):
+        success, _ = remove_item(output_dir)
+        cleaned += success
+        failed += not success
 
     # Print results
     if cleaned:
-        print(f"  ✓ Cleaned {len(cleaned)} items")
+        print(f"  ✓ Cleaned {cleaned} items")
     if failed:
-        print(f"  ✗ Failed to clean {len(failed)} items:")
-        for fail in failed[:5]:  # Show first 5 failures
-            print(f"    - {fail}")
+        print(f"  ✗ Failed to clean {failed} items")
     if not cleaned and not failed:
         print("  Nothing to clean")
     print()
 
 
-def ruff_check():
-    """Run ruff linter."""
-    print("\nRunning ruff check...")
-
-    try:
-        result = subprocess.run(
-            ["uv", "run", "ruff", "check", "."],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-
-        if result.returncode == 0:
-            print("  ✓ No issues found\n")
-            return True
-        else:
-            print(f"  ✗ Found issues (exit code {result.returncode})\n")
-            return False
-
-    except FileNotFoundError:
-        print("  ✗ ruff not found. Install with: uv sync\n")
-        return False
-    except subprocess.TimeoutExpired:
-        print("  ✗ ruff check timed out\n")
-        return False
-    except Exception as e:
-        print(f"  ✗ ruff check failed: {e}\n")
-        return False
-
-
-def ruff_format():
-    """Run ruff formatter."""
-    print("\nRunning ruff format...")
-
-    try:
-        result = subprocess.run(
-            ["uv", "run", "ruff", "format", "."],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-
-        if result.returncode == 0:
-            print("  ✓ Code formatted successfully\n")
-            return True
-        else:
-            print(f"  ✗ Formatting failed (exit code {result.returncode})\n")
-            return False
-
-    except FileNotFoundError:
-        print("  ✗ ruff not found. Install with: uv sync\n")
-        return False
-    except subprocess.TimeoutExpired:
-        print("  ✗ ruff format timed out\n")
-        return False
-    except Exception as e:
-        print(f"  ✗ ruff format failed: {e}\n")
-        return False
-
-
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Run example scripts and manage documentation",
+        description="Project management for MPI Poisson Solver",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py --compute                     Run data generation scripts
-  python main.py --plot                        Run plotting scripts
-  python main.py --build-docs                  Build Sphinx HTML documentation
-  python main.py --clean-docs                  Clean built documentation
-  python main.py --clean-all                   Clean all generated files and caches
-  python main.py --lint                        Check code with ruff
-  python main.py --format                      Format code with ruff
-  python main.py --compute --plot              Run all example scripts
+  python main.py --docs                        Build Sphinx documentation
+  python main.py --plot                        Run all plotting scripts
+  python main.py --copy-plots                  Copy plots to plots/ directory
+  python main.py --clean                       Clean all generated files
+  python main.py --plot --copy-plots           Generate and copy plots
         """,
     )
 
-    parser.add_argument(
-        "--compute", action="store_true", help="Run data generation (compute) scripts"
-    )
-    parser.add_argument("--plot", action="store_true", help="Run plotting scripts")
-    parser.add_argument(
-        "--build-docs", action="store_true", help="Build Sphinx HTML documentation"
-    )
-    parser.add_argument(
-        "--clean-docs", action="store_true", help="Clean built Sphinx documentation"
-    )
-    parser.add_argument(
-        "--clean-all", action="store_true", help="Clean all generated files and caches"
-    )
-    parser.add_argument("--lint", action="store_true", help="Run ruff linter")
-    parser.add_argument("--format", action="store_true", help="Run ruff formatter")
+    parser.add_argument("--docs", action="store_true", help="Build Sphinx HTML documentation")
+    parser.add_argument("--plot", action="store_true", help="Run all plotting scripts")
+    parser.add_argument("--copy-plots", action="store_true", help="Copy plots to plots/ directory")
+    parser.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
 
     # Show help if no arguments provided
     if len(sys.argv) == 1:
@@ -313,35 +269,18 @@ Examples:
 
     args = parser.parse_args()
 
-    # Handle cleaning commands
-    if args.clean_all:
+    # Execute commands in logical order
+    if args.clean:
         clean_all()
 
-    if args.clean_docs:
-        clean_docs()
+    if args.plot:
+        run_plot_scripts()
 
-    # Handle code quality commands
-    if args.lint:
-        ruff_check()
+    if args.copy_plots:
+        copy_plots()
 
-    if args.format:
-        ruff_format()
-
-    # Handle documentation commands
-    if args.build_docs:
+    if args.docs:
         build_docs()
-
-    # Handle example scripts
-    if args.compute or args.plot:
-        compute_scripts, plot_scripts = discover_scripts()
-        print(
-            f"\nFound {len(compute_scripts)} compute scripts and {len(plot_scripts)} plot scripts"
-        )
-
-        if args.compute:
-            run_scripts(compute_scripts)
-        if args.plot:
-            run_scripts(plot_scripts)
 
 
 if __name__ == "__main__":
