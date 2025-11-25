@@ -52,7 +52,7 @@ if __name__ == '__main__':
     print("=" * 60)
 
     # Run validation with different rank counts
-    rank_counts = [8]
+    rank_counts = [4, 8]
     success_count = 0
 
     for n_ranks in rank_counts:

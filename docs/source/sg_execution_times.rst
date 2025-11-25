@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 10 files **from all galleries**:
+**00:00.000** total execution time for 9 files **from all galleries**:
 
 .. container::
 
@@ -45,9 +45,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_example_gallery_03-communication_plot_communication.py` (``../../Experiments/03-communication/plot_communication.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_03-communication_plot_scaling_analysis.py` (``../../Experiments/03-communication/plot_scaling_analysis.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_example_gallery_03-communication_run_all.py` (``../../Experiments/03-communication/run_all.py``)
