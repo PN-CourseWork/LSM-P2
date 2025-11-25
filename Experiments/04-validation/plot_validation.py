@@ -11,7 +11,6 @@ against the analytical solution u(x,y,z) = sin(πx)sin(πy)sin(πz).
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 import pyvista as pv
 from pathlib import Path
@@ -35,11 +34,6 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # ============================================================================
 # Part 1: Convergence Analysis
 # ============================================================================
-
-print("=" * 60)
-print("PART 1: Convergence Analysis")
-print("=" * 60)
-
 # Load validation data
 parquet_files = list(data_dir.glob("validation_*.parquet"))
 if not parquet_files:
@@ -66,33 +60,28 @@ g = sns.relplot(
     y='error',
     hue='Strategy',
     style='Communicator',
-    col='Ranks',
-    kind='line',
+    col='Ranks', kind='line',
     markers=True,
     dashes=True,
     facet_kws={'sharey': True},
 )
 
-# Add O(N^-2) reference line to each subplot
-N_vals = np.array(sorted(df['N'].unique()))
-N_ref = np.linspace(N_vals.min(), N_vals.max(), 50)
-error_first = df[df['N'] == N_vals.min()]['error'].iloc[0]
-error_ref = error_first * (N_ref / N_vals.min()) ** (-2)
-
+# Add O(N^-2) reference line and set log scales
 for ax in g.axes.flat:
-    ax.plot(N_ref, error_ref, 'k:', alpha=0.5, label=r'$O(N^{-2})$')
+    N_ref = [16, 64]
+    ax.plot(N_ref, [0.02, 0.02 * (16/64)**2], 'k:', alpha=0.5, label=r'$O(N^{-2})$')
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.grid(True, alpha=0.3)
 
-# Set labels
+# Set labels and build legend with reference line
 g.set_axis_labels(r'Grid Size N', 'L2 Error')
 g.figure.suptitle(r'Spatial Convergence: Solver Validation', y=1.02)
-g.add_legend(title='', fontsize=10)
+handles, labels = g.axes.flat[0].get_legend_handles_labels()
+g.figure.legend(handles, labels, loc='center right', bbox_to_anchor=(1.15, 0.5))
 
 output_file = fig_dir / "validation_convergence.pdf"
 g.savefig(output_file)
-print(f"\nSaved: {output_file}")
 
 # ============================================================================
 # Part 2: 3D Solution Visualization
@@ -114,10 +103,8 @@ u_analytical = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
 grid = pv.StructuredGrid(X, Y, Z)
 grid['solution'] = u_analytical.flatten(order='F')
 
-print(f"\nGrid: {N}³ = {N**3:,} points")
 
 # Create orthogonal slices at domain center
-print("Creating orthogonal slices visualization...")
 slices = grid.slice_orthogonal(x=1.0, y=1.0, z=1.0)
 
 # Create single view plotter
@@ -164,18 +151,6 @@ plotter.show_bounds(
     ztitle='Z',
     font_size=12,
     all_edges=True
-)
-
-# Set camera position (isometric view)
-plotter.camera_position = [(5, 5, 5), (1, 1, 1), (0, 0, 1)]
-plotter.camera.zoom(1.2)
-
-# Add title
-plotter.add_text(
-    'Analytical Solution: u(x,y,z) = sin(πx)sin(πy)sin(πz)',
-    position='upper_edge',
-    font_size=16,
-    color='black'
 )
 
 # Save with transparent background
