@@ -58,7 +58,7 @@ class _BaseKernel:
         self.timeseries.residuals.append(residual)
         self.timeseries.compute_times.append(compute_time)
 
-    def warmup(self):
+    def warmup(self, warmup_size=10):
         """Warmup kernel (no-op by default)."""
         pass
 
@@ -109,13 +109,12 @@ class NumbaKernel(_BaseKernel):
         self._track(residual, time.perf_counter() - start)
         return residual
 
-    def warmup(self):
+    def warmup(self, warmup_size=10):
         """Trigger JIT compilation with a small problem."""
-        size = 10
-        h = 2.0 / (size - 1)
-        u1 = np.zeros((size, size, size), dtype=np.float64)
+        h = 2.0 / (warmup_size - 1)
+        u1 = np.zeros((warmup_size, warmup_size, warmup_size), dtype=np.float64)
         u2 = np.zeros_like(u1)
-        f = np.random.randn(size, size, size)
+        f = np.random.randn(warmup_size, warmup_size, warmup_size)
         for _ in range(5):
             _jacobi_step_numba(u1, u2, f, h, self.parameters.omega)
             u1, u2 = u2, u1

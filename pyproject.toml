@@ -40,7 +40,14 @@ dependencies = [
   "mpi4py>=4.1.1",
   "mlflow>=3.6.0",
   "pyvista>=0.46.4",
+  "h5py>=3.15.1",
+  "tables>=3.10.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::UserWarning"]
+addopts = "-ra"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

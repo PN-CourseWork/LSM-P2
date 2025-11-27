@@ -1,5 +1,5 @@
 """
-Visualization of kernel experiments 
+Visualization of kernel experiments
 ===========================
 
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
@@ -7,7 +7,8 @@ Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
+
+from Poisson import get_project_root
 
 # %%
 # Setup
@@ -15,11 +16,15 @@ from pathlib import Path
 
 sns.set_theme()
 
-# Get paths
-repo_root = Path(__file__).resolve().parent.parent.parent
+# Get paths using installed package utility (works in Sphinx-Gallery)
+repo_root = get_project_root()
 data_dir = repo_root / "data" / "01-kernels"
 fig_dir = repo_root / "figures" / "kernels"
 fig_dir.mkdir(parents=True, exist_ok=True)
+
+# Check if data exists
+if not data_dir.exists():
+    raise FileNotFoundError(f"Data not found: {data_dir}. Run compute_kernels.py first.")
 
 # %%
 # Plot 1: Convergence Validation

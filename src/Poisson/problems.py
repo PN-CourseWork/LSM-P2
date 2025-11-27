@@ -15,8 +15,12 @@ def create_grid_3d(N: int, value: float = 0.0, boundary_value: float = 0.0) -> n
 
 
 def sinusoidal_exact_solution(N: int) -> np.ndarray:
-    """Exact solution: sin(π x)sin(π y)sin(π z) on [-1,1]³."""
-    xs, ys, zs = np.ogrid[-1 : 1 : complex(N), -1 : 1 : complex(N), -1 : 1 : complex(N)]
+    """Exact solution: sin(π x)sin(π y)sin(π z) on [-1,1]³.
+
+    Array layout is (Z, Y, X) to match decomposition conventions.
+    """
+    # Use (Z, Y, X) axis ordering to match decomposition
+    zs, ys, xs = np.ogrid[-1 : 1 : complex(N), -1 : 1 : complex(N), -1 : 1 : complex(N)]
     return np.sin(np.pi * xs) * np.sin(np.pi * ys) * np.sin(np.pi * zs)
 
 
@@ -24,8 +28,10 @@ def sinusoidal_source_term(N: int) -> np.ndarray:
     """Source term: f = 3π² sin(π x)sin(π y)sin(π z).
 
     For -∇²u = f with u = sin(πx)sin(πy)sin(πz) in 3D.
+    Array layout is (Z, Y, X) to match decomposition conventions.
     """
-    xs, ys, zs = np.ogrid[-1 : 1 : complex(N), -1 : 1 : complex(N), -1 : 1 : complex(N)]
+    # Use (Z, Y, X) axis ordering to match decomposition
+    zs, ys, xs = np.ogrid[-1 : 1 : complex(N), -1 : 1 : complex(N), -1 : 1 : complex(N)]
     return 3 * np.pi**2 * np.sin(np.pi * xs) * np.sin(np.pi * ys) * np.sin(np.pi * zs)
 
 

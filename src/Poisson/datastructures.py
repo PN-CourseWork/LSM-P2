@@ -19,10 +19,10 @@ from mpi4py import MPI
 class KernelParams:
     """Kernel configuration parameters.
 
-    Note: N is the LOCAL grid size (after domain decomposition + ghost zones for MPI).
+    Note: N is the LOCAL grid size (after domain decomposition + halo zones for MPI).
     For standalone usage, N is the full problem size.
     """
-    N: int  # Local grid size (including ghost zones for MPI)
+    N: int  # Local grid size (including halo zones for MPI)
     omega: float
     tolerance: float = 1e-10
     max_iter: int = 100000
@@ -90,6 +90,11 @@ class GlobalMetrics:
     iterations: int = 0
     converged: bool = False
     final_error: float | None = None
+    wall_time: float | None = None
+    # Timing breakdown (sum across all iterations)
+    total_compute_time: float | None = None
+    total_halo_time: float | None = None
+    total_mpi_comm_time: float | None = None
 
 
 # ============================================================================
@@ -103,7 +108,7 @@ class LocalParams:
     Each rank has its own LocalParams with rank-specific values including
     the kernel configuration for that rank's local domain size.
     """
-    N_local: int  # Local grid size including ghost zones
+    N_local: int  # Local grid size including halo zones
 
     # Domain coordinates in global grid
     local_start: tuple[int, int, int]  # (i_start, j_start, k_start)
@@ -122,7 +127,7 @@ class LocalParams:
 
 @dataclass
 class LocalFields:
-    """Local domain arrays with ghost zones (each rank)."""
+    """Local domain arrays with halo zones (each rank)."""
     u1: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     u2: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     f: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))

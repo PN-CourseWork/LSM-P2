@@ -29,6 +29,22 @@ def discover_plot_scripts():
     return sorted(scripts)
 
 
+def discover_compute_scripts():
+    """Find all compute scripts in Experiments/ directory."""
+    experiments_dir = REPO_ROOT / "Experiments"
+
+    if not experiments_dir.exists():
+        return []
+
+    scripts = [
+        p
+        for p in experiments_dir.rglob("*.py")
+        if p.is_file() and "compute" in p.name and p.name != "__init__.py"
+    ]
+
+    return sorted(scripts)
+
+
 def _run_single_plot_script(script):
     """Run a single plotting script and return its result.
 
@@ -96,6 +112,50 @@ def run_plot_scripts():
             else:
                 print(f"  ✗ {display_path} ({error_msg})")
                 fail_count += 1
+
+    print(f"\n  Summary: {success_count} succeeded, {fail_count} failed\n")
+
+
+def run_compute_scripts():
+    """Run compute scripts sequentially."""
+    scripts = discover_compute_scripts()
+
+    if not scripts:
+        print("  No compute scripts found")
+        return
+
+    print(f"\nRunning {len(scripts)} compute scripts sequentially...\n")
+
+    success_count = 0
+    fail_count = 0
+
+    for script in scripts:
+        display_path = script.relative_to(REPO_ROOT)
+        print(f"  → {display_path}...", end=" ", flush=True)
+
+        try:
+            result = subprocess.run(
+                ["uv", "run", "python", str(script)],
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 min timeout for compute scripts
+                cwd=str(REPO_ROOT),
+            )
+
+            if result.returncode == 0:
+                print("✓")
+                success_count += 1
+            else:
+                error_msg = result.stderr[:200] if result.stderr else f"exit {result.returncode}"
+                print(f"✗ ({error_msg})")
+                fail_count += 1
+
+        except subprocess.TimeoutExpired:
+            print("✗ (timeout)")
+            fail_count += 1
+        except Exception as e:
+            print(f"✗ ({e})")
+            fail_count += 1
 
     print(f"\n  Summary: {success_count} succeeded, {fail_count} failed\n")
 
@@ -249,15 +309,17 @@ def main():
         epilog="""
 Examples:
   python main.py --docs                        Build Sphinx documentation
+  python main.py --compute                     Run all compute scripts
   python main.py --plot                        Run all plotting scripts
   python main.py --copy-plots                  Copy plots to plots/ directory
   python main.py --clean                       Clean all generated files
-  python main.py --plot --copy-plots           Generate and copy plots
+  python main.py --compute --plot              Run compute then plot scripts
         """,
     )
 
     parser.add_argument("--docs", action="store_true", help="Build Sphinx HTML documentation")
-    parser.add_argument("--plot", action="store_true", help="Run all plotting scripts")
+    parser.add_argument("--compute", action="store_true", help="Run all compute scripts (sequentially)")
+    parser.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
     parser.add_argument("--copy-plots", action="store_true", help="Copy plots to plots/ directory")
     parser.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
 
@@ -272,6 +334,9 @@ Examples:
     # Execute commands in logical order
     if args.clean:
         clean_all()
+
+    if args.compute:
+        run_compute_scripts()
 
     if args.plot:
         run_plot_scripts()
