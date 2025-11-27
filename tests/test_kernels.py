@@ -30,37 +30,7 @@ def test_kernels_produce_identical_results():
     assert np.allclose(u_numpy, u_numba, atol=1e-10)
 
 
-def test_convergence_order():
-    """Jacobi kernel should achieve O(h²) convergence."""
-    problem_sizes = [15, 25, 50]
-    errors, h_values = [], []
-
-    for N in problem_sizes:
-        u1, u2, f, h = setup_sinusoidal_problem(N)
-        exact = sinusoidal_exact_solution(N)
-        kernel = NumPyKernel(N=N, omega=1.0, tolerance=1e-12, max_iter=50000)
-
-        # Solve until converged
-        for i in range(50000):
-            if i % 2 == 0:
-                res = kernel.step(u1, u2, f)
-                u = u2
-            else:
-                res = kernel.step(u2, u1, f)
-                u = u1
-            if np.sqrt(res / (N-2)**3) < 1e-12:
-                break
-
-        l2_error = np.sqrt(np.mean((u[1:-1,1:-1,1:-1] - exact[1:-1,1:-1,1:-1])**2))
-        errors.append(l2_error)
-        h_values.append(h)
-
-    # Calculate convergence rate
-    rates = [np.log(errors[i]/errors[i+1]) / np.log(h_values[i]/h_values[i+1])
-             for i in range(len(errors)-1)]
-    avg_rate = np.mean(rates)
-
-    assert abs(avg_rate - 2.0) < 0.2, f"Rate {avg_rate:.2f} not close to 2.0"
+# Note: O(h²) convergence is tested in test_mpi_integration.py
 
 
 def test_boundary_preservation():

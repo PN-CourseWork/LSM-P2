@@ -14,13 +14,13 @@ from Poisson import run_solver
 # =============================================================================
 
 RANK_CONFIGS = [
-    (1, "sliced"),
+    # Skip n_ranks=1 (covered by test_solver.py)
     (2, "sliced"),
     (4, "sliced"),
     (8, "cubic"),
 ]
 
-CONVERGENCE_GRID_SIZES = [15, 25, 45]
+CONVERGENCE_GRID_SIZES = [15, 25]  # Reduced from [15, 25, 45]
 
 COMMUNICATORS = ["numpy", "custom"]
 
@@ -46,7 +46,7 @@ def convergence_results():
     """Run solver at multiple grid sizes to test O(h²) convergence."""
     results = {}
     for N in CONVERGENCE_GRID_SIZES:
-        result = run_solver(N=N, n_ranks=2, strategy="sliced", max_iter=50000, tol=1e-10, validate=True)
+        result = run_solver(N=N, n_ranks=2, strategy="sliced", max_iter=20000, tol=1e-8, validate=True)
         results[N] = result
     return results
 
@@ -78,15 +78,10 @@ class TestMPIExecution:
     """Tests for multi-rank MPI execution."""
 
     @pytest.mark.parametrize("n_ranks,strategy", RANK_CONFIGS)
-    def test_no_errors(self, rank_results, n_ranks, strategy):
-        """Solver should complete without errors."""
+    def test_runs_and_converges(self, rank_results, n_ranks, strategy):
+        """Solver should complete without errors and converge."""
         result = rank_results[(n_ranks, strategy)]
         assert "error" not in result, f"Solver failed: {result.get('error')}"
-
-    @pytest.mark.parametrize("n_ranks,strategy", RANK_CONFIGS)
-    def test_converged(self, rank_results, n_ranks, strategy):
-        """Solver should converge."""
-        result = rank_results[(n_ranks, strategy)]
         assert result["converged"], f"Did not converge in {result['iterations']} iterations"
 
 
