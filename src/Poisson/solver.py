@@ -5,6 +5,9 @@ single interface. Sequential execution is the default, and distributed execution
 is enabled by providing decomposition and communicator strategies.
 """
 
+import os
+import time
+
 import numpy as np
 from dataclasses import asdict
 from mpi4py import MPI
@@ -250,11 +253,22 @@ class JacobiPoisson:
         pd.DataFrame([row]).to_hdf(path, key='results', mode='w')
 
     # ========================================================================
-    # MLflow
+    # MLflow Integration
     # ========================================================================
 
-    def mlflow_start(self, experiment_name):
-        """Start MLflow run (rank 0 only)."""
+    def mlflow_start(self, experiment_name: str, run_name: str = None, parent_run_name: str = None):
+        """Start MLflow run and log parameters (rank 0 only).
+
+        Parameters
+        ----------
+        experiment_name : str
+            Name of the MLflow experiment.
+        run_name : str, optional
+            Name of the run within the experiment.
+        parent_run_name : str, optional
+            If specified, creates a nested run under a parent with this name.
+            Parent is created if it doesn't exist, or resumed if it does.
+        """
         if self.rank != 0:
             return
 
@@ -267,18 +281,112 @@ class JacobiPoisson:
             mlflow.create_experiment(name=experiment_name)
 
         mlflow.set_experiment(experiment_name)
-        mlflow.start_run()
+
+        # Handle parent run if specified (for grouping related runs)
+        if parent_run_name:
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+            client = mlflow.tracking.MlflowClient()
+
+            # Search for existing parent run
+            runs = client.search_runs(
+                experiment_ids=[experiment.experiment_id],
+                filter_string=f"tags.mlflow.runName = '{parent_run_name}' AND tags.is_parent = 'true'",
+                max_results=1
+            )
+
+            if runs:
+                parent_run_id = runs[0].info.run_id
+            else:
+                # Create new parent run
+                parent_run = client.create_run(
+                    experiment_id=experiment.experiment_id,
+                    run_name=parent_run_name,
+                    tags={"is_parent": "true"}
+                )
+                parent_run_id = parent_run.info.run_id
+
+            # Start nested child run
+            mlflow.start_run(run_id=parent_run_id, log_system_metrics=False)
+            mlflow.start_run(run_name=run_name, nested=True, log_system_metrics=True)
+            self._mlflow_nested = True
+        else:
+            mlflow.start_run(log_system_metrics=True, run_name=run_name)
+            self._mlflow_nested = False
+
+        # Log all parameters from config
         mlflow.log_params(asdict(self.config))
 
-    def mlflow_end(self):
-        """End MLflow run with metrics (rank 0 only)."""
+        # Log HPC job info if running on LSF cluster
+        job_id = os.environ.get("LSB_JOBID")
+        if job_id:
+            mlflow.set_tag("lsf.job_id", job_id)
+            job_index = os.environ.get("LSB_JOBINDEX", "")
+            job_name = os.environ.get("LSB_JOBNAME", "")
+            description = f"HPC Job: {job_name} (ID: {job_id}"
+            if job_index:
+                description += f", Index: {job_index}"
+            description += ")"
+            mlflow.set_tag("mlflow.note.content", description)
+
+    def mlflow_end(self, log_time_series: bool = True):
+        """End MLflow run and log metrics (rank 0 only).
+
+        Parameters
+        ----------
+        log_time_series : bool, optional
+            If True, logs the full convergence history as step-based metrics.
+            Default is True.
+        """
         if self.rank != 0:
             return
 
-        import mlflow
-        mlflow.log_metrics({
-            "total_compute_time": sum(self.timeseries.compute_times),
-            "total_halo_time": sum(self.timeseries.halo_exchange_times),
-            "total_mpi_comm_time": sum(self.timeseries.mpi_comm_times),
-        })
+        # Populate timing totals in results
+        self.results.total_compute_time = sum(self.timeseries.compute_times)
+        self.results.total_halo_time = sum(self.timeseries.halo_exchange_times)
+        self.results.total_mpi_comm_time = sum(self.timeseries.mpi_comm_times)
+
+        # Log final metrics
+        mlflow.log_metrics(asdict(self.results))
+
+        # Log time series as step-based metrics
+        if log_time_series:
+            self._mlflow_log_time_series()
+
+        # End child run
         mlflow.end_run()
+
+        # End parent run if nested
+        if getattr(self, '_mlflow_nested', False):
+            mlflow.end_run()
+
+    def _mlflow_log_time_series(self):
+        """Log time series as step-based metrics using async batch logging."""
+        from mlflow.entities import Metric
+
+        run_id = mlflow.active_run().info.run_id
+        client = mlflow.tracking.MlflowClient()
+        timestamp = int(time.time() * 1000)
+
+        # Build all metrics from timeseries
+        metrics = []
+        ts_dict = asdict(self.timeseries)
+        for name, values in ts_dict.items():
+            if values:  # Skip empty lists
+                for step, value in enumerate(values):
+                    metrics.append(Metric(name, float(value), timestamp, step))
+
+        # Async batch log (non-blocking)
+        if metrics:
+            client.log_batch(run_id, metrics=metrics, synchronous=False)
+
+    def mlflow_log_artifact(self, filepath: str):
+        """Log an artifact (e.g., saved HDF5 file) to MLflow (rank 0 only).
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the file to log as artifact.
+        """
+        if self.rank != 0:
+            return
+        mlflow.log_artifact(filepath)
