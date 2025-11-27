@@ -1,5 +1,7 @@
 """Large Scale Modeling package."""
 
+from pathlib import Path
+
 from .datastructures import (
     GlobalParams,
     GlobalMetrics,
@@ -13,9 +15,9 @@ from .datastructures import (
 from .kernels import NumPyKernel, NumbaKernel
 from .jacobi import JacobiPoisson
 from .decomposition import DomainDecomposition, RankInfo, NoDecomposition
-from .communicators import NumpyCommunicator as NumpyHaloExchange, DatatypeCommunicator
+from .communicators import NumpyHaloExchange, CustomHaloExchange
 from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
-# from .postprocessing import PostProcessor  # Not available
+from .runner import run_solver
 
 __all__ = [
     # Data structures - Kernel
@@ -39,10 +41,34 @@ __all__ = [
     "RankInfo",
     # Communicators
     "NumpyHaloExchange",
-    "DatatypeCommunicator",
+    "CustomHaloExchange",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",
     "sinusoidal_source_term",
     "setup_sinusoidal_problem",
+    # Runner
+    "run_solver",
+    # Utilities
+    "get_project_root",
 ]
+
+
+def get_project_root() -> Path:
+    """Get project root directory.
+
+    Works reliably in both standalone scripts and Sphinx-Gallery execution.
+
+    Returns
+    -------
+    Path
+        Project root directory (contains pyproject.toml).
+    """
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / "pyproject.toml").exists():
+            return current
+        current = current.parent
+
+    # Fallback: assume standard src layout
+    return Path(__file__).resolve().parent.parent.parent

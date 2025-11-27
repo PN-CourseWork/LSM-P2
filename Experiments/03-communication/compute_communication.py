@@ -1,179 +1,101 @@
 """
 Communication Method Benchmark
-================================
+==============================
 
-Unit test for halo exchange communicators.
+Compare NumPy vs Custom MPI datatype halo exchange for contiguous (Z-axis)
+and non-contiguous (X-axis) memory layouts.
+
+Uses per-iteration timeseries data for statistical analysis.
 """
-import numpy as np
-import pandas as pd
-import time
-from pathlib import Path
-from mpi4py import MPI
+import subprocess
+import sys
 
-from Poisson import DomainDecomposition, NumpyHaloExchange, DatatypeCommunicator
+from Poisson import get_project_root
 
 
-def benchmark_communicator(communicator, u, rank_info, comm, n_iterations=100):
-    """Benchmark a communicator implementation.
+def main():
+    """Entry point - spawns MPI if needed."""
+    try:
+        from mpi4py import MPI
+        if MPI.COMM_WORLD.Get_size() > 1:
+            _run_benchmark()
+            return
+    except ImportError:
+        pass
 
-    Parameters
-    ----------
-    communicator : Communicator
-        Communicator instance to benchmark
-    u : np.ndarray
-        Local array with ghost zones
-    rank_info : RankInfo
-        Decomposition information
-    comm : MPI.Comm
-        MPI communicator
-    n_iterations : int
-        Number of times to repeat exchange for timing accuracy
-
-    Returns
-    -------
-    float
-        Average time per exchange (seconds)
-    """
-    neighbors = rank_info.neighbors
-
-    # Warmup
-    for _ in range(10):
-        communicator.exchange_halos(u, neighbors, comm)
-
-    # Timed exchanges
-    comm.Barrier()
-    t_start = time.perf_counter()
-
-    for _ in range(n_iterations):
-        communicator.exchange_halos(u, neighbors, comm)
-
-    comm.Barrier()
-    t_end = time.perf_counter()
-
-    return (t_end - t_start) / n_iterations
+    # Spawn MPI
+    script = get_project_root() / "Experiments" / "03-communication" / "compute_communication.py"
+    subprocess.run(["mpiexec", "-n", "4", "uv", "run", "python", str(script)])
 
 
-def run_benchmark(N, size, strategy, n_repetitions=100):
-    """Run communication benchmark with multiple repetitions.
+def _run_benchmark():
+    """MPI worker - collects per-iteration timings."""
+    import pandas as pd
+    from mpi4py import MPI
+    from Poisson import JacobiPoisson, DomainDecomposition, NumpyHaloExchange, CustomHaloExchange, get_project_root
 
-    Parameters
-    ----------
-    N : int
-        Global grid size
-    size : int
-        Number of MPI ranks
-    strategy : str
-        Decomposition strategy
-    n_repetitions : int
-        Number of independent timing runs for statistics
-
-    Returns
-    -------
-    list of dict
-        Results for all ranks and repetitions
-    """
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    n_iterations = 50  # Repeat each timing run for accuracy
-
-    # Setup decomposition
-    decomp = DomainDecomposition(N=N, size=size, strategy=strategy)
-    rank_info = decomp.get_rank_info(rank)
-
-    # Allocate array
-    u = np.zeros(rank_info.ghosted_shape, dtype=np.float64)
-
-    # Create communicators
-    numpy_comm = NumpyHaloExchange()
-    datatype_comm = DatatypeCommunicator()
-
-    # Run multiple independent repetitions
-    all_local_results = []
-    for rep in range(n_repetitions):
-        # Reinitialize data each time
-        u[:] = rank + np.random.rand(*rank_info.ghosted_shape)
-
-        # Benchmark NumPy method (always)
-        time_numpy = benchmark_communicator(numpy_comm, u.copy(), rank_info, comm, n_iterations)
-        all_local_results.append(
-            {'N': N, 'size': size, 'strategy': strategy, 'rank': rank, 'repetition': rep, 'method': 'numpy', 'time': time_numpy}
-        )
-
-        # Benchmark datatype method (both strategies now supported!)
-        time_datatype = benchmark_communicator(datatype_comm, u.copy(), rank_info, comm, n_iterations)
-        all_local_results.append(
-            {'N': N, 'size': size, 'strategy': strategy, 'rank': rank, 'repetition': rep, 'method': 'datatype', 'time': time_datatype}
-        )
-
-    # Gather all results to rank 0
-    all_results = comm.gather(all_local_results, root=0)
-
-    if rank == 0:
-        # Flatten list of lists
-        return [item for sublist in all_results for item in sublist]
-    return None
-
-
-if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # Configuration 
-    problem_sizes = [20, 40, 60, 80, 100, 120,  140]
+    # Config
+    PROBLEM_SIZES = [32, 48, 64, 80, 100, 120, 140, 160, 180, 200]
+    ITERATIONS = 500  # Per-iteration data gives us 500 samples each
+    WARMUP = 50
 
-    # Determine strategies to test based on size
-    if size == 8:
-        # For 8 ranks, test both strategies for comparison
-        strategies = ['sliced', 'cubic']
-    elif size in [2, 4]:
-        strategies = ['sliced']
-    else:
-        if rank == 0:
-            print(f"Warning: size={size} not configured, using cubic")
-        strategies = ['cubic']
+    CONFIGS = [
+        ("z", "numpy", "NumPy (Z-axis, contiguous)"),
+        ("z", "custom", "Custom (Z-axis, contiguous)"),
+        ("x", "numpy", "NumPy (X-axis, non-contiguous)"),
+        ("x", "custom", "Custom (X-axis, non-contiguous)"),
+    ]
 
-    # Run benchmarks for each strategy
-    all_data = []
-    for strategy in strategies:
-        for N in problem_sizes:
-            if rank == 0:
-                print(f"Benchmarking N={N}, size={size}, strategy={strategy}...")
+    repo_root = get_project_root()
+    data_dir = repo_root / "data" / "communication"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-            results = run_benchmark(N, size, strategy)
-
-            if rank == 0 and results is not None:
-                all_data.extend(results)
-
-                # Print summary
-                df_subset = pd.DataFrame(results)
-                numpy_mean = df_subset[df_subset['method'] == 'numpy']['time'].mean()
-
-                # Check if datatype results exist
-                datatype_results = df_subset[df_subset['method'] == 'datatype']
-                if len(datatype_results) > 0:
-                    datatype_mean = datatype_results['time'].mean()
-                    print(f"  NumPy:     {numpy_mean*1e6:.2f} μs")
-                    print(f"  Datatype:  {datatype_mean*1e6:.2f} μs")
-                    print(f"  Speedup:   {numpy_mean/datatype_mean:.2f}x")
-                else:
-                    print(f"  NumPy:     {numpy_mean*1e6:.2f} μs")
-                    print(f"  Datatype:  (not tested for {strategy})")
-
-    # Save results as parquet
     if rank == 0:
-        df = pd.DataFrame(all_data)
+        print("Communication Benchmark: Per-Iteration Timings")
+        print(f"Ranks: {size}, Iterations: {ITERATIONS}, Warmup: {WARMUP}")
+        print("=" * 60)
 
-        repo_root = Path(__file__).resolve().parent.parent.parent
-        data_dir = repo_root / "data" / "communication"
-        data_dir.mkdir(parents=True, exist_ok=True)
+    dfs = []
 
-        # Use descriptive filename
-        if len(strategies) > 1:
-            output_file = data_dir / f"communication_size{size}_both.parquet"
-        else:
-            output_file = data_dir / f"communication_size{size}_{strategies[0]}.parquet"
+    for N in PROBLEM_SIZES:
+        if rank == 0:
+            print(f"\nN={N}")
 
-        df.to_parquet(output_file, index=False)
+        for axis, comm_type, label in CONFIGS:
+            if rank == 0:
+                print(f"  {label}...", end=" ", flush=True)
 
-        print(f"\nResults saved to: {output_file}")
+            # Create and run solver
+            decomp = DomainDecomposition(N=N, size=size, strategy='sliced', axis=axis)
+            halo = CustomHaloExchange() if comm_type == "custom" else NumpyHaloExchange()
+            solver = JacobiPoisson(N=N, decomposition=decomp, communicator=halo,
+                                   max_iter=WARMUP + ITERATIONS, tolerance=0)
+            solver.solve()
+
+            # Get max halo time across ranks per iteration (skip warmup)
+            local_times = solver.timeseries.halo_exchange_times[WARMUP:]
+            max_times = comm.allreduce(local_times, op=MPI.MAX)
+
+            if rank == 0:
+                local_N = N // size  # Local subdomain size along decomposed axis
+                print(f"mean={sum(max_times)/len(max_times)*1e6:.1f} μs/iter")
+                dfs.append(pd.DataFrame({
+                    "N": N, "local_N": local_N, "axis": axis,
+                    "communicator": comm_type, "label": label,
+                    "iteration": range(len(max_times)),
+                    "halo_time_us": [t * 1e6 for t in max_times],
+                }))
+
+    if rank == 0:
+        df = pd.concat(dfs, ignore_index=True)
+        output = data_dir / f"communication_np{size}.parquet"
+        df.to_parquet(output, index=False)
+        print(f"\nSaved {len(df)} measurements to: {output}")
+
+
+if __name__ == "__main__":
+    main()

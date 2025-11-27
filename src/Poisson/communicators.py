@@ -1,261 +1,129 @@
-"""Communication implementations for halo exchanges.
-
-Provides different strategies for exchanging ghost zones between MPI ranks.
-"""
+"""Halo exchange communicators for MPI domain decomposition."""
 import numpy as np
 from mpi4py import MPI
 
+# Axis config: (index, name) - used to build neighbor keys like 'z_lower'
+_AXES = [(0, 'z'), (1, 'y'), (2, 'x')]
 
-class _BaseCommunicator:
-    """Base class for halo exchange communicators."""
 
-    def exchange_ghosts(self, u, decomposition, rank, comm):
-        """Adapter method for solver interface.
+def _face_slice(axis, idx, has_halo):
+    """Slice for face at idx, excluding halos of other decomposed axes."""
+    return tuple(
+        idx if ax == axis else slice(1, -1) if has_halo[ax] else slice(None)
+        for ax in range(3)
+    )
 
-        Parameters
-        ----------
-        u : np.ndarray
-            Local array with ghost zones
-        decomposition : DomainDecomposition
-            Decomposition strategy (has get_neighbors method)
-        rank : int
-            Current MPI rank
-        comm : MPI.Comm
-            MPI communicator
-        """
+
+class _BaseHaloExchange:
+    """Base class with shared exchange loop logic."""
+
+    def exchange_halos(self, u, decomposition, rank, comm):
+        """Exchange halo zones with neighbors."""
         neighbors = decomposition.get_neighbors(rank)
-        self.exchange_halos(u, neighbors, comm)
+        has_halo = {ax: f'{name}_lower' in neighbors for ax, name in _AXES}
+
+        for axis, name in _AXES:
+            if not has_halo[axis]:
+                continue
+            lo = neighbors.get(f'{name}_lower')
+            hi = neighbors.get(f'{name}_upper')
+            self._exchange_axis(u, axis, lo, hi, has_halo, comm, tag=axis * 100)
 
 
-def _exchange_cubic_numpy(u, neighbors, comm):
-    """Exchange ghost zones for cubic decomposition using NumPy arrays.
+class NumpyHaloExchange(_BaseHaloExchange):
+    """Halo exchange using NumPy array copies."""
+    name = "NumPy"
 
-    Uses MPI PROC_NULL pattern: all ranks participate in all exchanges.
-    Sendrecv to/from PROC_NULL is a no-op.
-    At physical boundaries, set ghost to 0 (Dirichlet BC).
-    """
-    x_lo = neighbors.get('x_lower')
-    x_hi = neighbors.get('x_upper')
-    y_lo = neighbors.get('y_lower')
-    y_hi = neighbors.get('y_upper')
-    z_lo = neighbors.get('z_lower')
-    z_hi = neighbors.get('z_upper')
+    def _exchange_axis(self, u, axis, lo_rank, hi_rank, has_halo, comm, tag):
+        lo = lo_rank if lo_rank is not None else MPI.PROC_NULL
+        hi = hi_rank if hi_rank is not None else MPI.PROC_NULL
 
-    # Convert None to PROC_NULL for MPI
-    PROC_NULL = MPI.PROC_NULL
-    x_lo_rank = x_lo if x_lo is not None else PROC_NULL
-    x_hi_rank = x_hi if x_hi is not None else PROC_NULL
-    y_lo_rank = y_lo if y_lo is not None else PROC_NULL
-    y_hi_rank = y_hi if y_hi is not None else PROC_NULL
-    z_lo_rank = z_lo if z_lo is not None else PROC_NULL
-    z_hi_rank = z_hi if z_hi is not None else PROC_NULL
-
-    nz, ny, nx = u.shape[0] - 2, u.shape[1] - 2, u.shape[2] - 2
-
-    # X direction: Send right (to x_upper), receive left (from x_lower)
-    send_buf = np.ascontiguousarray(u[1:-1, 1:-1, -2])
-    recv_buf = np.empty((nz, ny), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=x_hi_rank, sendtag=100,
-                 recvbuf=recv_buf, source=x_lo_rank, recvtag=100)
-    if x_lo is not None:
-        u[1:-1, 1:-1, 0] = recv_buf
-    else:
-        u[1:-1, 1:-1, 0] = 0.0
-
-    # X direction: Send left (to x_lower), receive right (from x_upper)
-    send_buf = np.ascontiguousarray(u[1:-1, 1:-1, 1])
-    recv_buf = np.empty((nz, ny), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=x_lo_rank, sendtag=101,
-                 recvbuf=recv_buf, source=x_hi_rank, recvtag=101)
-    if x_hi is not None:
-        u[1:-1, 1:-1, -1] = recv_buf
-    else:
-        u[1:-1, 1:-1, -1] = 0.0
-
-    # Y direction: Send up (to y_upper), receive down (from y_lower)
-    send_buf = np.ascontiguousarray(u[1:-1, -2, 1:-1])
-    recv_buf = np.empty((nz, nx), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=y_hi_rank, sendtag=200,
-                 recvbuf=recv_buf, source=y_lo_rank, recvtag=200)
-    if y_lo is not None:
-        u[1:-1, 0, 1:-1] = recv_buf
-    else:
-        u[1:-1, 0, 1:-1] = 0.0
-
-    # Y direction: Send down (to y_lower), receive up (from y_upper)
-    send_buf = np.ascontiguousarray(u[1:-1, 1, 1:-1])
-    recv_buf = np.empty((nz, nx), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=y_lo_rank, sendtag=201,
-                 recvbuf=recv_buf, source=y_hi_rank, recvtag=201)
-    if y_hi is not None:
-        u[1:-1, -1, 1:-1] = recv_buf
-    else:
-        u[1:-1, -1, 1:-1] = 0.0
-
-    # Z direction: Send up (to z_upper), receive down (from z_lower)
-    send_buf = np.ascontiguousarray(u[-2, 1:-1, 1:-1])
-    recv_buf = np.empty((ny, nx), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=z_hi_rank, sendtag=300,
-                 recvbuf=recv_buf, source=z_lo_rank, recvtag=300)
-    if z_lo is not None:
-        u[0, 1:-1, 1:-1] = recv_buf
-    else:
-        u[0, 1:-1, 1:-1] = 0.0
-
-    # Z direction: Send down (to z_lower), receive up (from z_upper)
-    send_buf = np.ascontiguousarray(u[1, 1:-1, 1:-1])
-    recv_buf = np.empty((ny, nx), dtype=u.dtype)
-    comm.Sendrecv(send_buf, dest=z_lo_rank, sendtag=301,
-                 recvbuf=recv_buf, source=z_hi_rank, recvtag=301)
-    if z_hi is not None:
-        u[-1, 1:-1, 1:-1] = recv_buf
-    else:
-        u[-1, 1:-1, 1:-1] = 0.0
+        for send_i, recv_i, dest, src in [(-2, 0, hi, lo), (1, -1, lo, hi)]:
+            send = np.ascontiguousarray(u[_face_slice(axis, send_i, has_halo)])
+            recv = np.empty_like(send)
+            comm.Sendrecv(send, dest, tag, recv, src, tag)
+            u[_face_slice(axis, recv_i, has_halo)] = recv if src != MPI.PROC_NULL else 0.0
+            tag += 1
 
 
-class NumpyCommunicator(_BaseCommunicator):
-    """Halo exchange using NumPy arrays with explicit copies.
-
-    Uses np.ascontiguousarray() to create contiguous buffers before sending.
-    This introduces memory copy overhead but simplifies MPI calls.
-    """
+class CustomHaloExchange(_BaseHaloExchange):
+    """Halo exchange using MPI derived datatypes (zero-copy)."""
+    name = "MPI Datatype"
 
     def __init__(self):
-        self.name = "NumPy"
+        self._cache = {}  # (shape, has_halo_tuple) -> {axis: datatype}
 
-    def exchange_halos(self, u, neighbors, comm):
-        """Exchange ghost zones with neighboring ranks.
+    def _exchange_axis(self, u, axis, lo_rank, hi_rank, has_halo, comm, tag):
+        lo = lo_rank if lo_rank is not None else MPI.PROC_NULL
+        hi = hi_rank if hi_rank is not None else MPI.PROC_NULL
 
-        Parameters
-        ----------
-        u : np.ndarray
-            Local array with ghost zones (modified in-place)
-        neighbors : dict
-            Neighbor ranks for sliced (z_lower/z_upper) or cubic (x/y/z)
-        comm : MPI.Comm
-            MPI communicator
-        """
-        # Detect decomposition type: cubic has x neighbors, sliced doesn't
-        is_cubic = 'x_lower' in neighbors or 'x_upper' in neighbors
+        # Get or create datatype for this configuration
+        key = (u.shape, tuple(has_halo.items()))
+        if key not in self._cache:
+            self._cache[key] = self._create_datatypes(u.shape, has_halo)
+        dtype = self._cache[key][axis]
 
-        if is_cubic:
-            _exchange_cubic_numpy(u, neighbors, comm)
+        nz, ny, nx = u.shape
+        u_flat = u.ravel()
+
+        # Compute offsets into flattened array
+        start = [1 if has_halo[ax] else 0 for ax in range(3)]
+        flat = lambda z, y, x: z * ny * nx + y * nx + x
+
+        if axis == 0:
+            send_hi, recv_lo = flat(nz-2, start[1], start[2]), flat(0, start[1], start[2])
+            send_lo, recv_hi = flat(1, start[1], start[2]), flat(nz-1, start[1], start[2])
+        elif axis == 1:
+            send_hi, recv_lo = flat(start[0], ny-2, start[2]), flat(start[0], 0, start[2])
+            send_lo, recv_hi = flat(start[0], 1, start[2]), flat(start[0], ny-1, start[2])
         else:
-            # Sliced: shape is (nz, N, N) - z=axis0
-            # Use PROC_NULL pattern for safety
-            z_lo = neighbors.get('z_lower')
-            z_hi = neighbors.get('z_upper')
-            z_lo_rank = z_lo if z_lo is not None else MPI.PROC_NULL
-            z_hi_rank = z_hi if z_hi is not None else MPI.PROC_NULL
+            send_hi, recv_lo = flat(start[0], start[1], nx-2), flat(start[0], start[1], 0)
+            send_lo, recv_hi = flat(start[0], start[1], 1), flat(start[0], start[1], nx-1)
 
-            # Send up, receive down
-            send_buf = np.ascontiguousarray(u[-2, :, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=z_hi_rank, sendtag=300,
-                         recvbuf=recv_buf, source=z_lo_rank, recvtag=300)
-            if z_lo is not None:
-                u[0, :, :] = recv_buf
+        # Exchange
+        comm.Sendrecv([u_flat[send_hi:], 1, dtype], hi, tag,
+                      [u_flat[recv_lo:], 1, dtype], lo, tag)
+        if lo_rank is None:
+            u[_face_slice(axis, 0, has_halo)] = 0.0
 
-            # Send down, receive up
-            send_buf = np.ascontiguousarray(u[1, :, :])
-            recv_buf = np.empty_like(send_buf)
-            comm.Sendrecv(send_buf, dest=z_lo_rank, sendtag=301,
-                         recvbuf=recv_buf, source=z_hi_rank, recvtag=301)
-            if z_hi is not None:
-                u[-1, :, :] = recv_buf
+        comm.Sendrecv([u_flat[send_lo:], 1, dtype], lo, tag + 1,
+                      [u_flat[recv_hi:], 1, dtype], hi, tag + 1)
+        if hi_rank is None:
+            u[_face_slice(axis, -1, has_halo)] = 0.0
 
+    def _create_datatypes(self, shape, has_halo):
+        """Create MPI datatypes for each axis."""
+        nz, ny, nx = shape
+        nz_int = nz - 2 if has_halo[0] else nz
+        ny_int = ny - 2 if has_halo[1] else ny
+        nx_int = nx - 2 if has_halo[2] else nx
 
-class DatatypeCommunicator(_BaseCommunicator):
-    """Halo exchange using custom MPI datatypes (zero-copy).
-
-    Uses MPI.Create_subarray() to define non-contiguous data regions.
-    Avoids memory copies by sending directly from the array.
-    """
-
-    def __init__(self):
-        self.name = "MPI Datatype"
-        self._datatypes = None
-        self._shape = None
-
-    def exchange_halos(self, u, neighbors, comm):
-        """Exchange ghost zones with neighboring ranks.
-
-        Parameters
-        ----------
-        u : np.ndarray
-            Local array with ghost zones (modified in-place)
-        neighbors : dict
-            Neighbor ranks for sliced (z_lower/z_upper) or cubic (x/y/z)
-        comm : MPI.Comm
-            MPI communicator
-        """
-        # Create datatypes if needed
-        if self._datatypes is None or self._shape != u.shape:
-            if self._datatypes is not None:
-                self._free_datatypes()
-            self._datatypes = self._create_datatypes(u.shape)
-            self._shape = u.shape
-
-        n0, n1, n2 = u.shape
-        is_cubic = 'x_lower' in neighbors or 'x_upper' in neighbors
-
-        if is_cubic:
-            # For cubic, use the numpy-based exchange (safe and correct)
-            _exchange_cubic_numpy(u, neighbors, comm)
-        else:
-            # Sliced: use datatypes for efficient Z-direction exchange
-            z_lo = neighbors.get('z_lower')
-            z_hi = neighbors.get('z_upper')
-            z_lo_rank = z_lo if z_lo is not None else MPI.PROC_NULL
-            z_hi_rank = z_hi if z_hi is not None else MPI.PROC_NULL
-
-            # Send up, receive down
-            comm.Sendrecv([u[n0-2, :, :], 1, self._datatypes['axis0']],
-                         dest=z_hi_rank, sendtag=300,
-                         recvbuf=[u[0, :, :], 1, self._datatypes['axis0']],
-                         source=z_lo_rank, recvtag=300)
-
-            # Send down, receive up
-            comm.Sendrecv([u[1, :, :], 1, self._datatypes['axis0']],
-                         dest=z_lo_rank, sendtag=301,
-                         recvbuf=[u[n0-1, :, :], 1, self._datatypes['axis0']],
-                         source=z_hi_rank, recvtag=301)
-
-    def _create_datatypes(self, shape):
-        """Create MPI datatypes for contiguous face directions.
-
-        Parameters
-        ----------
-        shape : tuple
-            Array shape (n0, n1, n2) including ghost zones
-
-        Returns
-        -------
-        dict
-            Datatypes for axis 0 (contiguous planes)
-        """
-        n0, n1, n2 = shape
         datatypes = {}
 
-        # Axis 0 (first dimension) - contiguous in memory
-        # u[i, :, :] is contiguous: n1*n2 elements
-        plane_0 = MPI.DOUBLE.Create_contiguous(n1 * n2)
-        plane_0.Commit()
-        datatypes['axis0'] = plane_0
+        # Z-face: contiguous if no y/x halos, else strided
+        if not has_halo[1] and not has_halo[2]:
+            dt = MPI.DOUBLE.Create_contiguous(ny * nx)
+        else:
+            dt = MPI.DOUBLE.Create_vector(ny_int, nx_int, nx)
+        dt.Commit()
+        datatypes[0] = dt
+
+        # Y-face: strided across z-planes
+        dt = MPI.DOUBLE.Create_vector(nz_int, nx_int, ny * nx)
+        dt.Commit()
+        datatypes[1] = dt
+
+        # X-face: 2D strided (most complex)
+        row = MPI.DOUBLE.Create_vector(ny_int, 1, nx)
+        row.Commit()
+        dt = row.Create_hvector(nz_int, 1, ny * nx * MPI.DOUBLE.Get_size())
+        dt.Commit()
+        row.Free()
+        datatypes[2] = dt
 
         return datatypes
 
-    def _free_datatypes(self):
-        """Free allocated MPI datatypes."""
-        if self._datatypes is not None:
-            for dt in self._datatypes.values():
-                dt.Free()
-            self._datatypes = None
-
     def __del__(self):
-        """Cleanup datatypes on destruction."""
-        self._free_datatypes()
-
-
-# Aliases for backward compatibility
-NumpyHaloExchange = NumpyCommunicator
+        for datatypes in self._cache.values():
+            for dt in datatypes.values():
+                dt.Free()

@@ -33,8 +33,8 @@ A single :class:`JacobiPoisson` solver handles both sequential and distributed e
        │   ├── SlicedDecomposition (1D along Z-axis)
        │   └── CubicDecomposition (3D Cartesian grid)
        └── CommunicatorStrategy (pluggable)
-           ├── NumpyCommunicator (array slicing + send/recv)
-           └── CustomMPICommunicator (MPI datatypes)
+           ├── NumpyHaloExchange (array slicing + send/recv)
+           └── CustomHaloExchange (MPI datatypes)
 
 **Key principle:** Sequential execution is just distributed execution with ``decomposition=None``.
 
@@ -68,34 +68,26 @@ Simple, unified API for all execution modes:
    solver.solve()
    solver.save_hdf5("results/distributed.h5")  # All ranks write in parallel!
 
-**Phase 2: Post-Process + Analyze (no MPI needed)**
+**Phase 2: Run via Subprocess (easier MPI management)**
 
 .. code-block:: python
 
-   from Poisson import PostProcessor
+   from Poisson import run_solver
 
-   # Load results from HDF5
-   pp = PostProcessor("results/distributed.h5")
+   # Run solver with MPI via subprocess
+   result = run_solver(
+       N=100,
+       n_ranks=4,
+       strategy="sliced",
+       communicator="numpy",
+       max_iter=10000,
+       tol=1e-6,
+       validate=True  # Compute L2 error
+   )
 
-   # Aggregate per-rank timings to global statistics
-   timings = pp.aggregate_timings()
-   print(f"Total compute time: {timings['total_compute_time']:.4f}s")
-   print(f"Total MPI comm time: {timings['total_mpi_comm_time']:.4f}s")
-
-   # Export metrics for analysis
-   pp.to_parquet("analysis/metrics.parquet")
-
-   # Log to MLflow for experiment tracking
-   pp.log_to_mlflow("scaling-experiments")
-
-   # Multi-file analysis for scaling studies
-   pp_multi = PostProcessor([
-       "results/experiment_np2.h5",
-       "results/experiment_np4.h5",
-       "results/experiment_np6.h5"
-   ])
-   pp_multi.plot_strong_scaling()
-   pp_multi.plot_communication_overhead()
+   print(f"Converged: {result['converged']}")
+   print(f"Iterations: {result['iterations']}")
+   print(f"L2 Error: {result['final_error']}")
 
 Data Flow & Rank Symmetry
 --------------------------
@@ -105,14 +97,16 @@ Data Flow & Rank Symmetry
 Simplified Datastructures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Per-Solver (rank 0 only):**
-- :class:`Results` - Convergence info (iterations, converged) 
+**Global (rank 0 only):**
+
+- :class:`GlobalParams` - Runtime parameters (N, omega, tolerance, MPI size, etc.)
+- :class:`GlobalMetrics` - Convergence info (iterations, converged, final_error)
 
 **Per-Rank (all ranks):**
 
-- :class:`Config` - Runtime parameters (N, omega, tolerance, method, MPI size, etc.)
-- :class:`LocalFields` - Local domain arrays (u_local with ghosts, f_local)
-- :class:`Timeseries` - timing arrays with results pr. iteration (compute_time, mpi_comm_time, halo_exchange_time)
+- :class:`LocalParams` - Rank-specific parameters (N_local, coordinates, kernel config)
+- :class:`LocalFields` - Local domain arrays with halo zones (u1, u2, f)
+- :class:`LocalSeries` - Per-iteration timing arrays (compute_times, halo_exchange_times, residual_history)
 
 Parallel I/O Strategy
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -181,8 +175,8 @@ Decomposition Strategies
    :template: class.rst
 
    NoDecomposition
-   SlicedDecomposition
-   CubicDecomposition
+   DomainDecomposition
+   RankInfo
 
 Communication Strategies
 ------------------------
@@ -191,59 +185,61 @@ Communication Strategies
    :toctree: generated
    :template: class.rst
 
-   NumpyCommunicator
-   CustomMPICommunicator
+   NumpyHaloExchange
+   CustomHaloExchange
 
 .. _data-structures:
 
 Data Structures
 ===============
 
-Configuration
--------------
+Global Configuration & Metrics
+------------------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   Config
+   GlobalParams
+   GlobalMetrics
 
-**Stores:** N, omega, tolerance, max_iter, use_numba, method, num_threads, mpi_size
+**GlobalParams:** N, omega, tolerance, max_iter, mpi_size, decomposition, communicator, use_numba
 
-Fields
-------
+**GlobalMetrics:** iterations, converged, final_error, wall_time, timing breakdown
+
+Local Data Structures
+---------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
+   LocalParams
    LocalFields
+   LocalSeries
 
-**Stores:** Local domain arrays with ghost zones (u1_local, u2_local, f_local)
+**LocalParams:** Rank-specific parameters (N_local, local_start, local_end, kernel config)
 
-Results
--------
+**LocalFields:** Local domain arrays with halo zones (u1, u2, f)
 
-.. autosummary::
-   :toctree: generated
-   :template: class.rst
+**LocalSeries:** Per-iteration timing arrays (compute_times, mpi_comm_times, halo_exchange_times, residual_history)
 
-   Results
-
-**Results:** Convergence information (iterations, converged)
-
-.. **TimingResults:** Per-rank timing summary (compute_time, mpi_comm_time, halo_exchange_time)
-
-Time Series (Optional)
-----------------------
+Kernel Configuration
+--------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   Timeseries
+   KernelParams
+   KernelMetrics
+   KernelSeries
 
-**Stores:** Detailed profiling data (residual_history, compute_times, mpi_comm_times, halo_exchange_times)
+**KernelParams:** N, omega, tolerance, max_iter, numba_threads
+
+**KernelMetrics:** converged, iterations, final_residual, total_compute_time
+
+**KernelSeries:** Per-iteration tracking (residuals, compute_times, physical_errors)
 
 Solver I/O
 ==========
@@ -263,46 +259,23 @@ The solver writes complete simulation state to HDF5:
 - ✅ **Scalable**: No gather-to-rank-0 bottleneck
 - ✅ **Self-contained**: Everything needed to reproduce or analyze the run
 
-Post-Processing
-===============
+Subprocess Runner
+=================
 
 .. autosummary::
    :toctree: generated
-   :template: class.rst
 
-   PostProcessor
+   run_solver
 
-The :class:`PostProcessor` class handles analysis, aggregation, and export of simulation results.
-
-**Key Methods:**
+The :func:`run_solver` function provides a high-level API for running the solver via MPI subprocess:
 
 .. code-block:: python
 
-   from Poisson import PostProcessor
+   from Poisson import run_solver
 
-   pp = PostProcessor("results/experiment.h5")
-
-   # Aggregate per-rank data
-   timings = pp.aggregate_timings()        # Sum across all ranks
-   metadata = pp.get_config()              # Extract configuration
-   convergence = pp.get_convergence()      # Get iterations, error, etc.
-
-   # Export to different formats
-   pp.to_parquet("analysis/metrics.parquet")  # For pandas analysis
-   pp.log_to_mlflow("experiment-name")        # For experiment tracking
-
-   # Visualization
-   pp.plot_residual_convergence()
-   pp.plot_per_rank_breakdown()
-
-   # Multi-run analysis
-   pp_multi = PostProcessor([
-       "results/run_np2.h5",
-       "results/run_np4.h5",
-       "results/run_np6.h5"
-   ])
-   pp_multi.plot_strong_scaling()
-   pp_multi.to_dataframe()  # All runs as single DataFrame
+   # Run with 4 MPI ranks
+   result = run_solver(N=64, n_ranks=4, strategy="sliced", communicator="numpy")
+   print(f"Converged: {result['converged']}, Iterations: {result['iterations']}")
 
 
 Computational Kernels

@@ -2,6 +2,11 @@
 
 import os
 import sys
+import pyvista
+
+# Enable PyVista plotting in Sphinx-Gallery
+pyvista.BUILDING_GALLERY = True
+pyvista.OFF_SCREEN = True
 
 # Add src directory to path for module imports
 src_path = os.path.abspath(os.path.join(__file__, "..", "..", "..", "src"))
@@ -70,7 +75,8 @@ sphinx_gallery_conf = {
     "download_all_examples": False,  # No download buttons
     "remove_config_comments": True,  # Clean up notebook outputs
     "abort_on_example_error": False,  # Continue if examples fail
-    "plot_gallery": False,  # Disable plot execution for now - TODO: fix plot scripts
+    "plot_gallery": True,
+    "image_scrapers": ("matplotlib", "pyvista"),  # Capture both matplotlib and pyvista plots
     "capture_repr": ("_repr_html_", "__repr__"),  # Capture output representations
     "matplotlib_animations": True,  # Support matplotlib animations
     # Remove Jupyter cell markers (# %%) from rendered output

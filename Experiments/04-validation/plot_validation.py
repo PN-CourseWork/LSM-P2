@@ -9,11 +9,13 @@ Verifies O(h²) = O(N⁻²) convergence by comparing numerical solutions
 against the analytical solution u(x,y,z) = sin(πx)sin(πy)sin(πz).
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import pyvista as pv
-from pathlib import Path
+
+from Poisson import get_project_root
 
 # ============================================================================
 # Setup
@@ -25,8 +27,8 @@ sns.set_style()
 # PyVista setup
 pv.set_plot_theme("paraview")
 
-# Get paths
-repo_root = Path(__file__).resolve().parent.parent.parent
+# Get paths using installed package utility (works in Sphinx-Gallery)
+repo_root = get_project_root()
 data_dir = repo_root / "data" / "validation"
 fig_dir = repo_root / "figures" / "validation"
 fig_dir.mkdir(parents=True, exist_ok=True)
@@ -34,54 +36,51 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # ============================================================================
 # Part 1: Convergence Analysis
 # ============================================================================
-# Load validation data
-parquet_files = list(data_dir.glob("validation_*.parquet"))
-if not parquet_files:
-    print(f"No data found in {data_dir}")
-    print("Run compute_validation.py first!")
-    exit(1)
+# Load validation data from HDF5 files
+h5_files = list(data_dir.glob("*.h5"))
+if not h5_files:
+    raise FileNotFoundError(f"No data found in {data_dir}. Run compute_validation.py first.")
 
-dfs = [pd.read_parquet(f) for f in parquet_files]
-df = pd.concat(dfs, ignore_index=True)
+df = pd.concat([pd.read_hdf(f, key='results') for f in h5_files], ignore_index=True)
 
 print(f"\nLoaded {len(df)} validation results")
-print(f"Strategies: {df['strategy'].unique()}")
+print(f"Strategies: {df['decomposition'].unique()}")
 print(f"Problem sizes: {sorted(df['N'].unique())}")
 
 # Create labels for plotting
-df['Strategy'] = df['strategy'].str.capitalize()
-df['Communicator'] = df['communicator'].str.capitalize()
-df['Ranks'] = df['size']
+df['Strategy'] = df['decomposition'].str.capitalize()
+df['Communicator'] = df['communicator'].str.replace('haloexchange', '').str.replace('custom', 'Custom').str.replace('numpy', 'NumPy')
+df['Method'] = df['Strategy'] + ' + ' + df['Communicator']
 
-# Use seaborn relplot with rank count in columns
-g = sns.relplot(
+# Use lineplot (single rank count = 8)
+fig, ax = plt.subplots(figsize=(8, 6))
+
+sns.lineplot(
     data=df,
     x='N',
-    y='error',
-    hue='Strategy',
-    style='Communicator',
-    col='Ranks', kind='line',
+    y='final_error',
+    hue='Method',
+    style='Method',
     markers=True,
     dashes=True,
-    facet_kws={'sharey': True},
+    ax=ax,
 )
 
-# Add O(N^-2) reference line and set log scales
-for ax in g.axes.flat:
-    N_ref = [16, 64]
-    ax.plot(N_ref, [0.02, 0.02 * (16/64)**2], 'k:', alpha=0.5, label=r'$O(N^{-2})$')
-    ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.grid(True, alpha=0.3)
+# Add O(N^-2) reference line
+N_ref = [16, 64]
+ax.plot(N_ref, [0.02, 0.02 * (16/64)**2], 'k:', alpha=0.5, label=r'$O(N^{-2})$')
 
-# Set labels and build legend with reference line
-g.set_axis_labels(r'Grid Size N', 'L2 Error')
-g.figure.suptitle(r'Spatial Convergence: Solver Validation', y=1.02)
-handles, labels = g.axes.flat[0].get_legend_handles_labels()
-g.figure.legend(handles, labels, loc='center right', bbox_to_anchor=(1.15, 0.5))
+ax.set_xscale('log')
+ax.set_yscale('log')
+ax.grid(True, alpha=0.3)
+ax.set_xlabel('Grid Size N')
+ax.set_ylabel('L2 Error')
+ax.set_title('Spatial Convergence: Solver Validation')
+ax.legend()
 
+fig.tight_layout()
 output_file = fig_dir / "validation_convergence.pdf"
-g.savefig(output_file)
+fig.savefig(output_file)
 
 # ============================================================================
 # Part 2: 3D Solution Visualization
@@ -153,9 +152,10 @@ plotter.show_bounds(
     all_edges=True
 )
 
-# Save with transparent background
+# Show the plot (Sphinx-Gallery scraper will capture it)
+# Also save a copy to figures directory
 output_file = fig_dir / "solution_3d.png"
 plotter.screenshot(output_file, transparent_background=True)
 print(f"Saved: {output_file}")
-plotter.close()
+plotter.show()
 

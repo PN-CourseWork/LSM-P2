@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 9 files **from all galleries**:
+**00:05.720** total execution time for 8 files **from all galleries**:
 
 .. container::
 
@@ -32,30 +32,27 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_example_gallery_01-kernels_compute_all.py` (``../../Experiments/01-kernels/compute_all.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_example_gallery_01-kernels_plot_kernels.py` (``../../Experiments/01-kernels/plot_kernels.py``)
-     - 00:00.000
+     - 00:02.639
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_04-validation_plot_validation.py` (``../../Experiments/04-validation/plot_validation.py``)
+     - 00:01.353
      - 0.0
    * - :ref:`sphx_glr_example_gallery_02-decomposition_plot_decompositions.py` (``../../Experiments/02-decomposition/plot_decompositions.py``)
+     - 00:01.044
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_03-communication_plot_communication.py` (``../../Experiments/03-communication/plot_communication.py``)
+     - 00:00.685
+     - 0.0
+   * - :ref:`sphx_glr_example_gallery_01-kernels_compute_all.py` (``../../Experiments/01-kernels/compute_all.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_example_gallery_03-communication_compute_communication.py` (``../../Experiments/03-communication/compute_communication.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_03-communication_plot_communication.py` (``../../Experiments/03-communication/plot_communication.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_03-communication_run_all.py` (``../../Experiments/03-communication/run_all.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_example_gallery_04-validation_compute_validation.py` (``../../Experiments/04-validation/compute_validation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_04-validation_plot_validation.py` (``../../Experiments/04-validation/plot_validation.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_example_gallery_04-validation_run_all.py` (``../../Experiments/04-validation/run_all.py``)
+   * - :ref:`sphx_glr_example_gallery_05-scaling_sweep.py` (``../../Experiments/05-scaling/sweep.py``)
      - 00:00.000
      - 0.0

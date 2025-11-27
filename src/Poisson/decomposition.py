@@ -18,15 +18,15 @@ class RankInfo:
     global_start: tuple[int, int, int]  # (i, j, k) in global grid
     global_end: tuple[int, int, int]    # (i, j, k) exclusive
 
-    # Ghost zones
-    ghosted_shape: tuple[int, int, int]  # Shape including ghosts
+    # Halo zones
+    halo_shape: tuple[int, int, int]  # Shape including halos
 
     # Neighbors (None if at boundary)
     neighbors: dict  # Key: direction ('x_lower', etc), Value: rank or None
 
     # Communication metadata
     n_neighbors: int
-    ghost_cells_total: int
+    halo_cells_total: int
 
 
 class DomainDecomposition:
@@ -53,10 +53,16 @@ class DomainDecomposition:
     ...     print(f"Rank {rank}: {info.local_shape}")
     """
 
-    def __init__(self, N, size, strategy='sliced'):
+    def __init__(self, N, size, strategy='sliced', axis='z'):
         self.N = N
         self.size = size
         self.strategy = strategy
+
+        # Normalize axis to integer (0=z, 1=y, 2=x in ZYX ordering)
+        axis_map = {'z': 0, 'y': 1, 'x': 2, 0: 0, 1: 1, 2: 2}
+        if axis not in axis_map:
+            raise ValueError(f"Invalid axis: {axis}. Use 'x', 'y', 'z' or 0, 1, 2")
+        self.axis = axis_map[axis]
 
         # Decompose domain
         if strategy == 'sliced':
@@ -100,53 +106,63 @@ class DomainDecomposition:
     # =========================================================================
 
     def _decompose_sliced(self):
-        """Decompose domain with 1D slicing along Z-axis."""
+        """Decompose domain with 1D slicing along configurable axis."""
         interior_N = self.N - 2
+        axis = self.axis  # 0=z, 1=y, 2=x
+        axis_names = ['z', 'y', 'x']
+        axis_name = axis_names[axis]
 
-        # Compute decomposition for all ranks
         self._rank_info = []
 
         for rank in range(self.size):
-            # Compute local size in Z direction
+            # Compute local size along decomposition axis
             base_size, remainder = divmod(interior_N, self.size)
-            local_nz = base_size + (1 if rank < remainder else 0)
+            local_n = base_size + (1 if rank < remainder else 0)
 
-            # Compute Z start/end indices
+            # Compute start/end indices along decomposition axis
             if rank < remainder:
-                z_start = rank * (base_size + 1) + 1
+                start = rank * (base_size + 1) + 1
             else:
-                z_start = remainder * (base_size + 1) + (rank - remainder) * base_size + 1
-            z_end = z_start + local_nz
+                start = remainder * (base_size + 1) + (rank - remainder) * base_size + 1
+            end = start + local_n
 
-            # Local shape (interior)
-            local_shape = (local_nz, self.N, self.N)
+            # Build shape tuples based on axis (ZYX ordering)
+            full_shape = [self.N, self.N, self.N]
+            full_shape[axis] = local_n
+            local_shape = tuple(full_shape)
 
-            # Ghosted shape
-            ghosted_shape = (local_nz + 2, self.N, self.N)
+            halo = [self.N, self.N, self.N]
+            halo[axis] = local_n + 2
+            halo_shape = tuple(halo)
 
-            # Global extent
-            global_start = (z_start, 0, 0)
-            global_end = (z_end, self.N, self.N)
+            gs = [0, 0, 0]
+            gs[axis] = start
+            global_start = tuple(gs)
 
-            # Neighbors (only Z direction for sliced)
+            ge = [self.N, self.N, self.N]
+            ge[axis] = end
+            global_end = tuple(ge)
+
+            # Neighbors along decomposition axis only
             neighbors = {}
-            neighbors['z_lower'] = rank - 1 if rank > 0 else None
-            neighbors['z_upper'] = rank + 1 if rank < self.size - 1 else None
+            neighbors[f'{axis_name}_lower'] = rank - 1 if rank > 0 else None
+            neighbors[f'{axis_name}_upper'] = rank + 1 if rank < self.size - 1 else None
 
             n_neighbors = sum(1 for n in neighbors.values() if n is not None)
 
-            # Ghost cells: 2 full XY planes per neighbor
-            ghost_cells_total = n_neighbors * self.N * self.N
+            # Halo cells: 2 full planes per neighbor (plane size = product of non-decomposed dims)
+            plane_size = self.N * self.N
+            halo_cells_total = n_neighbors * plane_size
 
             info = RankInfo(
                 rank=rank,
                 local_shape=local_shape,
                 global_start=global_start,
                 global_end=global_end,
-                ghosted_shape=ghosted_shape,
+                halo_shape=halo_shape,
                 neighbors=neighbors,
                 n_neighbors=n_neighbors,
-                ghost_cells_total=ghost_cells_total
+                halo_cells_total=halo_cells_total
             )
             self._rank_info.append(info)
 
@@ -202,8 +218,8 @@ class DomainDecomposition:
 
             # local_shape is portion of full domain (Z, Y, X)
             local_shape = (local_nz, local_ny, local_nx)
-            # Ghosted: +2 in each dimension for halo exchange
-            ghosted_shape = (local_nz + 2, local_ny + 2, local_nx + 2)
+            # halo_shape: +2 in each dimension for halo exchange
+            halo_shape = (local_nz + 2, local_ny + 2, local_nx + 2)
 
             # Global start/end (0-based in full N grid)
             global_start = (z0, y0, x0)
@@ -221,23 +237,23 @@ class DomainDecomposition:
             n_neighbors = sum(1 for n in neighbors.values() if n is not None)
 
             nz, ny, nx = local_shape
-            ghost_cells = 0
+            halo_cells = 0
             if neighbors['x_lower'] is not None or neighbors['x_upper'] is not None:
-                ghost_cells += 2 * nz * ny
+                halo_cells += 2 * nz * ny
             if neighbors['y_lower'] is not None or neighbors['y_upper'] is not None:
-                ghost_cells += 2 * nz * nx
+                halo_cells += 2 * nz * nx
             if neighbors['z_lower'] is not None or neighbors['z_upper'] is not None:
-                ghost_cells += 2 * ny * nx
+                halo_cells += 2 * ny * nx
 
             info = RankInfo(
                 rank=rank,
                 local_shape=local_shape,
                 global_start=global_start,
                 global_end=global_end,
-                ghosted_shape=ghosted_shape,
+                halo_shape=halo_shape,
                 neighbors=neighbors,
                 n_neighbors=n_neighbors,
-                ghost_cells_total=ghost_cells
+                halo_cells_total=halo_cells
             )
             self._rank_info.append(info)
 
@@ -274,7 +290,7 @@ class DomainDecomposition:
     # =========================================================================
 
     def initialize_local_arrays_distributed(self, N, rank, comm):
-        """Initialize local arrays with ghost zones for this rank.
+        """Initialize local arrays with halo zones for this rank.
 
         Parameters
         ----------
@@ -288,10 +304,10 @@ class DomainDecomposition:
         Returns
         -------
         tuple
-            (u1, u2, f) local arrays with ghost zones
+            (u1, u2, f) local arrays with halo zones
         """
         info = self.get_rank_info(rank)
-        shape = info.ghosted_shape
+        shape = info.halo_shape
 
         u1 = np.zeros(shape, dtype=np.float64)
         u2 = np.zeros(shape, dtype=np.float64)
@@ -301,18 +317,29 @@ class DomainDecomposition:
         h = 2.0 / (N - 1)
 
         if self.strategy == 'sliced':
-            # Sliced: (nz, N, N) - only z decomposed
+            # Sliced: one axis decomposed, others full
             gs = info.global_start
-            nz_local = info.local_shape[0]
+            axis = self.axis  # 0=z, 1=y, 2=x
 
-            # Global z indices for this rank's interior
-            z_indices = np.arange(gs[0], gs[0] + nz_local)
-            zs = -1.0 + z_indices * h
-            ys = np.linspace(-1, 1, N)
-            xs = np.linspace(-1, 1, N)
+            # Build coordinate arrays for each dimension
+            coords = []
+            for dim in range(3):
+                if dim == axis:
+                    # Decomposed axis: local portion only
+                    local_n = info.local_shape[dim]
+                    indices = np.arange(gs[dim], gs[dim] + local_n)
+                    coords.append(-1.0 + indices * h)
+                else:
+                    # Full axis
+                    coords.append(np.linspace(-1, 1, N))
 
-            Z, Y, X = np.meshgrid(zs, ys, xs, indexing='ij')
-            f_local[1:-1, :, :] = 3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
+            Z, Y, X = np.meshgrid(coords[0], coords[1], coords[2], indexing='ij')
+            source = 3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
+
+            # Build interior slice (skip halo on decomposed axis only)
+            interior = [slice(None), slice(None), slice(None)]
+            interior[axis] = slice(1, -1)
+            f_local[tuple(interior)] = source
         else:
             # Cubic: (nz, ny, nx) - all dims decomposed
             # global_start is (z0, y0, x0) - 0-based indices in full N grid
@@ -339,9 +366,11 @@ class DomainDecomposition:
         return u1, u2, f_local
 
     def extract_interior(self, u_local):
-        """Extract interior points from local array (excluding ghosts)."""
+        """Extract interior points from local array (excluding halos)."""
         if self.strategy == 'sliced':
-            return u_local[1:-1, :, :].copy()
+            interior = [slice(None), slice(None), slice(None)]
+            interior[self.axis] = slice(1, -1)
+            return u_local[tuple(interior)].copy()
         else:
             return u_local[1:-1, 1:-1, 1:-1].copy()
 
@@ -355,7 +384,9 @@ class DomainDecomposition:
         if self.strategy == 'sliced':
             gs = info.global_start
             ge = info.global_end
-            return (slice(gs[0], ge[0]), slice(None), slice(None))
+            slices = [slice(None), slice(None), slice(None)]
+            slices[self.axis] = slice(gs[self.axis], ge[self.axis])
+            return tuple(slices)
         else:
             # Cubic: global_start is already 0-based in full N grid
             gs = info.global_start
@@ -375,7 +406,7 @@ class DomainDecomposition:
         Parameters
         ----------
         u_local : np.ndarray
-            Local array with ghost zones (modified in-place)
+            Local array with halo zones (modified in-place)
         rank : int
             MPI rank
         """
@@ -414,10 +445,29 @@ class DomainDecomposition:
 class NoDecomposition:
     """Stub decomposition for single-rank (sequential) execution."""
 
+    def __init__(self):
+        self.strategy = 'none'
+        self._N = None
+
+    def get_rank_info(self, rank):
+        """Return info for single-rank execution."""
+        N = self._N or 1
+        return RankInfo(
+            rank=0,
+            local_shape=(N-2, N-2, N-2),  # Interior only
+            global_start=(1, 1, 1),
+            global_end=(N-1, N-1, N-1),
+            halo_shape=(N, N, N),
+            neighbors={},
+            n_neighbors=0,
+            halo_cells_total=0
+        )
+
     def initialize_local_arrays_distributed(self, N, rank, comm):
         """Initialize arrays for single-rank execution."""
         from .problems import sinusoidal_source_term
 
+        self._N = N
         if rank == 0:
             u1 = np.zeros((N, N, N), dtype=np.float64)
             u2 = np.zeros((N, N, N), dtype=np.float64)
