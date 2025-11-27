@@ -465,7 +465,7 @@ class NoDecomposition:
 
     def initialize_local_arrays_distributed(self, N, rank, comm):
         """Initialize arrays for single-rank execution."""
-        from .problems import sinusoidal_source_term
+        from ..problems import sinusoidal_source_term
 
         self._N = N
         if rank == 0:

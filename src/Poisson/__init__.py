@@ -13,11 +13,10 @@ from .datastructures import (
     KernelSeries,
 )
 from .kernels import NumPyKernel, NumbaKernel
-from .jacobi import JacobiPoisson
-from .decomposition import DomainDecomposition, RankInfo, NoDecomposition
-from .communicators import NumpyHaloExchange, CustomHaloExchange
+from .solver import JacobiPoisson
+from .mpi import DomainDecomposition, RankInfo, NoDecomposition, NumpyHaloExchange, CustomHaloExchange
 from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
-from .runner import run_solver
+from .helpers import run_solver
 
 __all__ = [
     # Data structures - Kernel

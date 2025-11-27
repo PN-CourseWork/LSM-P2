@@ -35,7 +35,7 @@ def run_solver(N: int, n_ranks: int = 1, output: str = None, **kwargs) -> dict:
         tmp.close()
 
     config = {"N": N, "output": output, **kwargs}
-    cmd = ["mpiexec", "-n", str(n_ranks), "uv", "run", "python", "-m", "Poisson.runner_helper", json.dumps(config)]
+    cmd = ["mpiexec", "-n", str(n_ranks), "uv", "run", "python", "-m", "Poisson.helpers.runner_helper", json.dumps(config)]
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
 

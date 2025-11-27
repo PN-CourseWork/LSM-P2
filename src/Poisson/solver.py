@@ -13,8 +13,8 @@ import mlflow
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import GlobalParams, GlobalMetrics, LocalSeries
-from .communicators import NumpyHaloExchange
-from .decomposition import NoDecomposition
+from .mpi.communicators import NumpyHaloExchange
+from .mpi.decomposition import NoDecomposition
 
 
 def _get_strategy_name(obj):
