@@ -1,4 +1,4 @@
-"""MPI worker - invoked via: mpiexec -n X uv run python -m Poisson.runner_helper '{config}'"""
+"""MPI worker - invoked via: mpiexec -n X uv run python -m Poisson.helpers.runner_helper '{config}'"""
 
 import sys
 import json
