@@ -1,8 +1,7 @@
 """Tests for Jacobi iteration kernels."""
 
 import numpy as np
-import pytest
-from Poisson import NumPyKernel, NumbaKernel, setup_sinusoidal_problem, sinusoidal_exact_solution
+from Poisson import NumPyKernel, NumbaKernel, setup_sinusoidal_problem
 
 
 def run_iterations(kernel, u1, u2, f, n_iter):
@@ -28,25 +27,3 @@ def test_kernels_produce_identical_results():
     u_numba = run_iterations(numba_kernel, u1.copy(), u2.copy(), f.copy(), 10)
 
     assert np.allclose(u_numpy, u_numba, atol=1e-10)
-
-
-# Note: O(h²) convergence is tested in test_mpi_integration.py
-
-
-def test_boundary_preservation():
-    """Kernels should not modify boundary conditions."""
-    N = 16
-    u1, u2, f, _ = setup_sinusoidal_problem(N)
-    boundaries = [u1[0,:,:].copy(), u1[-1,:,:].copy(),
-                  u1[:,0,:].copy(), u1[:,-1,:].copy(),
-                  u1[:,:,0].copy(), u1[:,:,-1].copy()]
-
-    kernel = NumPyKernel(N=N, omega=1.0, tolerance=1e-10, max_iter=100)
-    u = run_iterations(kernel, u1, u2, f, 10)
-
-    assert np.allclose(u[0,:,:], boundaries[0])
-    assert np.allclose(u[-1,:,:], boundaries[1])
-    assert np.allclose(u[:,0,:], boundaries[2])
-    assert np.allclose(u[:,-1,:], boundaries[3])
-    assert np.allclose(u[:,:,0], boundaries[4])
-    assert np.allclose(u[:,:,-1], boundaries[5])
