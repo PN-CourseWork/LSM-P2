@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import GlobalParams, GlobalMetrics, LocalSeries
-from .mpi.communicators import NumpyHaloExchange
+from .mpi.communicators import NumpyHaloExchange, CustomHaloExchange
 from .mpi.decomposition import DomainDecomposition, NoDecomposition
 from .multigrid_operators import restrict, prolong
 
@@ -37,7 +37,16 @@ class GridLevel:
 class MultigridPoisson:
     """Multigrid V-Cycle Solver."""
 
-    def __init__(self, levels: int = 3, pre_smooth: int = 2, post_smooth: int = 2, decomposition_strategy: str = 'cubic', **kwargs):
+    def __init__(
+        self,
+        levels: Optional[int] = None,
+        min_coarse_size: int = 9,
+        pre_smooth: int = 2,
+        post_smooth: int = 2,
+        decomposition_strategy: str = 'sliced',
+        communicator: Optional[object] = None,
+        **kwargs,
+    ):
         """
         Initialize Multigrid Solver.
         
@@ -55,21 +64,91 @@ class MultigridPoisson:
             Configuration passed to GlobalParams (N, omega, etc.)
         """
         self.config = GlobalParams(**kwargs)
-        self.levels = levels
-        self.pre_smooth = pre_smooth
-        self.post_smooth = post_smooth
-        self.decomposition_strategy = decomposition_strategy
-        
+        # MPI setup
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
-        
+        self.decomposition_strategy = decomposition_strategy
+        self.config.mpi_size = self.size
+
+        self.min_coarse_size = max(min_coarse_size, 3)
+
+        # Determine number of levels automatically if not provided
+        self.levels = levels if levels is not None else self._infer_levels(self.config.N)
+        self.pre_smooth = pre_smooth
+        self.post_smooth = post_smooth
+
+        if self.size > 1 and self.decomposition_strategy != "sliced":
+            raise ValueError("Multigrid currently supports only sliced decomposition for MPI.")
+
+        # Communicator selection (numpy or custom)
+        if isinstance(communicator, str):
+            if communicator == "custom":
+                self.communicator = CustomHaloExchange()
+            elif communicator in (None, "numpy"):
+                self.communicator = NumpyHaloExchange()
+            else:
+                raise ValueError(f"Unknown communicator: {communicator}")
+        elif communicator is None:
+            self.communicator = NumpyHaloExchange()
+        else:
+            self.communicator = communicator
+
+        # Record metadata for outputs
+        self.config.decomposition = "sliced" if self.size > 1 else "none"
+        self.config.communicator = self.communicator.__class__.__name__.lower()
+
+        # Timing accumulators
+        self._time_compute = 0.0
+        self._time_halo = 0.0
+        self._time_mpi = 0.0
+
         self.results = GlobalMetrics() # Add this line
         self.timeseries = LocalSeries() # Add this line for top-level timing if needed for compatibility
         
         # Initialize Grid Hierarchy
         self.grid_levels: List[GridLevel] = []
         self._setup_hierarchy()
+
+    def _infer_levels(self, N: int) -> int:
+        """
+        Infer the number of grid levels by coarsening until the grid is 3x3x3.
+
+        Returns the total number of levels including the finest and coarsest.
+        """
+        if N < 3:
+            raise ValueError("Grid size must be at least 3.")
+
+        if self.size > 1 and (N - 2) < self.size:
+            raise ValueError(
+                f"Grid N={N} too small for {self.size} ranks with sliced decomposition."
+            )
+
+        levels = 1  # count the finest grid
+        N_current = N
+
+        while True:
+            if (N_current - 1) % 2 != 0:
+                raise ValueError(
+                    f"Grid size N={N_current} is not compatible with Multigrid (N-1 must be divisible by 2)."
+                )
+
+            N_next = (N_current - 1) // 2 + 1
+
+            # Stop if next level would be too small for the current MPI size
+            if self.size > 1 and (N_next - 2) < self.size:
+                break
+
+            if N_next < self.min_coarse_size:
+                break
+
+            levels += 1
+            N_current = N_next
+
+            if N_current == 3:
+                break
+
+        return levels
 
     def _setup_hierarchy(self):
         """Allocate arrays and setup solvers for all levels."""
@@ -84,7 +163,7 @@ class MultigridPoisson:
             h = 2.0 / (N_current - 1)
             
             if self.size > 1:
-                decomp = DomainDecomposition(N=N_current, size=self.size, strategy=self.decomposition_strategy) 
+                decomp = DomainDecomposition(N=N_current, size=self.size, strategy="sliced") 
             else:
                 decomp = NoDecomposition()
                 
@@ -99,7 +178,7 @@ class MultigridPoisson:
                 numba_threads=None
             )
             
-            communicator = NumpyHaloExchange()
+            communicator = self.communicator
             
             level_obj = GridLevel(
                 level_index=l,
@@ -122,6 +201,11 @@ class MultigridPoisson:
 
     def solve(self):
         """Execute V-Cycles until convergence."""
+        # Reset timers
+        self._time_compute = 0.0
+        self._time_halo = 0.0
+        self._time_mpi = 0.0
+
         t_start_solve = MPI.Wtime()
         
         fine_lvl = self.grid_levels[0]
@@ -156,11 +240,16 @@ class MultigridPoisson:
             self.results.iterations = self.config.max_iter
 
         self.results.wall_time = MPI.Wtime() - t_start_solve
+        self.results.total_compute_time = self._time_compute
+        self.results.total_halo_time = self._time_halo
+        self.results.total_mpi_comm_time = self._time_mpi
         
     def _get_global_residual_norm(self, r_array: np.ndarray) -> float:
         """Helper to compute global RMS norm of residual (matching JacobiPoisson)."""
         local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1]**2)
+        t0 = MPI.Wtime()
         global_res_sq_sum = self.comm.allreduce(local_res_sq, op=MPI.SUM)
+        self._time_mpi += MPI.Wtime() - t0
         
         N_fine_interior_points = (self.grid_levels[0].N - 2) ** 3
         # JacobiPoisson divides by N_interior_points (not 1.5 power).
@@ -185,19 +274,28 @@ class MultigridPoisson:
         else:
             current_residual_norm = 0.0 # Not needed for coarse levels
         
-        # Base Case: Coarsest Level
+        # Base Case: Coarsest Level - solve with Jacobi until tolerance
         if level_idx == self.levels - 1:
-            for _ in range(self.pre_smooth + self.post_smooth + 5):
+            current_residual_norm = float("inf")
+            for _ in range(self.config.max_iter):
                 self._smooth(lvl)
+                self._compute_residual(lvl)
+                current_residual_norm = self._get_global_residual_norm(lvl.r)
+                if current_residual_norm < self.config.tolerance:
+                    break
             return current_residual_norm
 
         # 3. Restriction: f_coarse = R(r_fine)
         next_lvl = self.grid_levels[level_idx + 1]
         
-        # DEBUG: Disable halo exchange for restrict
-        # lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm)
-        
+        # Ensure residual halos are up to date before restriction
+        t0 = MPI.Wtime()
+        lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm)
+        self._time_halo += MPI.Wtime() - t0
+
+        t0 = MPI.Wtime()
         restrict(lvl.r, next_lvl.f)
+        self._time_compute += MPI.Wtime() - t0
         
         next_lvl.u[:] = 0.0
         
@@ -206,11 +304,15 @@ class MultigridPoisson:
         
         # 5. Prolongation: u_fine += P(u_coarse_correction)
         
-        # DEBUG: Disable halo exchange for prolong
-        # next_lvl.communicator.exchange_halos(next_lvl.u, next_lvl.decomposition, self.rank, self.comm)
+        # Refresh coarse halos before prolongation
+        t0 = MPI.Wtime()
+        next_lvl.communicator.exchange_halos(next_lvl.u, next_lvl.decomposition, self.rank, self.comm)
+        self._time_halo += MPI.Wtime() - t0
         
         lvl.r[:] = 0.0
+        t0 = MPI.Wtime()
         prolong(next_lvl.u, lvl.r)
+        self._time_compute += MPI.Wtime() - t0
         
         lvl.u[1:-1, 1:-1, 1:-1] += lvl.r[1:-1, 1:-1, 1:-1]
         
@@ -222,11 +324,14 @@ class MultigridPoisson:
 
     def _smooth(self, lvl: GridLevel):
         """Perform one Jacobi smoothing step."""
-        # DEBUG: Temporarily disable halo exchange
-        # lvl.communicator.exchange_halos(lvl.u, lvl.decomposition, self.rank, self.comm)
+        t0 = MPI.Wtime()
+        lvl.communicator.exchange_halos(lvl.u, lvl.decomposition, self.rank, self.comm)
+        self._time_halo += MPI.Wtime() - t0
         
+        t0 = MPI.Wtime()
         lvl.kernel.step(lvl.u, lvl.u_temp, lvl.f)
         lvl.decomposition.apply_boundary_conditions(lvl.u_temp, self.rank)
+        self._time_compute += MPI.Wtime() - t0
         lvl.u, lvl.u_temp = lvl.u_temp, lvl.u
 
     def _compute_residual(self, lvl: GridLevel):
@@ -236,8 +341,9 @@ class MultigridPoisson:
         r = lvl.r
         h2 = lvl.h * lvl.h
         
-        # DEBUG: Temporarily disable halo exchange
-        # lvl.communicator.exchange_halos(u, lvl.decomposition, self.rank, self.comm)
+        t0 = MPI.Wtime()
+        lvl.communicator.exchange_halos(u, lvl.decomposition, self.rank, self.comm)
+        self._time_halo += MPI.Wtime() - t0
         
         u_center = u[1:-1, 1:-1, 1:-1]
         u_neighbors = (
@@ -246,8 +352,10 @@ class MultigridPoisson:
             u[1:-1, 1:-1, 0:-2] + u[1:-1, 1:-1, 2:]
         )
         
+        t0 = MPI.Wtime()
         laplacian_u = (u_neighbors - 6.0 * u_center) / h2
         r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian_u
+        self._time_compute += MPI.Wtime() - t0
         
     # ========================================================================
     # Validation
@@ -311,7 +419,9 @@ class MultigridPoisson:
         local_sq_error = np.sum((u_numerical - u_exact) ** 2)
 
         # Global reduction
+        t0 = MPI.Wtime()
         global_sq_error = self.comm.allreduce(local_sq_error, op=MPI.SUM)
+        self._time_mpi += MPI.Wtime() - t0
         l2_error = float(np.sqrt(h**3 * global_sq_error))
 
         if self.rank == 0:
