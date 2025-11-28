@@ -195,6 +195,10 @@ def build_docs():
 
     print("\nBuilding Sphinx documentation...")
 
+    if not source_dir.exists():
+        print(f"  Error: Documentation source directory not found: {source_dir}")
+        return False
+
     try:
         result = subprocess.run(
             [
@@ -231,6 +235,62 @@ def build_docs():
     except Exception as e:
         print(f"  ✗ Documentation build failed: {e}")
         return False
+
+
+def hpc_submit_pack(scaling_type: str, dry_run: bool):
+    """Generate and optionally submit an LSF job pack."""
+    print(f"\nGenerating {scaling_type} scaling job pack...")
+
+    pack_file_name = f"Experiments/05-scaling/{scaling_type}_scaling_jobs.pack"
+    pack_file_path = REPO_ROOT / pack_file_name
+
+    # Generate the pack file
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        str(REPO_ROOT / "Experiments" / "05-scaling" / "generate_pack.py"),
+        "--type",
+        scaling_type,
+        "--output",
+        str(pack_file_path),
+    ]
+    # Use standard N values for strong scaling if not specified in generate_pack default
+    if scaling_type == "strong":
+        # Hardcoded defaults for project consistency
+        cmd.extend(["--N", "64", "128", "256"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to generate pack file: {result.stderr}")
+        return
+    print(f"  ✓ {result.stdout.strip()}")
+
+    if dry_run:
+        print(f"\n[DRY RUN] Content of {pack_file_name}:")
+        print("-" * 40)
+        print(pack_file_path.read_text())
+        print("-" * 40)
+        print(
+            f"  To submit manually: bsub -pack {pack_file_name}"
+        )
+        return
+
+    # Submit the pack file
+    print(f"\nSubmitting {pack_file_path} to LSF...")
+    submit_cmd = [
+        str(REPO_ROOT / "Experiments" / "05-scaling" / "submit_pack.sh"),
+        str(pack_file_path),
+    ]
+    result = subprocess.run(
+        submit_cmd, capture_output=True, text=True, cwd=str(REPO_ROOT)
+    )
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to submit jobs: {result.stderr}")
+    else:
+        print(f"  ✓ {result.stdout.strip()}")
 
 
 def clean_all():
@@ -361,29 +421,44 @@ Examples:
   python main.py --plot                        Run all plotting scripts
   python main.py --copy-plots                  Copy plots to plots/ directory
   python main.py --clean                       Clean all generated files
-  python main.py --compute --plot              Run compute then plot scripts
+  python main.py --hpc strong --dry            Generate strong scaling pack (dry run)
         """,
     )
 
-    parser.add_argument(
+    # Action Group
+    actions = parser.add_argument_group("Actions")
+    actions.add_argument(
         "--docs", action="store_true", help="Build Sphinx HTML documentation"
     )
-    parser.add_argument(
+    actions.add_argument(
         "--compute", action="store_true", help="Run all compute scripts (sequentially)"
     )
-    parser.add_argument(
+    actions.add_argument(
         "--plot", action="store_true", help="Run all plotting scripts (in parallel)"
     )
-    parser.add_argument(
+    actions.add_argument(
         "--copy-plots", action="store_true", help="Copy plots to plots/ directory"
     )
-    parser.add_argument(
+    actions.add_argument(
         "--clean", action="store_true", help="Clean all generated files and caches"
     )
-    parser.add_argument(
+    actions.add_argument(
         "--fetch",
         action="store_true",
         help="Fetch artifacts from MLflow for all converged runs",
+    )
+    actions.add_argument(
+        "--hpc",
+        choices=["strong", "weak"],
+        help="Generate and submit LSF job pack for scaling",
+    )
+
+    # Options Group
+    options = parser.add_argument_group("Options")
+    options.add_argument(
+        "--dry",
+        action="store_true",
+        help="Print generated job pack without submitting (for --hpc)",
     )
 
     # Show help if no arguments provided
@@ -409,6 +484,12 @@ Examples:
 
     if args.fetch:
         fetch_mlflow()
+
+    # Handle HPC pack submission
+    if args.hpc:
+        hpc_submit_pack(args.hpc, args.dry)
+
+    # Handle documentation commands
 
     if args.docs:
         build_docs()

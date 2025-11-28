@@ -1,0 +1,51 @@
+### 02616 (2025) - batch script for running MPI bandwidth tests
+#
+#   requires the osu_bw executable
+#
+#   Author: Bernd Dammann, DTU Computing Center <bd@cc.dtu.dk>
+#           July 2025
+###
+#BSUB -J bw_test
+#BSUB -q hpc
+#BSUB -W 5
+#BSUB -n 2
+#BSUB -R "span[ptile=1]"
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -o bw_test_%J.out
+#BSUB -e bw_test_%J.err
+### select this model for a machine with 10 Gbit/s ethernet
+#BSUB -R "select[model = XeonGold6226R]"
+### select this model for a machine with 1 Gbit/s ethernet
+##BSUB -R "select[model = XeonE5_2650v4]"
+
+# get some HW info
+# Infiniband adapter speed
+IBDEV=ib0
+echo -n "$IBDEV"
+/sbin/ethtool $IBDEV 2>/dev/null | grep Speed
+# Ethernet adapter speed
+ETDEV=eth0
+echo -n "$ETDEV"
+/sbin/ethtool $ETDEV 2>/dev/null | grep Speed
+
+# load this specific version of OpenMPI
+module load mpi/5.0.8-gcc-13.4.0-binutils-2.44
+
+# exclude specific network adapters via mpirun options
+# disable the IB adapter
+IFSEL="--mca btl_tcp_if_exclude $IBDEV,lo"
+# disable the Ethernet adapter
+# IFSEL="--mca btl_tcp_if_exclude $ETDEV,lo"
+
+# a "plain run", no restrictions (reference)
+echo
+echo "Using best network (default) - probably IB:"
+mpirun ./osu_bw
+
+# choose specific transport mechanisms in the UCX layer (TCP, shared  memory)
+#
+echo
+echo "Using TCP over ethernet network:"
+export UCX_TLS=tcp,sm
+mpirun ${IFSEL} --mca btl tcp,self ./osu_bw
+
