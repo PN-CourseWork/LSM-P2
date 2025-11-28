@@ -14,7 +14,7 @@ data_dir = repo_root / "data" / "multigrid_fmg"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
-problem_sizes = [65, 129, 257]
+problem_sizes = [65, 129, 257, 513]
 rank_counts = [8]
 communicators = ["numpy", "custom"]
 decompositions = ["sliced", "cubic"]
