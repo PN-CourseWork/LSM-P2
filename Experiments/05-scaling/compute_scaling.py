@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import os
+import sys
 
 from mpi4py import MPI
 
@@ -134,7 +135,6 @@ if rank == 0:
     print(f"\nResults saved to: {output_file}")
     
     # Flush streams to ensure logs on disk are up to date for the external uploader
-    import sys
     sys.stdout.flush()
     sys.stderr.flush()
 

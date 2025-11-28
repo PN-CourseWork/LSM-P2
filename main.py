@@ -249,11 +249,14 @@ def hpc_submit_pack(scaling_type: str, dry_run: bool):
         "uv",
         "run",
         "python",
-        str(REPO_ROOT / "Experiments" / "05-scaling" / "generate_pack.py"),
+        "-m",
+        "src.utils.generate_pack",
         "--type",
         scaling_type,
         "--output",
         str(pack_file_path),
+        "--config-dir",
+        str(REPO_ROOT / "Experiments" / "05-scaling"),
     ]
     # Use standard N values for strong scaling if not specified in generate_pack default
     if scaling_type == "strong":
@@ -279,10 +282,13 @@ def hpc_submit_pack(scaling_type: str, dry_run: bool):
 
     # Submit the pack file
     print(f"\nSubmitting {pack_file_path} to LSF...")
-    submit_cmd = [
-        str(REPO_ROOT / "Experiments" / "05-scaling" / "submit_pack.sh"),
-        str(pack_file_path),
-    ]
+    
+    if not shutil.which("bsub"):
+        print("  ✗ 'bsub' command not found. Are you on the HPC login node?")
+        return
+
+    submit_cmd = ["bsub", "-pack", str(pack_file_path)]
+    
     result = subprocess.run(
         submit_cmd, capture_output=True, text=True, cwd=str(REPO_ROOT)
     )
@@ -290,7 +296,9 @@ def hpc_submit_pack(scaling_type: str, dry_run: bool):
     if result.returncode != 0:
         print(f"  ✗ Failed to submit jobs: {result.stderr}")
     else:
-        print(f"  ✓ {result.stdout.strip()}")
+        print(f"  ✓ Jobs submitted successfully.")
+        if result.stdout:
+            print(f"    {result.stdout.strip()}")
 
 
 def clean_all():
