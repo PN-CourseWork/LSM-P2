@@ -1,5 +1,8 @@
 """
-Solver Validation: Run solver across configurations and save results.
+Solver Validation
+=================
+
+Run solver across configurations and save results.
 """
 
 from Poisson import run_solver, get_project_root

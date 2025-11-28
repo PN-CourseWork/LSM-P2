@@ -500,7 +500,8 @@ Examples:
     # Handle documentation commands
 
     if args.docs:
-        build_docs()
+        if not build_docs():
+            sys.exit(1)
 
 
 if __name__ == "__main__":
