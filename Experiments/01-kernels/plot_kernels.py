@@ -23,8 +23,11 @@ fig_dir = repo_root / "figures" / "kernels"
 fig_dir.mkdir(parents=True, exist_ok=True)
 
 # Check if data exists
-if not data_dir.exists():
-    raise FileNotFoundError(f"Data not found: {data_dir}. Run compute_kernels.py first.")
+if not list(data_dir.glob("*.parquet")):
+    print(f"Data not found: {data_dir}. Run compute_kernels.py first.")
+    # Graceful exit for docs build
+    import sys
+    sys.exit(0)
 
 # %%
 # Plot 1: Convergence Validation
