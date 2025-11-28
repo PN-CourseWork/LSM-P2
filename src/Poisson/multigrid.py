@@ -40,9 +40,9 @@ class MultigridPoisson:
     def __init__(
         self,
         levels: Optional[int] = None,
-        min_coarse_size: int = 9,
-        pre_smooth: int = 2,
-        post_smooth: int = 2,
+        min_coarse_size: int = 3,
+        n_smooth: int = 3,
+        fmg_post_cycles: int = 50,
         decomposition_strategy: str = 'sliced',
         communicator: Optional[object] = None,
         **kwargs,
@@ -75,8 +75,8 @@ class MultigridPoisson:
 
         # Determine number of levels automatically if not provided
         self.levels = levels if levels is not None else self._infer_levels(self.config.N)
-        self.pre_smooth = pre_smooth
-        self.post_smooth = post_smooth
+        self.n_smooth = n_smooth
+        self.fmg_post_cycles = max(0, fmg_post_cycles)
 
         if self.size > 1 and self.decomposition_strategy != "sliced":
             raise ValueError("Multigrid currently supports only sliced decomposition for MPI.")
@@ -245,16 +245,18 @@ class MultigridPoisson:
         self.results.total_mpi_comm_time = self._time_mpi
         
     def _get_global_residual_norm(self, r_array: np.ndarray) -> float:
-        """Helper to compute global RMS norm of residual (matching JacobiPoisson)."""
+        """Helper to compute global RMS norm of residual (matching JacobiPoisson).
+
+        Uses the residual array shape to determine the number of interior points,
+        so coarse levels are normalized appropriately.
+        """
         local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1]**2)
         t0 = MPI.Wtime()
         global_res_sq_sum = self.comm.allreduce(local_res_sq, op=MPI.SUM)
         self._time_mpi += MPI.Wtime() - t0
         
-        N_fine_interior_points = (self.grid_levels[0].N - 2) ** 3
-        # JacobiPoisson divides by N_interior_points (not 1.5 power).
-        # This gives RMS error relative to number of points.
-        norm = np.sqrt(global_res_sq_sum) / N_fine_interior_points
+        interior_points = np.prod(np.array(r_array.shape) - 2)
+        norm = np.sqrt(global_res_sq_sum) / interior_points
         return norm
 
     def v_cycle(self, level_idx: int) -> float:
@@ -262,7 +264,7 @@ class MultigridPoisson:
         lvl = self.grid_levels[level_idx]
         
         # 1. Pre-smoothing
-        for _ in range(self.pre_smooth):
+        for _ in range(self.n_smooth):
             self._smooth(lvl)
             
         # 2. Compute Residual r = f - Au
@@ -276,7 +278,7 @@ class MultigridPoisson:
         
         # Base Case: Coarsest Level - solve with Jacobi until tolerance
         if level_idx == self.levels - 1:
-            return self._coarse_solve(lvl)
+            return self._coarse_solve(lvl, max_iters=self.config.max_iter)
 
         # 3. Restriction: f_coarse = R(r_fine)
         next_lvl = self.grid_levels[level_idx + 1]
@@ -310,19 +312,23 @@ class MultigridPoisson:
         lvl.u[1:-1, 1:-1, 1:-1] += lvl.r[1:-1, 1:-1, 1:-1]
         
         # 6. Post-smoothing
-        for _ in range(self.post_smooth):
+        for _ in range(self.n_smooth):
             self._smooth(lvl)
             
         return current_residual_norm
 
-    def _coarse_solve(self, lvl: GridLevel) -> float:
-        """Solve on the coarsest grid with Jacobi until tolerance or max_iter."""
+    def _coarse_solve(self, lvl: GridLevel, max_iters: Optional[int] = None) -> float:
+        """Solve on the coarsest grid with Jacobi until tolerance (optional cap)."""
         current_residual_norm = float("inf")
-        for _ in range(self.config.max_iter):
+        iterations = 0
+        while True:
             self._smooth(lvl)
             self._compute_residual(lvl)
             current_residual_norm = self._get_global_residual_norm(lvl.r)
+            iterations += 1
             if current_residual_norm < self.config.tolerance:
+                break
+            if max_iters is not None and iterations >= max_iters:
                 break
         return current_residual_norm
 
@@ -341,10 +347,13 @@ class MultigridPoisson:
 
         t_start = MPI.Wtime()
         residual = None
+        coarse_ok = True
 
         for _ in range(cycles):
             # Solve on coarsest level
-            self._coarse_solve(self.grid_levels[-1])
+            coarse_res = self._coarse_solve(self.grid_levels[-1], max_iters=None)
+            residual = coarse_res
+            coarse_ok = coarse_ok and coarse_res < self.config.tolerance
 
             # Ascend hierarchy: prolongate and refine with a V-cycle at each level
             for l in reversed(range(self.levels - 1)):
@@ -366,7 +375,7 @@ class MultigridPoisson:
                 fine.u[1:-1, 1:-1, 1:-1] = fine.r[1:-1, 1:-1, 1:-1]
 
                 # Smooth the interpolated guess
-                for _ in range(self.pre_smooth):
+                for _ in range(self.n_smooth):
                     self._smooth(fine)
 
                 # Refine with one V-cycle from this level
@@ -377,21 +386,19 @@ class MultigridPoisson:
         self._compute_residual(fine_lvl)
         residual = self._get_global_residual_norm(fine_lvl.r)
 
-        # Optional finishing V-cycles to reach tolerance
-        iterations = cycles * self.levels
-        for _ in range(self.config.max_iter):
-            if residual < self.config.tolerance:
-                break
+        # Optional finishing V-cycles on finest level to enforce tolerance
+        post_iters = 0
+        while residual >= self.config.tolerance and post_iters < min(self.fmg_post_cycles, self.config.max_iter):
             residual = self.v_cycle(0)
-            iterations += 1
+            post_iters += 1
 
         # Finalize metrics
         self.results.wall_time = MPI.Wtime() - t_start
         self.results.total_compute_time = self._time_compute
         self.results.total_halo_time = self._time_halo
         self.results.total_mpi_comm_time = self._time_mpi
-        self.results.converged = residual is not None and residual < self.config.tolerance
-        self.results.iterations = iterations
+        self.results.converged = residual < self.config.tolerance
+        self.results.iterations = cycles * self.levels + post_iters
 
         return residual
 

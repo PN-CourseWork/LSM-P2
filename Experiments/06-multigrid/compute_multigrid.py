@@ -11,9 +11,8 @@ from Poisson import MultigridPoisson # Direct import for debugging
 
 def main():
     # Configuration
-    N = 65  # Power of 2 + 1 (64 + 1)
-    levels = 4  # V-Cycle depth (65 -> 33 -> 17 -> 9)
-    max_iter = 20
+    N = 513  # Power of 2 + 1 (64 + 1)
+    max_iter = 50
     tolerance = 1e-6
     
     comm = MPI.COMM_WORLD
@@ -21,13 +20,12 @@ def main():
     size = comm.Get_size()
     
     if rank == 0:
-        print(f"Running Multigrid Solver on N={N}^3 grid with {levels} levels.")
+        print(f"Running Multigrid Solver on N={N}^3 grid ")
         print(f"MPI Size: {size}")
     
     # Instantiate Solver directly for debugging
     solver = MultigridPoisson(
         N=N,
-        levels=levels,
         pre_smooth=2,
         post_smooth=2,
         max_iter=max_iter,

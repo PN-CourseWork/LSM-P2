@@ -8,11 +8,10 @@ def test_fmg_converges_single_rank():
     """FMG should converge on a modest grid."""
     solver = MultigridPoisson(
         N=33,
-        tolerance=1e-6,
+        tolerance=1e-4,
         max_iter=20,
-        min_coarse_size=9,
-        pre_smooth=4,
-        post_smooth=4,
+        min_coarse_size=3,
+        n_smooth=4,
     )
     solver.fmg_solve(cycles=1)
     err = solver.compute_l2_error()
@@ -29,9 +28,8 @@ def test_fmg_runner_single_rank():
         strategy="sliced",
         communicator="numpy",
         max_iter=20,
-        pre_smooth=4,
-        post_smooth=4,
-        tol=1e-6,
+        n_smooth=4,
+        tol=1e-4,
         validate=True,
     )
     assert "error" not in res

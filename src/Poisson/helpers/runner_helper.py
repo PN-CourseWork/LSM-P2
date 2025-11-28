@@ -48,8 +48,7 @@ elif solver_type == "multigrid":
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
-        pre_smooth=config.get("pre_smooth", 2),
-        post_smooth=config.get("post_smooth", 2),
+        n_smooth=config.get("n_smooth", 3),
         max_iter=config.get("max_iter", 20), # Multigrid converges faster
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
@@ -66,8 +65,8 @@ elif solver_type == "fmg":
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
         min_coarse_size=config.get("min_coarse_size", 9),
-        pre_smooth=config.get("pre_smooth", 2),
-        post_smooth=config.get("post_smooth", 2),
+        n_smooth=config.get("n_smooth", 3),
+        fmg_post_cycles=config.get("fmg_post_cycles", 50),
         max_iter=config.get("max_iter", 20),
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),

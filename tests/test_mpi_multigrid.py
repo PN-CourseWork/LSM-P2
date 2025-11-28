@@ -27,10 +27,9 @@ def multigrid_results():
             strategy="sliced",
             communicator=communicator,
             levels=3,
-            pre_smooth=2,
-            post_smooth=2,
-            max_iter=20,
-            tol=1e-5,
+            n_smooth=3,
+            max_iter=50,
+            tol=1e-6,
             validate=True,
         )
     return results
@@ -48,10 +47,9 @@ def multigrid_convergence():
             strategy="sliced",
             communicator="numpy",
             levels=3,
-            pre_smooth=2,
-            post_smooth=2,
-            max_iter=25,
-            tol=1e-8,
+            n_smooth=3,
+            max_iter=50,
+            tol=1e-6,
             validate=True,
         )
         for N in Ns

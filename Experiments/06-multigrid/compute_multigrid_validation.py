@@ -14,13 +14,12 @@ data_dir = repo_root / "data" / "multigrid"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
-problem_sizes = [33, 65, 129]  # Power-of-two grids + 1 for clean coarsening
+problem_sizes = [33, 65, 129, 257, 513]  # Power-of-two grids + 1 for clean coarsening
 rank_counts = [4]
 communicators = ["numpy", "custom"]
 
 levels = 4
-pre_smooth = 2
-post_smooth = 2
+n_smooth = 3
 max_iterations = 30
 tolerance = 1e-8
 
@@ -40,8 +39,7 @@ for N in problem_sizes:
                 solver_type="multigrid",
                 strategy="sliced",
                 communicator=comm,
-                pre_smooth=pre_smooth,
-                post_smooth=post_smooth,
+                n_smooth=n_smooth,
                 max_iter=max_iterations,
                 tol=tolerance,
                 validate=True,

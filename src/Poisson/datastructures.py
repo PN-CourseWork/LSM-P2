@@ -76,7 +76,7 @@ class GlobalParams:
 
     # Global problem parameters
     N: int = 0  # Global grid size (before decomposition)
-    omega: float = 0.75
+    omega: float = 0.6
     tolerance: float = 1e-10
     max_iter: int = 100000
 
