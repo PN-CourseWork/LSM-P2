@@ -18,7 +18,9 @@ sys.path.insert(0, repo_root)
 # -- Project information -----------------------------------------------------
 
 project = "MPI 3D Poisson Solver"
-copyright = "2025, Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel, DTU Compute"
+copyright = (
+    "2025, Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel, DTU Compute"
+)
 author = "Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel"
 
 # -- General configuration ---------------------------------------------------
@@ -76,7 +78,10 @@ sphinx_gallery_conf = {
     "remove_config_comments": True,  # Clean up notebook outputs
     "abort_on_example_error": False,  # Continue if examples fail
     "plot_gallery": True,
-    "image_scrapers": ("matplotlib", "pyvista"),  # Capture both matplotlib and pyvista plots
+    "image_scrapers": (
+        "matplotlib",
+        "pyvista",
+    ),  # Capture both matplotlib and pyvista plots
     "capture_repr": ("_repr_html_", "__repr__"),  # Capture output representations
     "matplotlib_animations": True,  # Support matplotlib animations
     # Remove Jupyter cell markers (# %%) from rendered output
