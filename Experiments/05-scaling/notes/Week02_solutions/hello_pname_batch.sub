@@ -1,0 +1,12 @@
+#BSUB -J MPIhello
+#BSUB -o MPIhello_%J.out
+#BSUB -e MPIhello_%J.err
+#BSUB -n 8
+#BSUB -q hpcintro
+#BSUB -W 00:05
+#BSUB -R "rusage[mem=1GB]"
+#BSUB -R "span[ptile=4]"
+
+module load mpi
+
+mpirun ./hello_c_procname

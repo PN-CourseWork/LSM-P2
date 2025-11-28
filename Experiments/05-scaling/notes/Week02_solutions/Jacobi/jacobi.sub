@@ -1,0 +1,26 @@
+#BSUB -J jacobi_1s
+#BSUB -q hpcintro
+#BSUB -W 1:00
+#BSUB -M 30GB
+#BSUB -n 8
+#BSUB -R "span[hosts=1] affinity[core(1,same=socket)]"
+#BSUB -N
+
+# load the MPI module
+module load mpi/5.0.8-gcc-13.4.0-binutils-2.44 >& /dev/null
+
+# parameters for the Jacobi program
+SIZE=80000
+ITER=5
+
+# format string for the time command
+TIME="%e %U %S %M"
+export TIME
+
+# MPI mapping options
+MOPTS="--report-binding --bind-to core"
+MOPTS="--bind-to core"
+
+echo "#NP ALLOC wall user sys mem"
+echo -n "$LSB_DJOB_NUMPROC $LSB_DJOB_NUMPROC "
+/bin/time mpirun $MOPTS ./jacobi-mpi-block $SIZE $SIZE $ITER > /dev/null

@@ -1,0 +1,69 @@
+# ============================================================================
+# LSF Scaling Experiment Configuration Template
+# ============================================================================
+
+name: "Strong" 
+script: Experiments/05-scaling/compute_scaling.py
+
+# ============================================================================
+# Global Parameters (Apply to all groups)
+# ============================================================================
+# Arguments passed to the python script
+parameters:
+  tol: 0.0 # Always run fixed number of iterations
+  max-iter: 500
+  # Note: We always use numba kernel 
+# ============================================================================
+# Global LSF Settings (Apply to all groups)
+# ============================================================================
+# Common BSUB options
+lsf:
+  queue: hpcintro          # -q: Queue name
+  walltime: "00:10"   # -W: Walltime (HH:MM)
+  
+  # Resources strings (-R). List of resource requirements.
+  resources:
+    - "rusage[mem=4GB]"
+    - "span[hosts=1]"
+  
+  # Additional options
+  exclusive: false    # -x: Exclusive node access
+  # email: user@dtu.dk # -u: Email notification
+  # notify_start: false # -B: Notify on job start
+  # notify_end: false   # -N: Notify on job finish
+
+# ============================================================================
+# Experiment Groups
+# ============================================================================
+# Each group generates a set of jobs. 
+# Group settings merge with and override Global settings.
+groups:
+  # --------------------------------------------------------------------------
+  # Group 1: Single Node
+  # --------------------------------------------------------------------------
+  - name: single_node
+    lsf:
+      resources:
+        - "rusage[mem=4GB]"
+        - "span[hosts=1]"
+        - 
+    sweep:
+      N: [64, 128]
+      ranks: [8, 16, 24]
+      communicator: [numpy, custom]
+      strategy: [sliced, cubic]
+
+  # --------------------------------------------------------------------------
+  # Group 2: Multi Node (example)
+  # --------------------------------------------------------------------------
+  # - name: multi_node
+  #   lsf:
+  #     walltime: "04:00"
+  #     resources:
+  #       - "rusage[mem=8GB]"
+  #       - "span[hosts=2]"
+  #   sweep:
+  #     N: [256]
+  #     ranks: [64]
+  #     communicator: [custom]
+  #     strategy: [cubic]
