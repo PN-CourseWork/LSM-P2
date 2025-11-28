@@ -49,8 +49,8 @@ jobs:
       - name: Build Sphinx docs
         env:
           PYVISTA_OFF_SCREEN: "true"
-          PYTHONPATH: "${{ github.workspace }}/src"
-        run: uv run sphinx-build -b html docs/source docs/build/html
+          PYTHONPATH: "${{ github.workspace }}"
+        run: uv run python main.py --docs
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
