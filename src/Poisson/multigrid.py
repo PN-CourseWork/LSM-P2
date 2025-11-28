@@ -276,14 +276,7 @@ class MultigridPoisson:
         
         # Base Case: Coarsest Level - solve with Jacobi until tolerance
         if level_idx == self.levels - 1:
-            current_residual_norm = float("inf")
-            for _ in range(self.config.max_iter):
-                self._smooth(lvl)
-                self._compute_residual(lvl)
-                current_residual_norm = self._get_global_residual_norm(lvl.r)
-                if current_residual_norm < self.config.tolerance:
-                    break
-            return current_residual_norm
+            return self._coarse_solve(lvl)
 
         # 3. Restriction: f_coarse = R(r_fine)
         next_lvl = self.grid_levels[level_idx + 1]
@@ -321,6 +314,86 @@ class MultigridPoisson:
             self._smooth(lvl)
             
         return current_residual_norm
+
+    def _coarse_solve(self, lvl: GridLevel) -> float:
+        """Solve on the coarsest grid with Jacobi until tolerance or max_iter."""
+        current_residual_norm = float("inf")
+        for _ in range(self.config.max_iter):
+            self._smooth(lvl)
+            self._compute_residual(lvl)
+            current_residual_norm = self._get_global_residual_norm(lvl.r)
+            if current_residual_norm < self.config.tolerance:
+                break
+        return current_residual_norm
+
+    def fmg_solve(self, cycles: int = 1):
+        """Full Multigrid (FMG) cycle starting from the coarsest grid."""
+        # Reset timers
+        self._time_compute = 0.0
+        self._time_halo = 0.0
+        self._time_mpi = 0.0
+
+        # Clear all levels
+        for lvl in self.grid_levels:
+            lvl.u.fill(0.0)
+            lvl.u_temp.fill(0.0)
+            lvl.r.fill(0.0)
+
+        t_start = MPI.Wtime()
+        residual = None
+
+        for _ in range(cycles):
+            # Solve on coarsest level
+            self._coarse_solve(self.grid_levels[-1])
+
+            # Ascend hierarchy: prolongate and refine with a V-cycle at each level
+            for l in reversed(range(self.levels - 1)):
+                coarse = self.grid_levels[l + 1]
+                fine = self.grid_levels[l]
+
+                # Halo sync before prolongation
+                t0 = MPI.Wtime()
+                coarse.communicator.exchange_halos(coarse.u, coarse.decomposition, self.rank, self.comm)
+                self._time_halo += MPI.Wtime() - t0
+
+                # Prolong coarse solution as initial guess on fine
+                fine.r.fill(0.0)
+                t0 = MPI.Wtime()
+                prolong(coarse.u, fine.r)
+                self._time_compute += MPI.Wtime() - t0
+
+                fine.u.fill(0.0)
+                fine.u[1:-1, 1:-1, 1:-1] = fine.r[1:-1, 1:-1, 1:-1]
+
+                # Smooth the interpolated guess
+                for _ in range(self.pre_smooth):
+                    self._smooth(fine)
+
+                # Refine with one V-cycle from this level
+                residual = self.v_cycle(l)
+
+        # Final residual check on finest level
+        fine_lvl = self.grid_levels[0]
+        self._compute_residual(fine_lvl)
+        residual = self._get_global_residual_norm(fine_lvl.r)
+
+        # Optional finishing V-cycles to reach tolerance
+        iterations = cycles * self.levels
+        for _ in range(self.config.max_iter):
+            if residual < self.config.tolerance:
+                break
+            residual = self.v_cycle(0)
+            iterations += 1
+
+        # Finalize metrics
+        self.results.wall_time = MPI.Wtime() - t_start
+        self.results.total_compute_time = self._time_compute
+        self.results.total_halo_time = self._time_halo
+        self.results.total_mpi_comm_time = self._time_mpi
+        self.results.converged = residual is not None and residual < self.config.tolerance
+        self.results.iterations = iterations
+
+        return residual
 
     def _smooth(self, lvl: GridLevel):
         """Perform one Jacobi smoothing step."""

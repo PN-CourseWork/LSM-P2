@@ -57,26 +57,37 @@ elif solver_type == "multigrid":
         communicator=communicator_choice,
         # Assuming other params like omega are handled by GlobalParams in MultigridPoisson
     )
+elif solver_type == "fmg":
+    if config.get("strategy", "sliced") != "sliced":
+        raise ValueError("FMG only supports sliced decomposition.")
+
+    communicator_choice = config.get("communicator", "numpy")
+    solver = MultigridPoisson(
+        N=config["N"],
+        levels=config.get("levels"),  # auto-infer if None
+        min_coarse_size=config.get("min_coarse_size", 9),
+        pre_smooth=config.get("pre_smooth", 2),
+        post_smooth=config.get("post_smooth", 2),
+        max_iter=config.get("max_iter", 20),
+        tolerance=config.get("tol", 1e-6),
+        use_numba=config.get("use_numba", False),
+        decomposition_strategy="sliced",
+        communicator=communicator_choice,
+    )
 else:
     raise ValueError(f"Unknown solver type: {solver_type}")
 
 
 t0 = MPI.Wtime()
-solver.solve()
+if solver_type == "fmg":
+    solver.fmg_solve()
+else:
+    solver.solve()
 wall_time = MPI.Wtime() - t0
 
 # Store timing metrics in results (rank 0 only)
 if comm.Get_rank() == 0:
     solver.results.wall_time = wall_time
-    # For Multigrid, these metrics might need to be aggregated differently
-    # if the solver structure doesn't expose them directly in top-level results.
-    # For now, let's assume they exist or are calculated on rank 0.
-    if hasattr(solver, 'timeseries') and solver.timeseries.compute_times:
-        solver.results.total_compute_time = sum(solver.timeseries.compute_times)
-    if hasattr(solver, 'timeseries') and solver.timeseries.halo_exchange_times:
-        solver.results.total_halo_time = sum(solver.timeseries.halo_exchange_times)
-    if hasattr(solver, 'timeseries') and solver.timeseries.mpi_comm_times:
-        solver.results.total_mpi_comm_time = sum(solver.timeseries.mpi_comm_times)
 
 # Compute L2 error if requested (not timed)
 if config.get("validate"):
