@@ -1,6 +1,6 @@
 """
-Visualization of kernel experiments
-===========================
+Visualization of Kernel Experiments
+====================================
 
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
 """
