@@ -108,8 +108,20 @@ Simplified Datastructures
 - :class:`LocalFields` - Local domain arrays with halo zones (u1, u2, f)
 - :class:`LocalSeries` - Per-iteration timing arrays (compute_times, halo_exchange_times, residual_history)
 
-Parallel I/O Strategy
-^^^^^^^^^^^^^^^^^^^^^^
+Experiment Tracking & I/O
+-------------------------
+
+The framework integrates with **MLflow** for experiment tracking and **HDF5** for data storage.
+
+**MLflow Tracking:**
+
+The solver automatically logs:
+- **Parameters**: Grid size, tolerance, decomposition strategy, etc.
+- **Metrics**: Convergence status, iterations, final error, wall time.
+- **Time Series**: Complete history of residuals and performance metrics (compute time, comm time) per step.
+- **Artifacts**: The HDF5 result file is uploaded to the MLflow run.
+
+**Parallel HDF5 Strategy:**
 
 **HDF5 collective writes** eliminate the gather-to-rank-0 bottleneck:
 
@@ -188,10 +200,24 @@ Communication Strategies
    NumpyHaloExchange
    CustomHaloExchange
 
+Experiment Utilities
+====================
+
+.. currentmodule:: utils
+
+.. autosummary::
+   :toctree: generated
+
+   mlflow_io
+
+The :mod:`utils.mlflow_io` module provides tools for fetching and managing experiment data from MLflow.
+
 .. _data-structures:
 
 Data Structures
 ===============
+
+.. currentmodule:: Poisson
 
 Global Configuration & Metrics
 ------------------------------

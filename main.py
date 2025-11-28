@@ -146,7 +146,11 @@ def run_compute_scripts():
                 print("✓")
                 success_count += 1
             else:
-                error_msg = result.stderr[:200] if result.stderr else f"exit {result.returncode}"
+                error_msg = (
+                    result.stderr[:200]
+                    if result.stderr
+                    else f"exit {result.returncode}"
+                )
                 print(f"✗ ({error_msg})")
                 fail_count += 1
 
@@ -176,7 +180,7 @@ def copy_plots():
         if dest_dir.exists():
             shutil.rmtree(dest_dir)
         shutil.copytree(source_dir, dest_dir)
-        print(f"  ✓ Copied figures/ to docs/reports/TexReport/figures/")
+        print("  ✓ Copied figures/ to docs/reports/TexReport/figures/")
     except Exception as e:
         print(f"  ✗ Failed to copy: {e}")
 
@@ -190,6 +194,10 @@ def build_docs():
     build_dir = docs_dir / "build"
 
     print("\nBuilding Sphinx documentation...")
+
+    if not source_dir.exists():
+        print(f"  Error: Documentation source directory not found: {source_dir}")
+        return False
 
     try:
         result = subprocess.run(
@@ -229,6 +237,70 @@ def build_docs():
         return False
 
 
+def hpc_submit_pack(scaling_type: str, dry_run: bool):
+    """Generate and optionally submit an LSF job pack."""
+    print(f"\nGenerating {scaling_type} scaling job pack...")
+
+    pack_file_name = f"Experiments/05-scaling/{scaling_type}_scaling_jobs.pack"
+    pack_file_path = REPO_ROOT / pack_file_name
+
+    # Generate the pack file
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "src.utils.generate_pack",
+        "--type",
+        scaling_type,
+        "--output",
+        str(pack_file_path),
+        "--config-dir",
+        str(REPO_ROOT / "Experiments" / "05-scaling"),
+    ]
+    # Use standard N values for strong scaling if not specified in generate_pack default
+    if scaling_type == "strong":
+        # Hardcoded defaults for project consistency
+        cmd.extend(["--N", "64", "128", "256"])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT))
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to generate pack file: {result.stderr}")
+        return
+    print(f"  ✓ {result.stdout.strip()}")
+
+    if dry_run:
+        print(f"\n[DRY RUN] Content of {pack_file_name}:")
+        print("-" * 40)
+        print(pack_file_path.read_text())
+        print("-" * 40)
+        print(
+            f"  To submit manually: bsub -pack {pack_file_name}"
+        )
+        return
+
+    # Submit the pack file
+    print(f"\nSubmitting {pack_file_path} to LSF...")
+    
+    if not shutil.which("bsub"):
+        print("  ✗ 'bsub' command not found. Are you on the HPC login node?")
+        return
+
+    submit_cmd = ["bsub", "-pack", str(pack_file_path)]
+    
+    result = subprocess.run(
+        submit_cmd, capture_output=True, text=True, cwd=str(REPO_ROOT)
+    )
+
+    if result.returncode != 0:
+        print(f"  ✗ Failed to submit jobs: {result.stderr}")
+    else:
+        print(f"  ✓ Jobs submitted successfully.")
+        if result.stdout:
+            print(f"    {result.stdout.strip()}")
+
+
 def clean_all():
     """Clean all generated files and caches."""
     print("\nCleaning all generated files and caches...")
@@ -248,9 +320,16 @@ def clean_all():
 
     # Directories to clean
     dirs = [
-        "docs/build", "docs/source/example_gallery", "docs/source/generated",
-        "docs/source/gen_modules", "plots", "build", "dist",
-        ".pytest_cache", ".ruff_cache", ".mypy_cache",
+        "docs/build",
+        "docs/source/example_gallery",
+        "docs/source/generated",
+        "docs/source/gen_modules",
+        "plots",
+        "build",
+        "dist",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
     ]
     for d in dirs:
         path = REPO_ROOT / d
@@ -301,6 +380,43 @@ def clean_all():
     print()
 
 
+def fetch_mlflow():
+    """Fetch artifacts from MLflow for all converged runs."""
+    print("\nFetching MLflow artifacts...")
+
+    try:
+        # Import locally to avoid hard dependency if not fetching
+        # from utils.mlflow_io import download_artifacts_with_naming, setup_mlflow_auth
+        from utils.mlflow_io import setup_mlflow_auth
+
+        setup_mlflow_auth()
+
+        # Define download targets - modifying for LSM Project 2 context
+        # Assuming we might have experiments named like 'LSM-Project-2/Scaling' or similar
+        # For now, we'll use a placeholder or a generic search if available,
+        # but matching the ANA-P3 pattern:
+
+        # output_dir = REPO_ROOT / "data" / "downloaded"
+
+        # Example: Fetch from a "Scaling" experiment
+        # experiments = ["LSM-Scaling", "LSM-Kernels"]
+        # for exp in experiments:
+        #     print(f"\n{exp}:")
+        #     paths = download_artifacts_with_naming(exp, output_dir / exp)
+        #     print(f"  ✓ Downloaded {len(paths)} files to data/downloaded/{exp}/")
+
+        print(
+            "  (No experiments configured for auto-fetch yet. Edit main.py to specify experiments.)"
+        )
+        print()
+
+    except ImportError as e:
+        print(f"  ✗ Missing dependency: {e}")
+        print("    Install with: uv sync")
+    except Exception as e:
+        print(f"  ✗ Failed to fetch: {e}\n")
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -313,15 +429,45 @@ Examples:
   python main.py --plot                        Run all plotting scripts
   python main.py --copy-plots                  Copy plots to plots/ directory
   python main.py --clean                       Clean all generated files
-  python main.py --compute --plot              Run compute then plot scripts
+  python main.py --hpc strong --dry            Generate strong scaling pack (dry run)
         """,
     )
 
-    parser.add_argument("--docs", action="store_true", help="Build Sphinx HTML documentation")
-    parser.add_argument("--compute", action="store_true", help="Run all compute scripts (sequentially)")
-    parser.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
-    parser.add_argument("--copy-plots", action="store_true", help="Copy plots to plots/ directory")
-    parser.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
+    # Action Group
+    actions = parser.add_argument_group("Actions")
+    actions.add_argument(
+        "--docs", action="store_true", help="Build Sphinx HTML documentation"
+    )
+    actions.add_argument(
+        "--compute", action="store_true", help="Run all compute scripts (sequentially)"
+    )
+    actions.add_argument(
+        "--plot", action="store_true", help="Run all plotting scripts (in parallel)"
+    )
+    actions.add_argument(
+        "--copy-plots", action="store_true", help="Copy plots to plots/ directory"
+    )
+    actions.add_argument(
+        "--clean", action="store_true", help="Clean all generated files and caches"
+    )
+    actions.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Fetch artifacts from MLflow for all converged runs",
+    )
+    actions.add_argument(
+        "--hpc",
+        choices=["strong", "weak"],
+        help="Generate and submit LSF job pack for scaling",
+    )
+
+    # Options Group
+    options = parser.add_argument_group("Options")
+    options.add_argument(
+        "--dry",
+        action="store_true",
+        help="Print generated job pack without submitting (for --hpc)",
+    )
 
     # Show help if no arguments provided
     if len(sys.argv) == 1:
@@ -343,6 +489,15 @@ Examples:
 
     if args.copy_plots:
         copy_plots()
+
+    if args.fetch:
+        fetch_mlflow()
+
+    # Handle HPC pack submission
+    if args.hpc:
+        hpc_submit_pack(args.hpc, args.dry)
+
+    # Handle documentation commands
 
     if args.docs:
         build_docs()

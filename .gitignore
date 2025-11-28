@@ -7,7 +7,7 @@ docs/reports/TexReport/
 
 
 # Generated data (keep README.md)
-data/*
+#data/*
 
 # Uv stuff 
 uv.lock
@@ -18,6 +18,7 @@ docs/source/generated/
 docs/source/example_gallery/
 docs/source/_autosummary/
 docs/source/gen_modules/backreferences/
+sg_execution_times*
 
 # macOS
 .DS_Store
