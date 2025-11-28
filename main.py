@@ -301,6 +301,40 @@ def clean_all():
     print()
 
 
+def fetch_mlflow():
+    """Fetch artifacts from MLflow for all converged runs."""
+    print("\nFetching MLflow artifacts...")
+
+    try:
+        # Import locally to avoid hard dependency if not fetching
+        from utils.mlflow_io import download_artifacts_with_naming, setup_mlflow_auth
+
+        setup_mlflow_auth()
+
+        # Define download targets - modifying for LSM Project 2 context
+        # Assuming we might have experiments named like 'LSM-Project-2/Scaling' or similar
+        # For now, we'll use a placeholder or a generic search if available, 
+        # but matching the ANA-P3 pattern:
+        
+        output_dir = REPO_ROOT / "data" / "downloaded"
+        
+        # Example: Fetch from a "Scaling" experiment
+        # experiments = ["LSM-Scaling", "LSM-Kernels"]
+        # for exp in experiments:
+        #     print(f"\n{exp}:")
+        #     paths = download_artifacts_with_naming(exp, output_dir / exp)
+        #     print(f"  ✓ Downloaded {len(paths)} files to data/downloaded/{exp}/")
+
+        print("  (No experiments configured for auto-fetch yet. Edit main.py to specify experiments.)")
+        print()
+
+    except ImportError as e:
+        print(f"  ✗ Missing dependency: {e}")
+        print("    Install with: uv sync")
+    except Exception as e:
+        print(f"  ✗ Failed to fetch: {e}\n")
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -321,7 +355,14 @@ Examples:
     parser.add_argument("--compute", action="store_true", help="Run all compute scripts (sequentially)")
     parser.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
     parser.add_argument("--copy-plots", action="store_true", help="Copy plots to plots/ directory")
-    parser.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
+    parser.add_argument(
+        "--clean", action="store_true", help="Clean all generated files and caches"
+    )
+    parser.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Fetch artifacts from MLflow for all converged runs",
+    )
 
     # Show help if no arguments provided
     if len(sys.argv) == 1:
@@ -343,6 +384,9 @@ Examples:
 
     if args.copy_plots:
         copy_plots()
+
+    if args.fetch:
+        fetch_mlflow()
 
     if args.docs:
         build_docs()
