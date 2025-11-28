@@ -308,15 +308,7 @@ Computational Kernels
 =====================
 
 The package provides two implementations of the Jacobi iteration kernel through the :mod:`Poisson.kernels` module.
-
-.. .. autosummary::
-..    :toctree: generated
-..
-..    jacobi_step_numpy
-..    jacobi_step_numba
-
-NumPy and Numba kernel implementations are available through the :class:`NumPyKernel` and :class:`NumbaKernel` classes.
-See the :doc:`generated/Poisson.kernels` module documentation for details.
+NumPy and Numba kernel implementations are available through the ``NumPyKernel`` and ``NumbaKernel`` classes.
 
 Problem Setup
 =============
