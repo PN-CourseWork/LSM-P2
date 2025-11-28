@@ -20,7 +20,9 @@ def test_kernels_produce_identical_results():
     u1, u2, f, _ = setup_sinusoidal_problem(N)
 
     numpy_kernel = NumPyKernel(N=N, omega=1.0, tolerance=1e-10, max_iter=1000)
-    numba_kernel = NumbaKernel(N=N, omega=1.0, tolerance=1e-10, max_iter=1000, numba_threads=1)
+    numba_kernel = NumbaKernel(
+        N=N, omega=1.0, tolerance=1e-10, max_iter=1000, numba_threads=1
+    )
     numba_kernel.warmup()
 
     u_numpy = run_iterations(numpy_kernel, u1.copy(), u2.copy(), f.copy(), 10)

@@ -10,11 +10,21 @@ from Poisson import run_solver
 def mpi_results():
     """Run all MPI configurations once."""
     return {
-        (2, "sliced"): run_solver(N=25, n_ranks=2, strategy="sliced", max_iter=10000, tol=1e-8, validate=True),
-        (4, "sliced"): run_solver(N=25, n_ranks=4, strategy="sliced", max_iter=10000, tol=1e-8, validate=True),
-        (8, "cubic"): run_solver(N=25, n_ranks=8, strategy="cubic", max_iter=10000, tol=1e-8, validate=True),
-        "numpy": run_solver(N=20, n_ranks=2, communicator="numpy", max_iter=500, tol=0.0),
-        "custom": run_solver(N=20, n_ranks=2, communicator="custom", max_iter=500, tol=0.0),
+        (2, "sliced"): run_solver(
+            N=25, n_ranks=2, strategy="sliced", max_iter=10000, tol=1e-8, validate=True
+        ),
+        (4, "sliced"): run_solver(
+            N=25, n_ranks=4, strategy="sliced", max_iter=10000, tol=1e-8, validate=True
+        ),
+        (8, "cubic"): run_solver(
+            N=25, n_ranks=8, strategy="cubic", max_iter=10000, tol=1e-8, validate=True
+        ),
+        "numpy": run_solver(
+            N=20, n_ranks=2, communicator="numpy", max_iter=500, tol=0.0
+        ),
+        "custom": run_solver(
+            N=20, n_ranks=2, communicator="custom", max_iter=500, tol=0.0
+        ),
         "convergence": {
             N: run_solver(N=N, n_ranks=2, max_iter=20000, tol=1e-8, validate=True)
             for N in [15, 25]

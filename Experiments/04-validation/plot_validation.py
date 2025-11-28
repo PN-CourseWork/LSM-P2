@@ -39,28 +39,35 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # Load validation data from HDF5 files
 h5_files = list(data_dir.glob("*.h5"))
 if not h5_files:
-    raise FileNotFoundError(f"No data found in {data_dir}. Run compute_validation.py first.")
+    raise FileNotFoundError(
+        f"No data found in {data_dir}. Run compute_validation.py first."
+    )
 
-df = pd.concat([pd.read_hdf(f, key='results') for f in h5_files], ignore_index=True)
+df = pd.concat([pd.read_hdf(f, key="results") for f in h5_files], ignore_index=True)
 
 print(f"\nLoaded {len(df)} validation results")
 print(f"Strategies: {df['decomposition'].unique()}")
 print(f"Problem sizes: {sorted(df['N'].unique())}")
 
 # Create labels for plotting
-df['Strategy'] = df['decomposition'].str.capitalize()
-df['Communicator'] = df['communicator'].str.replace('haloexchange', '').str.replace('custom', 'Custom').str.replace('numpy', 'NumPy')
-df['Method'] = df['Strategy'] + ' + ' + df['Communicator']
+df["Strategy"] = df["decomposition"].str.capitalize()
+df["Communicator"] = (
+    df["communicator"]
+    .str.replace("haloexchange", "")
+    .str.replace("custom", "Custom")
+    .str.replace("numpy", "NumPy")
+)
+df["Method"] = df["Strategy"] + " + " + df["Communicator"]
 
 # Use lineplot (single rank count = 8)
 fig, ax = plt.subplots(figsize=(8, 6))
 
 sns.lineplot(
     data=df,
-    x='N',
-    y='final_error',
-    hue='Method',
-    style='Method',
+    x="N",
+    y="final_error",
+    hue="Method",
+    style="Method",
     markers=True,
     dashes=True,
     ax=ax,
@@ -68,14 +75,14 @@ sns.lineplot(
 
 # Add O(N^-2) reference line
 N_ref = [16, 64]
-ax.plot(N_ref, [0.02, 0.02 * (16/64)**2], 'k:', alpha=0.5, label=r'$O(N^{-2})$')
+ax.plot(N_ref, [0.02, 0.02 * (16 / 64) ** 2], "k:", alpha=0.5, label=r"$O(N^{-2})$")
 
-ax.set_xscale('log')
-ax.set_yscale('log')
+ax.set_xscale("log")
+ax.set_yscale("log")
 ax.grid(True, alpha=0.3)
-ax.set_xlabel('Grid Size N')
-ax.set_ylabel('L2 Error')
-ax.set_title('Spatial Convergence: Solver Validation')
+ax.set_xlabel("Grid Size N")
+ax.set_ylabel("L2 Error")
+ax.set_title("Spatial Convergence: Solver Validation")
 ax.legend()
 
 fig.tight_layout()
@@ -95,12 +102,12 @@ N = 100
 x = np.linspace(0, 2, N)
 y = np.linspace(0, 2, N)
 z = np.linspace(0, 2, N)
-X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 u_analytical = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
 
 # Create structured grid
 grid = pv.StructuredGrid(X, Y, Z)
-grid['solution'] = u_analytical.flatten(order='F')
+grid["solution"] = u_analytical.flatten(order="F")
 
 
 # Create orthogonal slices at domain center
@@ -112,44 +119,44 @@ plotter = pv.Plotter(off_screen=True, window_size=[2400, 2000])
 # Add orthogonal slices
 plotter.add_mesh(
     slices,
-    scalars='solution',
-    cmap='coolwarm',
+    scalars="solution",
+    cmap="coolwarm",
     show_edges=True,
-    edge_color='black',
+    edge_color="black",
     line_width=0.5,
     show_scalar_bar=True,
     scalar_bar_args={
-        'title': 'u(x,y,z)',
-        'position_x': 0.85,
-        'position_y': 0.05,
-        'title_font_size': 20,
-        'label_font_size': 16,
-        'fmt': '%.2f',
-        'n_labels': 7
-    }
+        "title": "u(x,y,z)",
+        "position_x": 0.85,
+        "position_y": 0.05,
+        "title_font_size": 20,
+        "label_font_size": 16,
+        "fmt": "%.2f",
+        "n_labels": 7,
+    },
 )
 
 # Add coordinate axes
 plotter.add_axes(
     interactive=False,
     line_width=5,
-    x_color='red',
-    y_color='green',
-    z_color='blue',
-    xlabel='X',
-    ylabel='Y',
-    zlabel='Z'
+    x_color="red",
+    y_color="green",
+    z_color="blue",
+    xlabel="X",
+    ylabel="Y",
+    zlabel="Z",
 )
 
 # Add bounds with labels
 plotter.show_bounds(
-    grid='back',
-    location='outer',
-    xtitle='X',
-    ytitle='Y',
-    ztitle='Z',
+    grid="back",
+    location="outer",
+    xtitle="X",
+    ytitle="Y",
+    ztitle="Z",
     font_size=12,
-    all_edges=True
+    all_edges=True,
 )
 
 # Show the plot (Sphinx-Gallery scraper will capture it)
@@ -158,4 +165,3 @@ output_file = fig_dir / "solution_3d.png"
 plotter.screenshot(output_file, transparent_background=True)
 print(f"Saved: {output_file}")
 plotter.show()
-

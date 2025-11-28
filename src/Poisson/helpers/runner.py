@@ -30,12 +30,22 @@ def run_solver(N: int, n_ranks: int = 1, output: str = None, **kwargs) -> dict:
     # Use temp file if no output path specified
     use_temp = output is None
     if use_temp:
-        tmp = tempfile.NamedTemporaryFile(suffix='.h5', delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".h5", delete=False)
         output = tmp.name
         tmp.close()
 
     config = {"N": N, "output": output, **kwargs}
-    cmd = ["mpiexec", "-n", str(n_ranks), "uv", "run", "python", "-m", "Poisson.helpers.runner_helper", json.dumps(config)]
+    cmd = [
+        "mpiexec",
+        "-n",
+        str(n_ranks),
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "Poisson.helpers.runner_helper",
+        json.dumps(config),
+    ]
 
     proc = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -46,7 +56,7 @@ def run_solver(N: int, n_ranks: int = 1, output: str = None, **kwargs) -> dict:
     if not Path(output).exists():
         return {"error": "No output file created", "stderr": proc.stderr}
 
-    result = pd.read_hdf(output, key='results').iloc[0].to_dict()
+    result = pd.read_hdf(output, key="results").iloc[0].to_dict()
 
     # Clean up temp file if we created one
     if use_temp:

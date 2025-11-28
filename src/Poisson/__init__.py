@@ -14,8 +14,19 @@ from .datastructures import (
 )
 from .kernels import NumPyKernel, NumbaKernel
 from .solver import JacobiPoisson
-from .mpi import DomainDecomposition, RankInfo, NoDecomposition, NumpyHaloExchange, CustomHaloExchange
-from .problems import create_grid_3d, sinusoidal_exact_solution, sinusoidal_source_term, setup_sinusoidal_problem
+from .mpi import (
+    DomainDecomposition,
+    RankInfo,
+    NoDecomposition,
+    NumpyHaloExchange,
+    CustomHaloExchange,
+)
+from .problems import (
+    create_grid_3d,
+    sinusoidal_exact_solution,
+    sinusoidal_source_term,
+    setup_sinusoidal_problem,
+)
 from .helpers import run_solver
 
 __all__ = [

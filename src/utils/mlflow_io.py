@@ -186,7 +186,7 @@ def download_artifacts_with_naming(
         # Extract parameters for naming - Adapting to typical Poisson params
         # Assuming 'n' is grid size, 'max_iter' or 'iterations' might be useful
         n = row.get("params.n", row.get("params.N", "unknown"))
-        
+
         # List artifacts and find HDF5 files
         artifacts = client.list_artifacts(run_id)
 

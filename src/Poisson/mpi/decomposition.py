@@ -11,12 +11,13 @@ from dataclasses import dataclass
 @dataclass
 class RankInfo:
     """Decomposition information for a single rank."""
+
     rank: int
 
     # Local domain (interior points only)
     local_shape: tuple[int, int, int]  # (nx, ny, nz) interior
     global_start: tuple[int, int, int]  # (i, j, k) in global grid
-    global_end: tuple[int, int, int]    # (i, j, k) exclusive
+    global_end: tuple[int, int, int]  # (i, j, k) exclusive
 
     # Halo zones
     halo_shape: tuple[int, int, int]  # Shape including halos
@@ -53,21 +54,21 @@ class DomainDecomposition:
     ...     print(f"Rank {rank}: {info.local_shape}")
     """
 
-    def __init__(self, N, size, strategy='sliced', axis='z'):
+    def __init__(self, N, size, strategy="sliced", axis="z"):
         self.N = N
         self.size = size
         self.strategy = strategy
 
         # Normalize axis to integer (0=z, 1=y, 2=x in ZYX ordering)
-        axis_map = {'z': 0, 'y': 1, 'x': 2, 0: 0, 1: 1, 2: 2}
+        axis_map = {"z": 0, "y": 1, "x": 2, 0: 0, 1: 1, 2: 2}
         if axis not in axis_map:
             raise ValueError(f"Invalid axis: {axis}. Use 'x', 'y', 'z' or 0, 1, 2")
         self.axis = axis_map[axis]
 
         # Decompose domain
-        if strategy == 'sliced':
+        if strategy == "sliced":
             self._decompose_sliced()
-        elif strategy == 'cubic':
+        elif strategy == "cubic":
             self._decompose_cubic()
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -109,7 +110,7 @@ class DomainDecomposition:
         """Decompose domain with 1D slicing along configurable axis."""
         interior_N = self.N - 2
         axis = self.axis  # 0=z, 1=y, 2=x
-        axis_names = ['z', 'y', 'x']
+        axis_names = ["z", "y", "x"]
         axis_name = axis_names[axis]
 
         self._rank_info = []
@@ -145,8 +146,8 @@ class DomainDecomposition:
 
             # Neighbors along decomposition axis only
             neighbors = {}
-            neighbors[f'{axis_name}_lower'] = rank - 1 if rank > 0 else None
-            neighbors[f'{axis_name}_upper'] = rank + 1 if rank < self.size - 1 else None
+            neighbors[f"{axis_name}_lower"] = rank - 1 if rank > 0 else None
+            neighbors[f"{axis_name}_upper"] = rank + 1 if rank < self.size - 1 else None
 
             n_neighbors = sum(1 for n in neighbors.values() if n is not None)
 
@@ -162,7 +163,7 @@ class DomainDecomposition:
                 halo_shape=halo_shape,
                 neighbors=neighbors,
                 n_neighbors=n_neighbors,
-                halo_cells_total=halo_cells_total
+                halo_cells_total=halo_cells_total,
             )
             self._rank_info.append(info)
 
@@ -193,9 +194,9 @@ class DomainDecomposition:
 
         # Store for later use
         self._split_info = {
-            'nx': (nx_counts, nx_starts),
-            'ny': (ny_counts, ny_starts),
-            'nz': (nz_counts, nz_starts),
+            "nx": (nx_counts, nx_starts),
+            "ny": (ny_counts, ny_starts),
+            "nz": (nz_counts, nz_starts),
         }
 
         self._rank_info = []
@@ -227,22 +228,22 @@ class DomainDecomposition:
 
             # Neighbors
             neighbors = {}
-            neighbors['x_lower'] = self._cart_neighbor(ix-1, iy, iz, px, py, pz)
-            neighbors['x_upper'] = self._cart_neighbor(ix+1, iy, iz, px, py, pz)
-            neighbors['y_lower'] = self._cart_neighbor(ix, iy-1, iz, px, py, pz)
-            neighbors['y_upper'] = self._cart_neighbor(ix, iy+1, iz, px, py, pz)
-            neighbors['z_lower'] = self._cart_neighbor(ix, iy, iz-1, px, py, pz)
-            neighbors['z_upper'] = self._cart_neighbor(ix, iy, iz+1, px, py, pz)
+            neighbors["x_lower"] = self._cart_neighbor(ix - 1, iy, iz, px, py, pz)
+            neighbors["x_upper"] = self._cart_neighbor(ix + 1, iy, iz, px, py, pz)
+            neighbors["y_lower"] = self._cart_neighbor(ix, iy - 1, iz, px, py, pz)
+            neighbors["y_upper"] = self._cart_neighbor(ix, iy + 1, iz, px, py, pz)
+            neighbors["z_lower"] = self._cart_neighbor(ix, iy, iz - 1, px, py, pz)
+            neighbors["z_upper"] = self._cart_neighbor(ix, iy, iz + 1, px, py, pz)
 
             n_neighbors = sum(1 for n in neighbors.values() if n is not None)
 
             nz, ny, nx = local_shape
             halo_cells = 0
-            if neighbors['x_lower'] is not None or neighbors['x_upper'] is not None:
+            if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
                 halo_cells += 2 * nz * ny
-            if neighbors['y_lower'] is not None or neighbors['y_upper'] is not None:
+            if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
                 halo_cells += 2 * nz * nx
-            if neighbors['z_lower'] is not None or neighbors['z_upper'] is not None:
+            if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
                 halo_cells += 2 * ny * nx
 
             info = RankInfo(
@@ -253,7 +254,7 @@ class DomainDecomposition:
                 halo_shape=halo_shape,
                 neighbors=neighbors,
                 n_neighbors=n_neighbors,
-                halo_cells_total=halo_cells
+                halo_cells_total=halo_cells,
             )
             self._rank_info.append(info)
 
@@ -266,19 +267,20 @@ class DomainDecomposition:
     def _factorize_3d(self, n):
         """Simple 3D factorization (as cubic as possible)."""
         candidates = np.arange(1, int(n**0.5) + 1)
-        divisors = np.concatenate([candidates[n % candidates == 0],
-                                   n // candidates[n % candidates == 0]])
+        divisors = np.concatenate(
+            [candidates[n % candidates == 0], n // candidates[n % candidates == 0]]
+        )
         divisors = np.unique(divisors)
 
         best = (n, 1, 1)
-        best_score = float('inf')
+        best_score = float("inf")
 
         for i in divisors:
             remaining = n // i
             valid_j = divisors[divisors <= remaining]
             for j in valid_j[remaining % valid_j == 0]:
                 k = remaining // j
-                score = (i - j)**2 + (j - k)**2 + (k - i)**2
+                score = (i - j) ** 2 + (j - k) ** 2 + (k - i) ** 2
                 if score < best_score:
                     best = (int(i), int(j), int(k))
                     best_score = score
@@ -316,7 +318,7 @@ class DomainDecomposition:
         # Build local source term using physical coordinates
         h = 2.0 / (N - 1)
 
-        if self.strategy == 'sliced':
+        if self.strategy == "sliced":
             # Sliced: one axis decomposed, others full
             gs = info.global_start
             axis = self.axis  # 0=z, 1=y, 2=x
@@ -333,8 +335,10 @@ class DomainDecomposition:
                     # Full axis
                     coords.append(np.linspace(-1, 1, N))
 
-            Z, Y, X = np.meshgrid(coords[0], coords[1], coords[2], indexing='ij')
-            source = 3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
+            Z, Y, X = np.meshgrid(coords[0], coords[1], coords[2], indexing="ij")
+            source = (
+                3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
+            )
 
             # Build interior slice (skip halo on decomposed axis only)
             interior = [slice(None), slice(None), slice(None)]
@@ -361,13 +365,19 @@ class DomainDecomposition:
             Yl = ys.reshape((1, ny, 1))
             Xl = xs.reshape((1, 1, nx))
 
-            f_local[1:-1, 1:-1, 1:-1] = 3 * np.pi**2 * np.sin(np.pi * Xl) * np.sin(np.pi * Yl) * np.sin(np.pi * Zl)
+            f_local[1:-1, 1:-1, 1:-1] = (
+                3
+                * np.pi**2
+                * np.sin(np.pi * Xl)
+                * np.sin(np.pi * Yl)
+                * np.sin(np.pi * Zl)
+            )
 
         return u1, u2, f_local
 
     def extract_interior(self, u_local):
         """Extract interior points from local array (excluding halos)."""
-        if self.strategy == 'sliced':
+        if self.strategy == "sliced":
             interior = [slice(None), slice(None), slice(None)]
             interior[self.axis] = slice(1, -1)
             return u_local[tuple(interior)].copy()
@@ -381,7 +391,7 @@ class DomainDecomposition:
         """
         info = self.get_rank_info(rank_id)
 
-        if self.strategy == 'sliced':
+        if self.strategy == "sliced":
             gs = info.global_start
             ge = info.global_end
             slices = [slice(None), slice(None), slice(None)]
@@ -410,7 +420,7 @@ class DomainDecomposition:
         rank : int
             MPI rank
         """
-        if self.strategy != 'cubic':
+        if self.strategy != "cubic":
             return  # Sliced doesn't need this - boundaries are handled differently
 
         info = self.get_rank_info(rank)
@@ -446,7 +456,7 @@ class NoDecomposition:
     """Stub decomposition for single-rank (sequential) execution."""
 
     def __init__(self):
-        self.strategy = 'none'
+        self.strategy = "none"
         self._N = None
 
     def get_rank_info(self, rank):
@@ -454,13 +464,13 @@ class NoDecomposition:
         N = self._N or 1
         return RankInfo(
             rank=0,
-            local_shape=(N-2, N-2, N-2),  # Interior only
+            local_shape=(N - 2, N - 2, N - 2),  # Interior only
             global_start=(1, 1, 1),
-            global_end=(N-1, N-1, N-1),
+            global_end=(N - 1, N - 1, N - 1),
             halo_shape=(N, N, N),
             neighbors={},
             n_neighbors=0,
-            halo_cells_total=0
+            halo_cells_total=0,
         )
 
     def initialize_local_arrays_distributed(self, N, rank, comm):

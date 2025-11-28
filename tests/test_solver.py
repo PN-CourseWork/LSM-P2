@@ -42,7 +42,7 @@ class TestSolverBasics:
     def test_boundary_conditions(self, solver):
         """Dirichlet BCs (zero) should be preserved."""
         u = solver.u_global
-        for face in [u[0], u[-1], u[:,0], u[:,-1], u[:,:,0], u[:,:,-1]]:
+        for face in [u[0], u[-1], u[:, 0], u[:, -1], u[:, :, 0], u[:, :, -1]]:
             assert np.allclose(face, 0.0)
 
     def test_numba_kernel(self):

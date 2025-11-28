@@ -3,7 +3,12 @@
 import sys
 import json
 from mpi4py import MPI
-from Poisson import JacobiPoisson, DomainDecomposition, NumpyHaloExchange, CustomHaloExchange
+from Poisson import (
+    JacobiPoisson,
+    DomainDecomposition,
+    NumpyHaloExchange,
+    CustomHaloExchange,
+)
 
 config = json.loads(sys.argv[1])
 comm = MPI.COMM_WORLD
@@ -14,7 +19,11 @@ decomp = DomainDecomposition(
     strategy=config.get("strategy", "sliced"),
     axis=config.get("axis", "z"),
 )
-halo = CustomHaloExchange() if config.get("communicator") == "custom" else NumpyHaloExchange()
+halo = (
+    CustomHaloExchange()
+    if config.get("communicator") == "custom"
+    else NumpyHaloExchange()
+)
 
 solver = JacobiPoisson(
     N=config["N"],
