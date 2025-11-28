@@ -49,10 +49,8 @@ jobs:
       - name: Build Sphinx docs
         env:
           PYVISTA_OFF_SCREEN: "true"
-        run: |
-          echo "Checking if Poisson module is importable..."
-          uv run python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); import Poisson; print('Poisson imported from:', Poisson.__file__)"
-          uv run python -c "import sys; sys.path.insert(0, '${{ github.workspace }}/src'); from sphinx.cmd.build import main; sys.exit(main(['-b', 'html', 'docs/source', 'docs/build/html']))"
+          PYTHONPATH: "${{ github.workspace }}/src"
+        run: uv run sphinx-build -b html docs/source docs/build/html
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
