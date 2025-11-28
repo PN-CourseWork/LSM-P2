@@ -7,7 +7,7 @@ A modular framework for studying parallel performance of 3D Poisson equation sol
 
 ## Documentation
 
-📖 **[View Full Documentation](https://lsm-p2.readthedocs.io/)** 
+📖 **[View Full Documentation](https://pn-coursework.github.io/LSM-P2/)** 
 For local documentation, see [Building Documentation](#building-documentation) below.
 
 ## Quick Start
