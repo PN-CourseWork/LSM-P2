@@ -14,15 +14,15 @@ data_dir = repo_root / "data" / "multigrid_fmg"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
-problem_sizes = [65, 129, 257]  # Power-of-two grids + 1 for clean coarsening
-rank_counts = [2]
-communicators = ["custom"]
+problem_sizes = [65, 129, 257, 513]
+rank_counts = [4]
+communicators = ["numpy", "custom"]
 
 n_smooth = 5
 omega = 0.6
 max_iterations = 3000
-tolerance = 1e-12
-fmg_post_cycles = 1
+tolerance = 1e-16
+fmg_post_cycles = 2
 
 print("FMG Spatial Convergence")
 print("=" * 60)

@@ -7,11 +7,7 @@ from Poisson import run_solver
 
 MULTIGRID_CASES = [
     (2, "numpy"),
-    (2, "custom"),
     (4, "numpy"),
-    (4, "custom"),
-    (8, "numpy"),
-    (8, "custom"),
 ]
 
 

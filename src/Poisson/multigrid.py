@@ -112,7 +112,7 @@ class MultigridPoisson:
 
     def _infer_levels(self, N: int) -> int:
         """
-        Infer the number of grid levels by coarsening until the grid is 3x3x3.
+        Infer the number of grid levels by coarsening until the grid is too small.
 
         Returns the total number of levels including the finest and coarsest.
         """
@@ -247,16 +247,23 @@ class MultigridPoisson:
     def _get_global_residual_norm(self, r_array: np.ndarray) -> float:
         """Helper to compute global RMS norm of residual (matching JacobiPoisson).
 
-        Uses the residual array shape to determine the number of interior points,
-        so coarse levels are normalized appropriately.
+        Uses allreduce to gather both the sum of squared residuals AND the total
+        interior point count across all ranks, ensuring all ranks compute the
+        same norm value.
         """
-        local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1]**2)
+        local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1] ** 2)
+        local_interior_pts = float(np.prod(np.array(r_array.shape) - 2))
+
         t0 = MPI.Wtime()
-        global_res_sq_sum = self.comm.allreduce(local_res_sq, op=MPI.SUM)
+        # Reduce both values in a single allreduce for efficiency
+        local_data = np.array([local_res_sq, local_interior_pts])
+        global_data = np.empty(2)
+        self.comm.Allreduce(local_data, global_data, op=MPI.SUM)
         self._time_mpi += MPI.Wtime() - t0
-        
-        interior_points = np.prod(np.array(r_array.shape) - 2)
-        norm = np.sqrt(global_res_sq_sum) / interior_points
+
+        global_res_sq_sum = global_data[0]
+        global_interior_pts = global_data[1]
+        norm = np.sqrt(global_res_sq_sum) / global_interior_pts
         return norm
 
     def v_cycle(self, level_idx: int) -> float:
@@ -277,15 +284,16 @@ class MultigridPoisson:
             current_residual_norm = 0.0 # Not needed for coarse levels
         
         # Base Case: Coarsest Level - solve with Jacobi until tolerance
+        # Use limited iterations on coarse grid (10-20 sweeps is typical for V-cycle)
         if level_idx == self.levels - 1:
-            return self._coarse_solve(lvl, max_iters=self.config.max_iter)
+            return self._coarse_solve(lvl, max_iters=20)
 
         # 3. Restriction: f_coarse = R(r_fine)
         next_lvl = self.grid_levels[level_idx + 1]
-        
+
         # Ensure residual halos are up to date before restriction
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm)
+        lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm, level=level_idx)
         self._time_halo += MPI.Wtime() - t0
 
         t0 = MPI.Wtime()
@@ -298,10 +306,10 @@ class MultigridPoisson:
         self.v_cycle(level_idx + 1)
         
         # 5. Prolongation: u_fine += P(u_coarse_correction)
-        
+
         # Refresh coarse halos before prolongation
         t0 = MPI.Wtime()
-        next_lvl.communicator.exchange_halos(next_lvl.u, next_lvl.decomposition, self.rank, self.comm)
+        next_lvl.communicator.exchange_halos(next_lvl.u, next_lvl.decomposition, self.rank, self.comm, level=level_idx + 1)
         self._time_halo += MPI.Wtime() - t0
         
         lvl.r[:] = 0.0
@@ -317,18 +325,16 @@ class MultigridPoisson:
             
         return current_residual_norm
 
-    def _coarse_solve(self, lvl: GridLevel, max_iters: Optional[int] = None) -> float:
-        """Solve on the coarsest grid with Jacobi until tolerance (optional cap)."""
+    def _coarse_solve(self, lvl: GridLevel, max_iters: int = 2000) -> float:
+        """Solve on the coarsest grid with Jacobi until tolerance or max iterations."""
         current_residual_norm = float("inf")
         iterations = 0
-        while True:
+        while iterations < max_iters:
             self._smooth(lvl)
             self._compute_residual(lvl)
             current_residual_norm = self._get_global_residual_norm(lvl.r)
             iterations += 1
             if current_residual_norm < self.config.tolerance:
-                break
-            if max_iters is not None and iterations >= max_iters:
                 break
         return current_residual_norm
 
@@ -351,7 +357,7 @@ class MultigridPoisson:
 
         for _ in range(cycles):
             # Solve on coarsest level
-            coarse_res = self._coarse_solve(self.grid_levels[-1], max_iters=None)
+            coarse_res = self._coarse_solve(self.grid_levels[-1])
             residual = coarse_res
             coarse_ok = coarse_ok and coarse_res < self.config.tolerance
 
@@ -362,7 +368,7 @@ class MultigridPoisson:
 
                 # Halo sync before prolongation
                 t0 = MPI.Wtime()
-                coarse.communicator.exchange_halos(coarse.u, coarse.decomposition, self.rank, self.comm)
+                coarse.communicator.exchange_halos(coarse.u, coarse.decomposition, self.rank, self.comm, level=l + 1)
                 self._time_halo += MPI.Wtime() - t0
 
                 # Prolong coarse solution as initial guess on fine
@@ -405,7 +411,7 @@ class MultigridPoisson:
     def _smooth(self, lvl: GridLevel):
         """Perform one Jacobi smoothing step."""
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(lvl.u, lvl.decomposition, self.rank, self.comm)
+        lvl.communicator.exchange_halos(lvl.u, lvl.decomposition, self.rank, self.comm, level=lvl.level_index)
         self._time_halo += MPI.Wtime() - t0
         
         t0 = MPI.Wtime()
@@ -420,9 +426,9 @@ class MultigridPoisson:
         f = lvl.f
         r = lvl.r
         h2 = lvl.h * lvl.h
-        
+
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(u, lvl.decomposition, self.rank, self.comm)
+        lvl.communicator.exchange_halos(u, lvl.decomposition, self.rank, self.comm, level=lvl.level_index)
         self._time_halo += MPI.Wtime() - t0
         
         u_center = u[1:-1, 1:-1, 1:-1]

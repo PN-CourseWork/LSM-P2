@@ -18,8 +18,14 @@ def _face_slice(axis, idx, has_halo):
 class _BaseHaloExchange:
     """Base class with shared exchange loop logic."""
 
-    def exchange_halos(self, u, decomposition, rank, comm):
-        """Exchange halo zones with neighbors."""
+    def exchange_halos(self, u, decomposition, rank, comm, level=0):
+        """Exchange halo zones with neighbors.
+
+        Parameters
+        ----------
+        level : int
+            Grid level index (used to generate unique MPI tags per level).
+        """
         neighbors = decomposition.get_neighbors(rank)
         has_halo = {ax: f"{name}_lower" in neighbors for ax, name in _AXES}
 
@@ -28,7 +34,8 @@ class _BaseHaloExchange:
                 continue
             lo = neighbors.get(f"{name}_lower")
             hi = neighbors.get(f"{name}_upper")
-            self._exchange_axis(u, axis, lo, hi, has_halo, comm, tag=axis * 100)
+            # Use level * 1000 + axis * 100 to ensure unique tags per level
+            self._exchange_axis(u, axis, lo, hi, has_halo, comm, tag=level * 1000 + axis * 100)
 
 
 class NumpyHaloExchange(_BaseHaloExchange):
@@ -39,6 +46,9 @@ class NumpyHaloExchange(_BaseHaloExchange):
     def _exchange_axis(self, u, axis, lo_rank, hi_rank, has_halo, comm, tag):
         lo = lo_rank if lo_rank is not None else MPI.PROC_NULL
         hi = hi_rank if hi_rank is not None else MPI.PROC_NULL
+
+        # Barrier to ensure all ranks are synchronized before exchange
+        comm.Barrier()
 
         for send_i, recv_i, dest, src in [(-2, 0, hi, lo), (1, -1, lo, hi)]:
             send = np.ascontiguousarray(u[_face_slice(axis, send_i, has_halo)])
