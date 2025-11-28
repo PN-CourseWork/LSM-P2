@@ -41,36 +41,31 @@ if solver_type == "jacobi":
     )
 elif solver_type == "multigrid":
     # MultigridPoisson handles its own decomposition internally
-    if config.get("strategy", "sliced") != "sliced":
-        raise ValueError("MultigridPoisson only supports sliced decomposition.")
-
     communicator_choice = config.get("communicator", "numpy")
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
         n_smooth=config.get("n_smooth", 3),
+        omega=config.get("omega", 2.0 / 3.0),
         max_iter=config.get("max_iter", 20), # Multigrid converges faster
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
-        decomposition_strategy="sliced",
+        decomposition_strategy=config.get("strategy", "sliced"),
         communicator=communicator_choice,
-        # Assuming other params like omega are handled by GlobalParams in MultigridPoisson
     )
 elif solver_type == "fmg":
-    if config.get("strategy", "sliced") != "sliced":
-        raise ValueError("FMG only supports sliced decomposition.")
-
     communicator_choice = config.get("communicator", "numpy")
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
         min_coarse_size=config.get("min_coarse_size", 9),
         n_smooth=config.get("n_smooth", 3),
+        omega=config.get("omega", 2.0 / 3.0),
         fmg_post_cycles=config.get("fmg_post_cycles", 50),
         max_iter=config.get("max_iter", 20),
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
-        decomposition_strategy="sliced",
+        decomposition_strategy=config.get("strategy", "sliced"),
         communicator=communicator_choice,
     )
 else:
