@@ -7,8 +7,8 @@ and non-contiguous (X-axis) memory layouts.
 
 Uses per-iteration timeseries data for statistical analysis.
 """
+
 import subprocess
-import sys
 
 from Poisson import get_project_root
 
@@ -17,6 +17,7 @@ def main():
     """Entry point - spawns MPI if needed."""
     try:
         from mpi4py import MPI
+
         if MPI.COMM_WORLD.Get_size() > 1:
             _run_benchmark()
             return
@@ -24,7 +25,12 @@ def main():
         pass
 
     # Spawn MPI
-    script = get_project_root() / "Experiments" / "03-communication" / "compute_communication.py"
+    script = (
+        get_project_root()
+        / "Experiments"
+        / "03-communication"
+        / "compute_communication.py"
+    )
     subprocess.run(["mpiexec", "-n", "4", "uv", "run", "python", str(script)])
 
 
@@ -32,7 +38,13 @@ def _run_benchmark():
     """MPI worker - collects per-iteration timings."""
     import pandas as pd
     from mpi4py import MPI
-    from Poisson import JacobiPoisson, DomainDecomposition, NumpyHaloExchange, CustomHaloExchange, get_project_root
+    from Poisson import (
+        JacobiPoisson,
+        DomainDecomposition,
+        NumpyHaloExchange,
+        CustomHaloExchange,
+        get_project_root,
+    )
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -70,10 +82,17 @@ def _run_benchmark():
                 print(f"  {label}...", end=" ", flush=True)
 
             # Create and run solver
-            decomp = DomainDecomposition(N=N, size=size, strategy='sliced', axis=axis)
-            halo = CustomHaloExchange() if comm_type == "custom" else NumpyHaloExchange()
-            solver = JacobiPoisson(N=N, decomposition=decomp, communicator=halo,
-                                   max_iter=WARMUP + ITERATIONS, tolerance=0)
+            decomp = DomainDecomposition(N=N, size=size, strategy="sliced", axis=axis)
+            halo = (
+                CustomHaloExchange() if comm_type == "custom" else NumpyHaloExchange()
+            )
+            solver = JacobiPoisson(
+                N=N,
+                decomposition=decomp,
+                communicator=halo,
+                max_iter=WARMUP + ITERATIONS,
+                tolerance=0,
+            )
             solver.solve()
 
             # Get max halo time across ranks per iteration (skip warmup)
@@ -82,13 +101,20 @@ def _run_benchmark():
 
             if rank == 0:
                 local_N = N // size  # Local subdomain size along decomposed axis
-                print(f"mean={sum(max_times)/len(max_times)*1e6:.1f} μs/iter")
-                dfs.append(pd.DataFrame({
-                    "N": N, "local_N": local_N, "axis": axis,
-                    "communicator": comm_type, "label": label,
-                    "iteration": range(len(max_times)),
-                    "halo_time_us": [t * 1e6 for t in max_times],
-                }))
+                print(f"mean={sum(max_times) / len(max_times) * 1e6:.1f} μs/iter")
+                dfs.append(
+                    pd.DataFrame(
+                        {
+                            "N": N,
+                            "local_N": local_N,
+                            "axis": axis,
+                            "communicator": comm_type,
+                            "label": label,
+                            "iteration": range(len(max_times)),
+                            "halo_time_us": [t * 1e6 for t in max_times],
+                        }
+                    )
+                )
 
     if rank == 0:
         df = pd.concat(dfs, ignore_index=True)

@@ -146,7 +146,11 @@ def run_compute_scripts():
                 print("✓")
                 success_count += 1
             else:
-                error_msg = result.stderr[:200] if result.stderr else f"exit {result.returncode}"
+                error_msg = (
+                    result.stderr[:200]
+                    if result.stderr
+                    else f"exit {result.returncode}"
+                )
                 print(f"✗ ({error_msg})")
                 fail_count += 1
 
@@ -176,7 +180,7 @@ def copy_plots():
         if dest_dir.exists():
             shutil.rmtree(dest_dir)
         shutil.copytree(source_dir, dest_dir)
-        print(f"  ✓ Copied figures/ to docs/reports/TexReport/figures/")
+        print("  ✓ Copied figures/ to docs/reports/TexReport/figures/")
     except Exception as e:
         print(f"  ✗ Failed to copy: {e}")
 
@@ -248,9 +252,16 @@ def clean_all():
 
     # Directories to clean
     dirs = [
-        "docs/build", "docs/source/example_gallery", "docs/source/generated",
-        "docs/source/gen_modules", "plots", "build", "dist",
-        ".pytest_cache", ".ruff_cache", ".mypy_cache",
+        "docs/build",
+        "docs/source/example_gallery",
+        "docs/source/generated",
+        "docs/source/gen_modules",
+        "plots",
+        "build",
+        "dist",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".mypy_cache",
     ]
     for d in dirs:
         path = REPO_ROOT / d
@@ -307,17 +318,18 @@ def fetch_mlflow():
 
     try:
         # Import locally to avoid hard dependency if not fetching
-        from utils.mlflow_io import download_artifacts_with_naming, setup_mlflow_auth
+        # from utils.mlflow_io import download_artifacts_with_naming, setup_mlflow_auth
+        from utils.mlflow_io import setup_mlflow_auth
 
         setup_mlflow_auth()
 
         # Define download targets - modifying for LSM Project 2 context
         # Assuming we might have experiments named like 'LSM-Project-2/Scaling' or similar
-        # For now, we'll use a placeholder or a generic search if available, 
+        # For now, we'll use a placeholder or a generic search if available,
         # but matching the ANA-P3 pattern:
-        
-        output_dir = REPO_ROOT / "data" / "downloaded"
-        
+
+        # output_dir = REPO_ROOT / "data" / "downloaded"
+
         # Example: Fetch from a "Scaling" experiment
         # experiments = ["LSM-Scaling", "LSM-Kernels"]
         # for exp in experiments:
@@ -325,7 +337,9 @@ def fetch_mlflow():
         #     paths = download_artifacts_with_naming(exp, output_dir / exp)
         #     print(f"  ✓ Downloaded {len(paths)} files to data/downloaded/{exp}/")
 
-        print("  (No experiments configured for auto-fetch yet. Edit main.py to specify experiments.)")
+        print(
+            "  (No experiments configured for auto-fetch yet. Edit main.py to specify experiments.)"
+        )
         print()
 
     except ImportError as e:
@@ -351,10 +365,18 @@ Examples:
         """,
     )
 
-    parser.add_argument("--docs", action="store_true", help="Build Sphinx HTML documentation")
-    parser.add_argument("--compute", action="store_true", help="Run all compute scripts (sequentially)")
-    parser.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
-    parser.add_argument("--copy-plots", action="store_true", help="Copy plots to plots/ directory")
+    parser.add_argument(
+        "--docs", action="store_true", help="Build Sphinx HTML documentation"
+    )
+    parser.add_argument(
+        "--compute", action="store_true", help="Run all compute scripts (sequentially)"
+    )
+    parser.add_argument(
+        "--plot", action="store_true", help="Run all plotting scripts (in parallel)"
+    )
+    parser.add_argument(
+        "--copy-plots", action="store_true", help="Copy plots to plots/ directory"
+    )
     parser.add_argument(
         "--clean", action="store_true", help="Clean all generated files and caches"
     )

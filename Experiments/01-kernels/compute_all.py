@@ -5,9 +5,9 @@ Kernel Experiments
 1. Convergence validation with analytical solution
 2. Fixed iteration performance benchmark
 """
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from dataclasses import asdict
 from scipy.ndimage import laplace
 
@@ -29,10 +29,10 @@ def run_kernel(kernel, f, max_iter, track_algebraic=False):
 
     if track_algebraic:
         kernel.timeseries.physical_errors = []
-        h2 = kernel.parameters.h ** 2
+        h2 = kernel.parameters.h**2
 
     for _ in range(max_iter):
-        residual = kernel.step(u_old, u, f)
+        kernel.step(u_old, u, f)
 
         if track_algebraic:
             Au = -laplace(u) / h2
@@ -47,10 +47,10 @@ def run_kernel(kernel, f, max_iter, track_algebraic=False):
 def kernel_to_df(kernel, kernel_name, N, omega, **extra):
     """Convert kernel timeseries to DataFrame."""
     df = pd.DataFrame(asdict(kernel.timeseries))
-    df['iteration'] = range(len(df))
-    df['kernel'] = kernel_name
-    df['N'] = N
-    df['omega'] = omega
+    df["iteration"] = range(len(df))
+    df["kernel"] = kernel_name
+    df["N"] = N
+    df["omega"] = omega
     for k, v in extra.items():
         df[k] = v
     return df
@@ -67,14 +67,18 @@ for N in [25]:
     f = problems.sinusoidal_source_term(N)
 
     numpy_kernel = NumPyKernel(N=N, omega=omega, tolerance=0.0, max_iter=max_iter)
-    numba_kernel = NumbaKernel(N=N, omega=omega, tolerance=0.0, max_iter=max_iter, numba_threads=4)
+    numba_kernel = NumbaKernel(
+        N=N, omega=omega, tolerance=0.0, max_iter=max_iter, numba_threads=4
+    )
     numba_kernel.warmup()
 
-    for name, kernel in [('numpy', numpy_kernel), ('numba', numba_kernel)]:
+    for name, kernel in [("numpy", numpy_kernel), ("numba", numba_kernel)]:
         run_kernel(kernel, f, max_iter, track_algebraic=True)
         all_dfs.append(kernel_to_df(kernel, name, N, omega, tolerance=0.0))
 
-pd.concat(all_dfs, ignore_index=True).to_parquet(data_dir / "kernel_convergence.parquet", index=False)
+pd.concat(all_dfs, ignore_index=True).to_parquet(
+    data_dir / "kernel_convergence.parquet", index=False
+)
 
 
 # Experiment 2: Fixed Iteration Benchmark
@@ -90,16 +94,38 @@ for N in problem_sizes:
     kernel = NumPyKernel(N=N, omega=omega, tolerance=0.0, max_iter=max_iter)
     f = np.ones((N, N, N), dtype=np.float64)
     run_kernel(kernel, f, max_iter)
-    all_dfs.append(kernel_to_df(kernel, 'numpy', N, omega, max_iter=max_iter, use_numba=False, num_threads=0))
+    all_dfs.append(
+        kernel_to_df(
+            kernel, "numpy", N, omega, max_iter=max_iter, use_numba=False, num_threads=0
+        )
+    )
 
 # Numba with thread scaling
 for num_threads in thread_counts:
     for idx, N in enumerate(problem_sizes):
-        kernel = NumbaKernel(N=N, omega=omega, tolerance=0.0, max_iter=max_iter, numba_threads=num_threads)
+        kernel = NumbaKernel(
+            N=N,
+            omega=omega,
+            tolerance=0.0,
+            max_iter=max_iter,
+            numba_threads=num_threads,
+        )
         if idx == 0:
             kernel.warmup()
         f = np.ones((N, N, N), dtype=np.float64)
         run_kernel(kernel, f, max_iter)
-        all_dfs.append(kernel_to_df(kernel, 'numba', N, omega, max_iter=max_iter, use_numba=True, num_threads=num_threads))
+        all_dfs.append(
+            kernel_to_df(
+                kernel,
+                "numba",
+                N,
+                omega,
+                max_iter=max_iter,
+                use_numba=True,
+                num_threads=num_threads,
+            )
+        )
 
-pd.concat(all_dfs, ignore_index=True).to_parquet(data_dir / "kernel_benchmark.parquet", index=False)
+pd.concat(all_dfs, ignore_index=True).to_parquet(
+    data_dir / "kernel_benchmark.parquet", index=False
+)

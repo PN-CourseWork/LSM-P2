@@ -9,7 +9,9 @@ from .datastructures import KernelParams, KernelMetrics, KernelSeries
 
 
 @njit(parallel=True)
-def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float, omega: float) -> float:
+def _jacobi_step_numba(
+    uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float, omega: float
+) -> float:
     """Numba JIT implementation of Jacobi iteration step."""
     c = 1.0 / 6.0
     h2 = h * h
@@ -18,7 +20,9 @@ def _jacobi_step_numba(uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float,
         for j in range(1, u.shape[1] - 1):
             for k in range(1, u.shape[2] - 1):
                 u[i, j, k] = (
-                    omega * c * (
+                    omega
+                    * c
+                    * (
                         uold[i - 1, j, k]
                         + uold[i + 1, j, k]
                         + uold[i, j - 1, k]
@@ -74,7 +78,9 @@ class NumPyKernel(_BaseKernel):
         h2 = self.parameters.h * self.parameters.h
 
         u[1:-1, 1:-1, 1:-1] = (
-            self.parameters.omega * c * (
+            self.parameters.omega
+            * c
+            * (
                 uold[0:-2, 1:-1, 1:-1]
                 + uold[2:, 1:-1, 1:-1]
                 + uold[1:-1, 0:-2, 1:-1]
@@ -89,7 +95,7 @@ class NumPyKernel(_BaseKernel):
         # Compute sum of squared differences over interior points only
         # Return unnormalized sum - normalization done globally in solver
         diff = u[1:-1, 1:-1, 1:-1] - uold[1:-1, 1:-1, 1:-1]
-        diff_sum = np.sum(diff ** 2)
+        diff_sum = np.sum(diff**2)
         self._track(diff_sum, time.perf_counter() - start)
         return diff_sum
 
@@ -105,7 +111,9 @@ class NumbaKernel(_BaseKernel):
     def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray) -> float:
         """Perform one Jacobi iteration step."""
         start = time.perf_counter()
-        residual = _jacobi_step_numba(uold, u, f, self.parameters.h, self.parameters.omega)
+        residual = _jacobi_step_numba(
+            uold, u, f, self.parameters.h, self.parameters.omega
+        )
         self._track(residual, time.perf_counter() - start)
         return residual
 

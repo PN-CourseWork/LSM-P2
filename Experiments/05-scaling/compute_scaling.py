@@ -23,13 +23,31 @@ from Poisson import (
 )
 
 # Parse command line arguments
-parser = argparse.ArgumentParser(description="MPI Jacobi solver for 3D Poisson equation")
+parser = argparse.ArgumentParser(
+    description="MPI Jacobi solver for 3D Poisson equation"
+)
 parser.add_argument("--N", type=int, default=64, help="Grid size N³ (default: 64)")
-parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance (default: 1e-6)")
-parser.add_argument("--max-iter", type=int, default=50000, help="Max iterations (default: 50000)")
-parser.add_argument("--omega", type=float, default=0.8, help="Relaxation parameter (default: 0.8)")
-parser.add_argument("--strategy", choices=["sliced", "cubic"], default="sliced", help="Decomposition strategy")
-parser.add_argument("--communicator", choices=["numpy", "custom"], default="numpy", help="Halo exchange communicator")
+parser.add_argument(
+    "--tol", type=float, default=1e-6, help="Convergence tolerance (default: 1e-6)"
+)
+parser.add_argument(
+    "--max-iter", type=int, default=50000, help="Max iterations (default: 50000)"
+)
+parser.add_argument(
+    "--omega", type=float, default=0.8, help="Relaxation parameter (default: 0.8)"
+)
+parser.add_argument(
+    "--strategy",
+    choices=["sliced", "cubic"],
+    default="sliced",
+    help="Decomposition strategy",
+)
+parser.add_argument(
+    "--communicator",
+    choices=["numpy", "custom"],
+    default="numpy",
+    help="Halo exchange communicator",
+)
 parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
 args = parser.parse_args()
 
@@ -57,7 +75,9 @@ solver = JacobiPoisson(
 )
 
 if rank == 0:
-    print(f"Solver configured: N={N}³, ranks={n_ranks}, strategy={args.strategy}, comm={args.communicator}")
+    print(
+        f"Solver configured: N={N}³, ranks={n_ranks}, strategy={args.strategy}, comm={args.communicator}"
+    )
     print(f"  Kernel: {'Numba' if args.numba else 'NumPy'}, omega={args.omega}")
 
 # MLflow setup with nested runs (auto-detect HPC via LSF env vars)
@@ -99,16 +119,26 @@ solver.mlflow_end()
 
 # Summary
 if rank == 0:
-    print(f"\nSolution Status:")
+    print("\nSolution Status:")
     print(f"  Converged: {solver.results.converged}")
     print(f"  Iterations: {solver.results.iterations}")
     print(f"  L2 error: {solver.results.final_error:.6e}")
     print(f"  Wall time: {wall_time:.2f} seconds")
 
     # Timing breakdown
-    total = solver.results.total_compute_time + solver.results.total_halo_time + solver.results.total_mpi_comm_time
+    total = (
+        solver.results.total_compute_time
+        + solver.results.total_halo_time
+        + solver.results.total_mpi_comm_time
+    )
     if total > 0:
-        print(f"\nTiming breakdown:")
-        print(f"  Compute:      {solver.results.total_compute_time:.3f}s ({100*solver.results.total_compute_time/total:.1f}%)")
-        print(f"  Halo exchange:{solver.results.total_halo_time:.3f}s ({100*solver.results.total_halo_time/total:.1f}%)")
-        print(f"  MPI allreduce:{solver.results.total_mpi_comm_time:.3f}s ({100*solver.results.total_mpi_comm_time/total:.1f}%)")
+        print("\nTiming breakdown:")
+        print(
+            f"  Compute:      {solver.results.total_compute_time:.3f}s ({100 * solver.results.total_compute_time / total:.1f}%)"
+        )
+        print(
+            f"  Halo exchange:{solver.results.total_halo_time:.3f}s ({100 * solver.results.total_halo_time / total:.1f}%)"
+        )
+        print(
+            f"  MPI allreduce:{solver.results.total_mpi_comm_time:.3f}s ({100 * solver.results.total_mpi_comm_time / total:.1f}%)"
+        )

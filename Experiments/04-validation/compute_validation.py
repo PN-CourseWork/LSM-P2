@@ -43,8 +43,8 @@ for N in problem_sizes:
             )
 
             if "error" in result:
-                print(f"ERROR")
+                print("ERROR")
             else:
-                print(f"done")
+                print("done")
 
 print(f"\nSaved results to: {data_dir}")
