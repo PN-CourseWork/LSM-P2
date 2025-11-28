@@ -1,4 +1,10 @@
-"""Large Scale Modeling package."""
+"""MPI Poisson Solver package.
+
+A modular framework for studying parallel performance of 3D Poisson equation
+solvers using MPI domain decomposition. Supports pluggable decomposition
+strategies (sliced, cubic) and communication methods (NumPy arrays, custom
+MPI datatypes).
+"""
 
 from pathlib import Path
 

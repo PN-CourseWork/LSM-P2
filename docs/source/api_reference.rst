@@ -20,7 +20,7 @@ The package implements a unified, **rank-symmetric** architecture for studying p
 2. **Scalable I/O**: Parallel HDF5 writes eliminate serial bottlenecks
 3. **Pluggable strategies**: Duck-typed decomposition and communication strategies
 4. **Clean abstractions**: Simple dataclasses without global/local redundancy
-5. **Separation of concerns**: Solver solves + writes; PostProcessor analyzes + logs
+5. **Separation of concerns**: Solver handles computation, I/O, and MLflow logging
 
 Unified Solver Design
 ----------------------
@@ -30,8 +30,9 @@ A single :class:`JacobiPoisson` solver handles both sequential and distributed e
    JacobiPoisson (unified solver)
        ├── DecompositionStrategy (pluggable)
        │   ├── NoDecomposition (sequential: entire domain on rank 0)
-       │   ├── SlicedDecomposition (1D along Z-axis)
-       │   └── CubicDecomposition (3D Cartesian grid)
+       │   └── DomainDecomposition (parallel)
+       │       ├── strategy="sliced" (1D along Z-axis)
+       │       └── strategy="cubic" (3D Cartesian grid)
        └── CommunicatorStrategy (pluggable)
            ├── NumpyHaloExchange (array slicing + send/recv)
            └── CustomHaloExchange (MPI datatypes)
