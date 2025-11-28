@@ -52,8 +52,8 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
-# Mock heavy runtime dependencies
-# autodoc_mock_imports = ["numba", "pyarrow", "matplotlib"]  # Disabled - causing import issues
+# Mock heavy runtime dependencies that may not be available during docs build
+autodoc_mock_imports = ["mpi4py", "h5py", "numba"]
 
 # -- Numpydoc configuration --------------------------------------------------
 

@@ -1,5 +1,5 @@
-01 - Choise of Kernel: Numpy vs Numba 
-======================
+01 - Choice of Kernel: NumPy vs Numba
+======================================
 
 Description
 -----------
