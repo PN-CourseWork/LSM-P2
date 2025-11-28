@@ -49,6 +49,8 @@ parser.add_argument(
     help="Halo exchange communicator",
 )
 parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
+parser.add_argument("--job-name", type=str, default=None, help="LSF Job Name for log retrieval")
+parser.add_argument("--log-dir", type=str, default="logs", help="Directory containing LSF logs")
 args = parser.parse_args()
 
 N = args.N
@@ -87,6 +89,18 @@ parent_run = f"N{N}"
 run_name = f"N{N}_p{n_ranks}_{args.strategy}"
 solver.mlflow_start(experiment_name, run_name, parent_run_name=parent_run)
 
+# Save Run ID for external log uploader
+if rank == 0 and args.job_name:
+    try:
+        run_id = mlflow.active_run().info.run_id
+        log_path = project_root / args.log_dir
+        log_path.mkdir(parents=True, exist_ok=True)
+        run_id_file = log_path / f"{args.job_name}.runid"
+        with open(run_id_file, "w") as f:
+            f.write(run_id)
+    except Exception as e:
+        print(f"Warning: Could not save run ID to file: {e}")
+
 # Warmup Numba if needed
 if args.numba:
     solver.warmup()
@@ -113,6 +127,11 @@ solver.mlflow_log_artifact(str(output_file))
 
 if rank == 0:
     print(f"\nResults saved to: {output_file}")
+    
+    # Flush streams to ensure logs on disk are up to date for the external uploader
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
 
 # End MLflow run
 solver.mlflow_end()

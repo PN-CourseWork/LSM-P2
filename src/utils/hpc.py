@@ -21,6 +21,7 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
     global_params = config.get("parameters", {})
     global_lsf = config.get("lsf", {})
     global_sweep = config.get("sweep", {})
+    global_mpi = config.get("mpi_options", "")
     
     # Normalize to a list of groups
     if "groups" in config:
@@ -31,7 +32,8 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
             "name": "default",
             "lsf": {},
             "parameters": {},
-            "sweep": global_sweep
+            "sweep": global_sweep,
+            "mpi_options": ""
         }]
 
     lines = []
@@ -42,6 +44,7 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
         group_lsf = {**global_lsf, **group.get("lsf", {})}
         group_params = {**global_params, **group.get("parameters", {})}
         group_sweep = group.get("sweep", {})
+        group_mpi = group.get("mpi_options", global_mpi)
         
         # If no sweep in group, use global sweep (if it exists and wasn't just the legacy fallback)
         if not group_sweep and "groups" in config:
@@ -73,6 +76,9 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
             # Extract ranks for mpiexec and bsub -n
             ranks = current_params.pop("ranks")
             
+            # Calculate job name early to pass to script
+            current_job_name = f"{job_name_base}_{group_name}_{global_job_counter}"
+
             # Build command arguments
             args = []
             for k, v in current_params.items():
@@ -82,11 +88,27 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
                 else:
                     args.append(f"--{k} {v}")
             
+            # Add logging info for MLflow artifact upload
+            args.append(f"--job-name {current_job_name}")
+            args.append("--log-dir logs")
+
             # Construct the actual command to run
-            cmd = base_cmd.format(ranks=ranks) + " " + " ".join(args)
+            # base_cmd pattern: mpiexec -n {ranks} {mpi_options} uv run python {script} {args}
+            cmd_parts = [f"mpiexec -n {ranks}"]
+            if group_mpi:
+                cmd_parts.append(group_mpi)
+            cmd_parts.append(f"uv run python {script}")
+            cmd_parts.append(" ".join(args))
+            
+            main_cmd = " ".join(cmd_parts)
+            
+            # Chain the log uploader command
+            # We use (cmd; uploader) to ensure uploader runs regardless of cmd exit status
+            uploader_cmd = f"uv run python src/utils/upload_logs.py --job-name {current_job_name} --log-dir logs"
+            cmd = f'({main_cmd}; {uploader_cmd})'
             
             # Build LSF options for this specific job
-            current_job_name = f"{job_name_base}_{group_name}_{global_job_counter}"
+            # current_job_name is already defined above
             
             # Map config keys to LSF flags
             lsf_opts = []

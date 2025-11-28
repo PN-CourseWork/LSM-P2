@@ -2,7 +2,7 @@
 # LSF Scaling Experiment Configuration Template
 # ============================================================================
 
-name: "Strong" 
+type: strong # Options: strong, weak
 script: Experiments/05-scaling/compute_scaling.py
 
 # ============================================================================
@@ -10,60 +10,63 @@ script: Experiments/05-scaling/compute_scaling.py
 # ============================================================================
 # Arguments passed to the python script
 parameters:
-  tol: 0.0 # Always run fixed number of iterations
-  max-iter: 500
-  # Note: We always use numba kernel 
+  tol: 1e-6
+  max-iter: 50000
+  numba: true # Always use numba
+
 # ============================================================================
 # Global LSF Settings (Apply to all groups)
 # ============================================================================
-# Common BSUB options
 lsf:
-  queue: hpcintro          # -q: Queue name
+  queue: hpc          # -q: Queue name
   walltime: "00:10"   # -W: Walltime (HH:MM)
   
-  # Resources strings (-R). List of resource requirements.
+  # Default resources
   resources:
     - "rusage[mem=4GB]"
-    - "span[hosts=1]"
   
   # Additional options
   exclusive: false    # -x: Exclusive node access
-  # email: user@dtu.dk # -u: Email notification
-  # notify_start: false # -B: Notify on job start
-  # notify_end: false   # -N: Notify on job finish
 
 # ============================================================================
 # Experiment Groups
 # ============================================================================
-# Each group generates a set of jobs. 
-# Group settings merge with and override Global settings.
 groups:
   # --------------------------------------------------------------------------
-  # Group 1: Single Node
+  # Group 1: Single Node (Shared Memory)
   # --------------------------------------------------------------------------
+  # Runs on a single host. Useful for small scale testing and debugging.
   - name: single_node
     lsf:
       resources:
         - "rusage[mem=4GB]"
-        - "span[hosts=1]"
-        - 
+        - "span[hosts=1]"  # FORCE execution on a single node
+    
+    # Sweep parameters generate one job per combination
     sweep:
       N: [64, 128]
-      ranks: [8, 16, 24]
+      ranks: [1, 2, 4, 8, 16, 32]
       communicator: [numpy, custom]
       strategy: [sliced, cubic]
 
   # --------------------------------------------------------------------------
-  # Group 2: Multi Node (example)
+  # Group 2: Multi Node (Distributed Memory)
   # --------------------------------------------------------------------------
-  # - name: multi_node
-  #   lsf:
-  #     walltime: "04:00"
-  #     resources:
-  #       - "rusage[mem=8GB]"
-  #       - "span[hosts=2]"
-  #   sweep:
-  #     N: [256]
-  #     ranks: [64]
-  #     communicator: [custom]
-  #     strategy: [cubic]
+  # Runs across multiple nodes. 
+  # 'ptile' defines how many MPI ranks to place per node.
+  - name: multi_node
+    lsf:
+      walltime: "00:10"
+      resources:
+        - "rusage[mem=8GB]"
+        - "span[ptile=24]" # Place 24 ranks per node (e.g. full node usage)
+    
+    # MPI options for process binding and mapping
+    # Example: 2 processes per CPU socket (package)
+    mpi_options: "--map-by ppr:2:package --bind-to core --report-bindings"
+    
+    sweep:
+      N: [256]
+      ranks: [48, 96] # Must be multiples of ptile (24) for efficient packing
+      communicator: [custom, numpy]
+      strategy: [cubic, sliced]
