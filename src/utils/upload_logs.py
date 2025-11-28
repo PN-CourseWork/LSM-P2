@@ -14,6 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Upload LSF logs to MLflow")
     parser.add_argument("--job-name", type=str, required=True, help="LSF Job Name")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory containing logs")
+    parser.add_argument("--experiment-name", type=str, default="HPC-Poisson-Scaling", help="MLflow experiment name")
     args = parser.parse_args()
 
     log_dir = Path(args.log_dir)
@@ -44,7 +45,7 @@ def main():
         else:
             # Create new run for startup failure
             print("Run ID file not found. Creating new run for startup failure.")
-            experiment_name = "HPC-Poisson-Scaling" # Default for HPC context
+            experiment_name = args.experiment_name
             
             # Ensure experiment exists
             if mlflow.get_experiment_by_name(experiment_name) is None:

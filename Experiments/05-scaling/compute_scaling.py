@@ -51,6 +51,7 @@ parser.add_argument(
 parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
 parser.add_argument("--job-name", type=str, default=None, help="LSF Job Name for log retrieval")
 parser.add_argument("--log-dir", type=str, default="logs", help="Directory containing LSF logs")
+parser.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name")
 args = parser.parse_args()
 
 N = args.N
@@ -83,8 +84,12 @@ if rank == 0:
     print(f"  Kernel: {'Numba' if args.numba else 'NumPy'}, omega={args.omega}")
 
 # MLflow setup with nested runs (auto-detect HPC via LSF env vars)
-is_hpc = "LSB_JOBID" in os.environ
-experiment_name = "HPC-Poisson-Scaling" if is_hpc else "Poisson-Scaling"
+if args.experiment_name:
+    experiment_name = args.experiment_name
+else:
+    is_hpc = "LSB_JOBID" in os.environ
+    experiment_name = "HPC-Poisson-Scaling" if is_hpc else "Poisson-Scaling"
+
 parent_run = f"N{N}"
 run_name = f"N{N}_p{n_ranks}_{args.strategy}"
 solver.mlflow_start(experiment_name, run_name, parent_run_name=parent_run)

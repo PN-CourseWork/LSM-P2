@@ -91,6 +91,7 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
             # Add logging info for MLflow artifact upload
             args.append(f"--job-name {current_job_name}")
             args.append("--log-dir logs")
+            args.append(f"--experiment-name {group_name}")
 
             # Construct the actual command to run
             # base_cmd pattern: mpiexec -n {ranks} {mpi_options} uv run python {script} {args}
@@ -104,7 +105,7 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
             
             # Chain the log uploader command
             # We use (cmd; uploader) to ensure uploader runs regardless of cmd exit status
-            uploader_cmd = f"uv run python src/utils/upload_logs.py --job-name {current_job_name} --log-dir logs"
+            uploader_cmd = f"uv run python src/utils/upload_logs.py --job-name {current_job_name} --log-dir logs --experiment-name {group_name}"
             cmd = f'({main_cmd}; {uploader_cmd})'
             
             # Build LSF options for this specific job
