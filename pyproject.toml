@@ -47,6 +47,7 @@ dependencies = [
   "questionary>=2.1.1",
   "python-dotenv>=1.2.1",
   "readchar>=4.2.1",
+  "blessed>=1.25.0",
 ]
 
 [tool.pytest.ini_options]

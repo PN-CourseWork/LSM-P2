@@ -1,10 +1,11 @@
 import sys
 from src.utils import manage, mlflow_io
-from src.utils.cli.io import getch
+from src.utils.TUI.io import getch, clear_screen
 
 def run_data_menu():
     """Data & Results Submenu"""
     while True:
+        clear_screen()
         print("\n--- Data & Results ---")
         print("  [f] Fetch MLflow Artifacts")
         print("  -----------------------")
@@ -13,7 +14,6 @@ def run_data_menu():
         print("\nSelect an action: ", end="", flush=True)
         
         key = getch().lower()
-        print(key)
         
         if key == 'f':
             config = manage.load_project_config()
@@ -31,6 +31,7 @@ def run_data_menu():
                 mlflow_io.fetch_project_artifacts(experiments, output_dir)
             input("Press Enter to continue...")
         elif key == 'q':
+            clear_screen()
             sys.exit(0)
         elif key == 'b':
             break

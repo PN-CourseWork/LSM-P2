@@ -1,6 +1,7 @@
 import sys
 import tty
 import termios
+import os
 
 def getch():
     """Read a single character from stdin without echo."""
@@ -12,3 +13,7 @@ def getch():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
+
+def clear_screen():
+    """Clear the terminal screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')

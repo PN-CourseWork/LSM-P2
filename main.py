@@ -2,15 +2,15 @@
 """Main entry point for project management."""
 
 import sys
-from src.utils.cli import main as interactive_menu
-from src.utils.cli import batch
+from src.utils.TUI import batch
+from src.utils.TUI.tui import run_tui
 
 def main():
-    """Run interactive menu if no args, else run batch mode."""
+    """Run interactive TUI if no args, else run batch mode."""
     if len(sys.argv) > 1:
         batch.handle_args()
     else:
-        interactive_menu.main_menu()
+        run_tui()
 
 if __name__ == "__main__":
     main()

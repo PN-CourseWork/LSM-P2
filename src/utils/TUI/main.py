@@ -1,11 +1,12 @@
 import sys
-from src.utils.cli.actions import hpc, run, data, docs, clean
-from src.utils.cli.io import getch
+from src.utils.TUI.actions import hpc, run, data, docs, clean
+from src.utils.TUI.io import getch, clear_screen
 
 def main_menu():
     """Main CLI Entry Point"""
     
     while True:
+        clear_screen()
         print("\n=== LSM Project 2 Manager ===")
         print("  [h] HPC & Scheduling")
         print("  [e] Execution & Processing")
@@ -17,7 +18,6 @@ def main_menu():
         print("\nSelect an action: ", end="", flush=True)
         
         key = getch().lower()
-        print(key) # Echo the key
         
         if key == 'h':
             hpc.run_hpc_menu()
@@ -30,9 +30,9 @@ def main_menu():
         elif key == 'c':
             clean.run_clean_menu()
         elif key == 'q':
+            clear_screen()
             print("Exiting.")
             sys.exit(0)
 
 if __name__ == "__main__":
     main_menu()
-

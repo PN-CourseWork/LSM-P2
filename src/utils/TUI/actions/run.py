@@ -1,10 +1,11 @@
 import sys
 from src.utils import manage
-from src.utils.cli.io import getch
+from src.utils.TUI.io import getch, clear_screen
 
 def run_execution_menu():
     """Execution Submenu"""
     while True:
+        clear_screen()
         print("\n--- Execution & Processing ---")
         print("  [c] Run Compute Scripts (Sequential)")
         print("  [p] Run Plot Scripts (Parallel)")
@@ -15,7 +16,6 @@ def run_execution_menu():
         print("\nSelect an action: ", end="", flush=True)
         
         key = getch().lower()
-        print(key)
         
         if key == 'c':
             manage.run_compute_scripts()
@@ -27,6 +27,7 @@ def run_execution_menu():
             manage.copy_plots()
             input("Press Enter to continue...")
         elif key == 'q':
+            clear_screen()
             sys.exit(0)
         elif key == 'b':
             break

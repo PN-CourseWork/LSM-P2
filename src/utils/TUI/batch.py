@@ -1,7 +1,7 @@
 import argparse
 import sys
 from src.utils import manage, mlflow_io
-from src.utils.cli.actions import hpc
+from src.utils.TUI.actions import hpc
 
 def handle_args():
     """Handle command line arguments for batch/automation mode."""
