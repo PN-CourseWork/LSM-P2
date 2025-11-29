@@ -1,35 +1,32 @@
-import questionary
 import sys
 from src.utils import manage
-from src.utils.cli.styles import get_custom_style
+from src.utils.cli.io import getch
 
 def run_execution_menu():
     """Execution Submenu"""
     while True:
-        action = questionary.select(
-            "Execution & Processing:",
-            choices=[
-                "Run Compute Scripts (Sequential)",
-                "Run Plot Scripts (Parallel)",
-                "Copy Plots to Report (Overleaf)",
-                questionary.Separator(),
-                "[b] Back",
-                "[q] Quit"
-            ],
-            style=get_custom_style(),
-            use_shortcuts=True
-        ).ask()
+        print("\n--- Execution & Processing ---")
+        print("  [c] Run Compute Scripts (Sequential)")
+        print("  [p] Run Plot Scripts (Parallel)")
+        print("  [r] Copy Plots to Report (Overleaf)")
+        print("  -----------------------")
+        print("  [b] Back")
+        print("  [q] Quit")
+        print("\nSelect an action: ", end="", flush=True)
         
-        if action == "Run Compute Scripts (Sequential)":
+        key = getch().lower()
+        print(key)
+        
+        if key == 'c':
             manage.run_compute_scripts()
             input("Press Enter to continue...")
-        elif action == "Run Plot Scripts (Parallel)":
+        elif key == 'p':
             manage.run_plot_scripts()
             input("Press Enter to continue...")
-        elif action == "Copy Plots to Report (Overleaf)":
+        elif key == 'r':
             manage.copy_plots()
             input("Press Enter to continue...")
-        elif action == "[q] Quit":
+        elif key == 'q':
             sys.exit(0)
-        else:
+        elif key == 'b':
             break

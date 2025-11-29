@@ -1,8 +1,7 @@
-import questionary
 import sys
 from src.utils.hpc import _interactive_generate, _interactive_submit
-from src.utils.cli.styles import get_custom_style
 from src.utils.manage import load_project_config
+from src.utils.cli.io import getch
 from pathlib import Path
 
 def run_hpc_menu(config_path_str: str = None):
@@ -22,24 +21,22 @@ def run_hpc_menu(config_path_str: str = None):
         config_path = job_packs_dir / "packs.yaml"
 
     while True:
-        action = questionary.select(
-            "HPC & Scheduling:",
-            choices=[
-                "Generate Job Pack",
-                "Submit Job Pack",
-                questionary.Separator(),
-                "[b] Back",
-                "[q] Quit"
-            ],
-            style=get_custom_style(),
-            use_shortcuts=True
-        ).ask()
+        print("\n--- HPC & Scheduling ---")
+        print("  [g] Generate Job Pack")
+        print("  [s] Submit Job Pack")
+        print("  -----------------------")
+        print("  [b] Back")
+        print("  [q] Quit")
+        print("\nSelect an action: ", end="", flush=True)
         
-        if action == "Generate Job Pack":
+        key = getch().lower()
+        print(key)
+        
+        if key == 'g':
             _interactive_generate(config_path, job_packs_dir)
-        elif action == "Submit Job Pack":
+        elif key == 's':
             _interactive_submit(job_packs_dir)
-        elif action == "[q] Quit":
+        elif key == 'q':
             sys.exit(0)
-        else: # [b] Back or None
+        elif key == 'b':
             break

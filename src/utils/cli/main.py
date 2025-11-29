@@ -1,42 +1,38 @@
 import sys
-import questionary
-from src.utils.cli.styles import get_custom_style
 from src.utils.cli.actions import hpc, run, data, docs, clean
+from src.utils.cli.io import getch
 
 def main_menu():
     """Main CLI Entry Point"""
     
     while True:
         print("\n=== LSM Project 2 Manager ===")
+        print("  [h] HPC & Scheduling")
+        print("  [e] Execution & Processing")
+        print("  [d] Data & Results")
+        print("  [o] Documentation")
+        print("  [c] Clean & Maintenance")
+        print("  -----------------------")
+        print("  [q] Quit")
+        print("\nSelect an action: ", end="", flush=True)
         
-        action = questionary.select(
-            "Select an action:",
-            choices=[
-                "HPC & Scheduling",
-                "Execution & Processing",
-                "Data & Results",
-                "Documentation",
-                "Clean & Maintenance",
-                questionary.Separator(),
-                "[q] Quit"
-            ],
-            style=get_custom_style(),
-            use_shortcuts=True
-        ).ask()
+        key = getch().lower()
+        print(key) # Echo the key
         
-        if action == "HPC & Scheduling":
+        if key == 'h':
             hpc.run_hpc_menu()
-        elif action == "Execution & Processing":
+        elif key == 'e':
             run.run_execution_menu()
-        elif action == "Data & Results":
+        elif key == 'd':
             data.run_data_menu()
-        elif action == "Documentation":
+        elif key == 'o':
             docs.run_docs_menu()
-        elif action == "Clean & Maintenance":
+        elif key == 'c':
             clean.run_clean_menu()
-        elif action == "[q] Quit" or action is None:
+        elif key == 'q':
             print("Exiting.")
             sys.exit(0)
 
 if __name__ == "__main__":
     main_menu()
+

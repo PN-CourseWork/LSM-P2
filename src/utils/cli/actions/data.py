@@ -1,24 +1,21 @@
-import questionary
 import sys
 from src.utils import manage, mlflow_io
-from src.utils.cli.styles import get_custom_style
+from src.utils.cli.io import getch
 
 def run_data_menu():
     """Data & Results Submenu"""
     while True:
-        action = questionary.select(
-            "Data & Results:",
-            choices=[
-                "Fetch MLflow Artifacts",
-                questionary.Separator(),
-                "[b] Back",
-                "[q] Quit"
-            ],
-            style=get_custom_style(),
-            use_shortcuts=True
-        ).ask()
+        print("\n--- Data & Results ---")
+        print("  [f] Fetch MLflow Artifacts")
+        print("  -----------------------")
+        print("  [b] Back")
+        print("  [q] Quit")
+        print("\nSelect an action: ", end="", flush=True)
         
-        if action == "Fetch MLflow Artifacts":
+        key = getch().lower()
+        print(key)
+        
+        if key == 'f':
             config = manage.load_project_config()
             mlflow_conf = config.get("mlflow", {})
             repo_root = manage.get_repo_root()
@@ -33,7 +30,7 @@ def run_data_menu():
             else:
                 mlflow_io.fetch_project_artifacts(experiments, output_dir)
             input("Press Enter to continue...")
-        elif action == "[q] Quit":
+        elif key == 'q':
             sys.exit(0)
-        else:
+        elif key == 'b':
             break
