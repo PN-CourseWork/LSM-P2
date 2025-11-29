@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.892** total execution time for 8 files **from all galleries**:
+**00:02.405** total execution time for 8 files **from all galleries**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_example_gallery_03-communication_plot_communication.py` (``../../Experiments/03-communication/plot_communication.py``)
-     - 00:01.892
+   * - :ref:`sphx_glr_example_gallery_04-validation_plot_validation.py` (``../../Experiments/04-validation/plot_validation.py``)
+     - 00:02.405
      - 0.0
    * - :ref:`sphx_glr_example_gallery_01-kernels_compute_all.py` (``../../Experiments/01-kernels/compute_all.py``)
      - 00:00.000
@@ -47,10 +47,10 @@ Computation times
    * - :ref:`sphx_glr_example_gallery_03-communication_compute_communication.py` (``../../Experiments/03-communication/compute_communication.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_04-validation_compute_validation.py` (``../../Experiments/04-validation/compute_validation.py``)
+   * - :ref:`sphx_glr_example_gallery_03-communication_plot_communication.py` (``../../Experiments/03-communication/plot_communication.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_example_gallery_04-validation_plot_validation.py` (``../../Experiments/04-validation/plot_validation.py``)
+   * - :ref:`sphx_glr_example_gallery_04-validation_compute_validation.py` (``../../Experiments/04-validation/compute_validation.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_example_gallery_05-scaling_compute_scaling.py` (``../../Experiments/05-scaling/compute_scaling.py``)
