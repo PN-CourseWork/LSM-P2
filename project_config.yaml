@@ -1,0 +1,17 @@
+# ============================================================================
+# Project Configuration
+# ============================================================================
+
+# HPC / Scaling Experiments Configuration
+hpc:
+  job_packs: "Experiments/05-scaling/job-packs"
+
+# MLflow Configuration
+mlflow:
+  tracking_uri: "http://localhost:5000" # Default if not set in env
+  download_dir: "data/downloaded"
+  
+  # List of experiments to fetch artifacts from
+  experiments:
+    # - "LSM-Scaling"
+    # - "LSM-Kernels"

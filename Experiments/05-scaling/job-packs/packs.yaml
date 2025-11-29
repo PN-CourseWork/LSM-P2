@@ -1,0 +1,61 @@
+# ============================================================================
+# LSF Experiment Configuration
+# ============================================================================
+# Format:
+# GroupName:
+#   lsf: { ... }
+#   static_args: { ... }
+#   sweep: { ... }
+
+# ----------------------------------------------------------------------------
+# Group 1: Single Node Strong Scaling
+# ----------------------------------------------------------------------------
+SN_strong:
+  lsf:
+    queue: "hpc"
+    walltime: "00:10"
+    exclusive: false
+    notify_start: false
+    notify_end: false
+    resources:
+      - "rusage[mem=4GB]"
+      - "span[hosts=1]"
+
+  static_args:
+    interpreter: "uv run python"
+    script: "Experiments/05-scaling/compute_scaling.py"
+    tol: 0.0
+    max-iter: 500
+    numba: true
+
+  sweep:
+    N: [64, 128]
+    ranks: [1, 2, 4, 8]
+    strategy: ["sliced", "cubic"]
+    communicator: ["numpy", "custom"]
+
+# ----------------------------------------------------------------------------
+# Group 2: Multi Node Strong Scaling
+# ----------------------------------------------------------------------------
+MN_strong:
+  lsf:
+    queue: "hpc"
+    walltime: "00:20"
+    exclusive: true
+    resources:
+      - "rusage[mem=8GB]"
+      - "span[ptile=24]"
+    mpi_options: "--map-by ppr:24:node --bind-to core"
+
+  static_args:
+    interpreter: "uv run python"
+    script: "Experiments/05-scaling/compute_scaling.py"
+    tol: 1e-6
+    max-iter: 10000
+    numba: true
+
+  sweep:
+    N: [256]
+    ranks: [24, 48, 96]
+    strategy: ["sliced", "cubic"]
+    communicator: ["numpy", "custom"]

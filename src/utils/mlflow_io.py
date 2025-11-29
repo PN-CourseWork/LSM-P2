@@ -11,11 +11,11 @@ import mlflow
 import pandas as pd
 
 
-def setup_mlflow_auth():
+def setup_mlflow_auth(tracking_uri: Optional[str] = None):
     """Configure MLflow authentication.
 
     Uses DATABRICKS_TOKEN environment variable if available (for CI),
-    otherwise falls back to interactive login.
+    otherwise falls back to interactive login or provided tracking URI.
     """
     token = os.environ.get("DATABRICKS_TOKEN")
     if token:
@@ -23,9 +23,36 @@ def setup_mlflow_auth():
         host = "https://dbc-6756e917-e5fc.cloud.databricks.com"
         os.environ["DATABRICKS_HOST"] = host
         mlflow.set_tracking_uri("databricks")
+    elif tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
     else:
         # Local environment - interactive login
         mlflow.login()
+
+
+def fetch_project_artifacts(experiments: List[str], output_dir: Path):
+    """Fetch artifacts for a list of experiments.
+
+    Parameters
+    ----------
+    experiments : List[str]
+        List of experiment names.
+    output_dir : Path
+        Base directory to save artifacts.
+    """
+    output_dir = Path(output_dir)
+
+    for exp in experiments:
+        print(f"\nProcessing Experiment: {exp}")
+        # Ensure output directory for this experiment exists
+        exp_dir = output_dir / exp
+        exp_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            paths = download_artifacts_with_naming(exp, exp_dir)
+            print(f"  ✓ Downloaded {len(paths)} files to {exp_dir}")
+        except Exception as e:
+            print(f"  ✗ Failed to fetch experiment '{exp}': {e}")
 
 
 def load_runs(

@@ -1,125 +1,172 @@
-"""Utilities for LSF job pack generation."""
+"Utilities for LSF job pack generation."
 
 import yaml
 import itertools
+import sys
+import shutil
+import subprocess
+import os
+import questionary
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
-
+from typing import List, Dict, Any, Union
 
 def load_config(config_path: Path) -> Dict[str, Any]:
     """Load YAML configuration file."""
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-
-def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]:
+def generate_pack_lines(config: Dict[str, Any], job_name_base: str, selected_groups: List[str] = None) -> List[str]:
     """Generate list of job pack lines (options + command)."""
-    script = config.get("script", "compute_scaling.py")
-    base_cmd = f"mpiexec -n {{ranks}} uv run python {script}"
     
-    # Global defaults
-    global_params = config.get("parameters", {})
-    global_lsf = config.get("lsf", {})
-    global_sweep = config.get("sweep", {})
-    global_mpi = config.get("mpi_options", "")
-    
-    # Normalize to a list of groups
-    if "groups" in config:
-        groups = config["groups"]
+    # --- Schema Normalization ---
+    input_jobs_raw = []
+
+    # 1. Collect raw job definitions from various input schemas
+    if "jobs" in config:
+        # Preferred Schema (List of Jobs)
+        input_jobs_raw = config["jobs"]
+    elif "groups" in config:
+        # Legacy Schema (List of Groups)
+        input_jobs_raw = []
+        for g in config["groups"]:
+            job_entry = {
+                "name": g.get("name", "job"),
+                "lsf": g.get("lsf", {}),
+                "sweep": g.get("sweep", {})
+            }
+            if "parameters" in g:
+                job_entry["execution"] = {"arguments": g["parameters"]}
+            if "mpi_options" in g:
+                job_entry.setdefault("lsf", {})["mpi_options"] = g["mpi_options"]
+            input_jobs_raw.append(job_entry)
     else:
-        # Legacy/Simple mode: Treat top-level as a single group
-        groups = [{
-            "name": "default",
-            "lsf": {},
-            "parameters": {},
-            "sweep": global_sweep,
-            "mpi_options": ""
-        }]
+        # New Dictionary Schema (Keys are Group Names)
+        for key, value in config.items():
+            if key == "defaults": # Ignore defaults as requested
+                continue
+            if isinstance(value, dict):
+                job_entry = value.copy()
+                job_entry["name"] = key 
+                input_jobs_raw.append(job_entry)
+
+    # 2. Convert all raw input_jobs entries into the normalized 'execution' format
+    normalized_jobs = []
+    for input_job in input_jobs_raw:
+        normalized_job = {
+            "name": input_job.get("name", "unnamed"),
+            "lsf": input_job.get("lsf", {}),
+            "sweep": input_job.get("sweep", {})
+        }
+
+        if "static_args" in input_job:
+            normalized_job["execution"] = {
+                "script": input_job["static_args"].get("script"),
+                "interpreter": input_job["static_args"].get("interpreter", "uv run python"),
+                "arguments": {k: v for k, v in input_job["static_args"].items() if k not in ["script", "interpreter"]}
+            }
+        elif "execution" in input_job:
+            normalized_job["execution"] = input_job["execution"]
+        else:
+            normalized_job["execution"] = {} 
+        
+        normalized_jobs.append(normalized_job)
+    
+    # --- End Schema Normalization ---
 
     lines = []
     global_job_counter = 1
     
-    for group in groups:
-        # Merge configurations (Group overrides Global)
-        group_lsf = {**global_lsf, **group.get("lsf", {})}
-        group_params = {**global_params, **group.get("parameters", {})}
-        group_sweep = group.get("sweep", {})
-        group_mpi = group.get("mpi_options", global_mpi)
+    for job in normalized_jobs:
+        job_name_group = job.get("name", "job")
         
-        # If no sweep in group, use global sweep (if it exists and wasn't just the legacy fallback)
-        if not group_sweep and "groups" in config:
-             group_sweep = global_sweep
+        # Filter based on selection
+        if selected_groups and job_name_group not in selected_groups:
+            continue
+            
+        # Add Group Comment Header
+        lines.append(f"\n# --- Group: {job_name_group} ---")
 
-        # Prepare sweep combinations
-        keys = list(group_sweep.keys())
-        values = list(group_sweep.values())
-        combinations = list(itertools.product(*values))
+        # 1. LSF Settings
+        job_lsf = job.get("lsf", {})
         
-        group_name = group.get("name", "job")
+        # 2. Execution Settings
+        job_exec = job.get("execution", {})
+        
+        script = job_exec.get("script", "compute_scaling.py") 
+        interpreter = job_exec.get("interpreter", "uv run python")
+        
+        # Base arguments
+        current_args_base = job_exec.get("arguments", {})
+        
+        # Sweep
+        sweep = job.get("sweep", {})
+        
+        if not sweep:
+            combinations = [()]
+            keys = []
+        else:
+            keys = list(sweep.keys())
+            values = list(sweep.values())
+            combinations = list(itertools.product(*values))
         
         for combo in combinations:
-            current_params = group_params.copy()
-            current_sweep = dict(zip(keys, combo))
+            # Create full params for this run
+            run_args = current_args_base.copy()
+            sweep_args = dict(zip(keys, combo))
             
-            # Handle scaling logic
-            scaling_type = config.get("type", "strong")
-            if scaling_type == "weak":
-                # For weak scaling, N depends on ranks
-                base_N = current_params.get("base_N", 32)
-                ranks = current_sweep.get("ranks", 1)
-                N = int(round(base_N * (ranks**(1/3))))
-                current_params["N"] = N
+            # Cartesian Product Logic 
+            run_args.update(sweep_args)
             
-            # Merge sweep parameters
-            current_params.update(current_sweep)
+            # Extract Special Args for Infrastructure
+            ranks = run_args.pop("ranks", 1)
             
-            # Extract ranks for mpiexec and bsub -n
-            ranks = current_params.pop("ranks")
+            # Construct Job Name
+            current_job_name = f"{job_name_base}_{job_name_group}_{global_job_counter}"
             
-            # Calculate job name early to pass to script
-            current_job_name = f"{job_name_base}_{group_name}_{global_job_counter}"
-
-            # Build command arguments
-            args = []
-            for k, v in current_params.items():
+            # Build Script Arguments
+            args_list = []
+            for k, v in run_args.items():
                 if isinstance(v, bool):
                     if v:
-                        args.append(f"--{k}")
+                        args_list.append(f"--{k}")
                 else:
-                    args.append(f"--{k} {v}")
+                    args_list.append(f"--{k} {v}")
             
-            # Add logging info for MLflow artifact upload
-            args.append(f"--job-name {current_job_name}")
-            args.append("--log-dir logs")
-            args.append(f"--experiment-name {group_name}")
-
-            # Construct the actual command to run
-            # base_cmd pattern: mpiexec -n {ranks} {mpi_options} uv run python {script} {args}
+            # Add Standard Logging Args
+            args_list.append(f"--job-name {current_job_name}")
+            args_list.append("--log-dir logs")
+            args_list.append(f"--experiment-name {job_name_group}")
+            
+            # Build Command
+            mpi_options = job_lsf.get("mpi_options", "")
+            
             cmd_parts = [f"mpiexec -n {ranks}"]
-            if group_mpi:
-                cmd_parts.append(group_mpi)
-            cmd_parts.append(f"uv run python {script}")
-            cmd_parts.append(" ".join(args))
+            if mpi_options:
+                cmd_parts.append(mpi_options)
+            
+            cmd_parts.append(f"{interpreter} {script}")
+            cmd_parts.append(" ".join(args_list))
             
             main_cmd = " ".join(cmd_parts)
             
-            # Chain the log uploader command
-            # We use (cmd; uploader) to ensure uploader runs regardless of cmd exit status
-            uploader_cmd = f"uv run python src/utils/upload_logs.py --job-name {current_job_name} --log-dir logs --experiment-name {group_name}"
+            # Log Uploader 
+            uploader_cmd = f"{interpreter} src/utils/upload_logs.py --job-name {current_job_name} --log-dir logs --experiment-name {job_name_group}"
             cmd = f'({main_cmd}; {uploader_cmd})'
             
-            # Build LSF options for this specific job
-            # current_job_name is already defined above
-            
-            # Map config keys to LSF flags
+            # Build LSF Line
             lsf_opts = []
             lsf_opts.append(f"-J {current_job_name}")
             
-            # Cores: driven by ranks (if in sweep/params) or explicit 'cores' config
-            cores = ranks if ranks is not None else group_lsf.get('cores', 1)
+            # Cores logic
+            cores = ranks 
+            if "cores" in job_lsf:
+                cores = job_lsf["cores"]
             lsf_opts.append(f"-n {cores}")
             
-            # Value mappings
+            # Standard Keys
             val_map = {
                 'queue': '-q',
                 'walltime': '-W',
@@ -128,8 +175,8 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
                 'project': '-P',
             }
             for key, flag in val_map.items():
-                if key in group_lsf:
-                    lsf_opts.append(f"{flag} {group_lsf[key]}")
+                if key in job_lsf:
+                    lsf_opts.append(f"{flag} {job_lsf[key]}")
             
             # Boolean mappings
             bool_map = {
@@ -138,13 +185,12 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
                 'notify_end': '-N',
             }
             for key, flag in bool_map.items():
-                if group_lsf.get(key, False):
+                if job_lsf.get(key, False):
                     lsf_opts.append(flag)
             
-            # Resource requirements (-R)
-            resources = group_lsf.get('resources', [])
-            if isinstance(resources, str):
-                resources = [resources]
+            # Resources
+            resources = job_lsf.get("resources", [])
+            if isinstance(resources, str): resources = [resources]
             for r in resources:
                 lsf_opts.append(f'-R "{r}"')
             
@@ -152,17 +198,208 @@ def generate_pack_lines(config: Dict[str, Any], job_name_base: str) -> List[str]
             lsf_opts.append(f"-o logs/{current_job_name}.out")
             lsf_opts.append(f"-e logs/{current_job_name}.err")
             
-            # Combine options and command
             line = " ".join(lsf_opts) + " " + cmd
             lines.append(line)
             global_job_counter += 1
-        
+            
     return lines
-
 
 def write_pack_file(output_path: Path, lines: List[str]):
     """Write LSF pack file."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# LSF Job Pack generated by generate_pack.py\n")
+        f.write("# LSF Job Pack generated by src.utils.hpc\n")
         for line in lines:
             f.write(line + "\n")
+
+def _get_custom_style():
+    return questionary.Style([
+        ('qmark', 'fg:#673ab7 bold'),       # Token.QuestionMark
+        ('question', 'bold'),               # Token.Question
+        ('answer', 'fg:#f44336 bold'),      # Token.Answer
+        ('pointer', 'fg:#673ab7 bold'),     # Token.Pointer
+        ('highlighted', 'fg:#673ab7 bold'), # Token.Highlighted
+        ('selected', 'fg:#cc5454'),         # Token.Selected
+        ('separator', 'fg:#cc5454'),        # Token.Separator
+        ('instruction', '')                 # Token.Instruction
+    ])
+
+def _interactive_generate(config_path: Path, job_packs_dir: Path):
+    """Handle job pack generation workflow."""
+    print(f"\n--- Generate Job Pack ---")
+    print(f"Loading config: {config_path}")
+    
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        print(f"Error: Config file not found at {config_path}")
+        return
+
+    # Extract Group Names based on Schema
+    group_names = []
+    if "jobs" in config:
+        group_names = [j.get("name", "unnamed") for j in config["jobs"]]
+    elif "groups" in config:
+        group_names = [j.get("name", "unnamed") for j in config["groups"]]
+    else:
+        # Dictionary Schema
+        group_names = [key for key in config.keys() if key != "defaults"]
+        
+    if not group_names:
+        print("No job groups found in configuration.")
+        return
+    
+    # Select Groups
+    selected_groups_for_gen = questionary.checkbox( # Renamed to avoid conflict
+        "Select experiment groups to generate packs for (Space to select, Enter to confirm):",
+        choices=group_names,
+        style=_get_custom_style()
+    ).ask()
+    
+    if not selected_groups_for_gen:
+        print("No groups selected. returning to menu.")
+        return
+
+    generated_files = []
+    total_jobs_generated = 0
+
+    for group_name in selected_groups_for_gen:
+        # Generate lines ONLY for the current group
+        job_name_base = config_path.stem # Base name from config file
+        lines = generate_pack_lines(config, job_name_base, [group_name]) # Pass single group
+        
+        if not lines:
+            print(f"  No jobs generated for group '{group_name}'. Skipping.")
+            continue
+
+        print(f"\n  Generated {len(lines)} jobs for group '{group_name}'.")
+        total_jobs_generated += len(lines)
+        
+        # Output file named after the group
+        output_file = job_packs_dir / f"{group_name}.pack"
+        write_pack_file(output_file, lines)
+        generated_files.append(output_file)
+        print(f"  Pack file saved to: {output_file}")
+        
+        # Preview for this group
+        print(f"\n  --- Pack Content Preview for {group_name}.pack ---")
+        print("  " + "-" * 40)
+        for line in lines[:5]: # Show fewer lines for individual previews
+            print("  " + line)
+        if len(lines) > 5:
+            print(f"  ... ({len(lines) - 5} more lines)")
+        print("  " + "-" * 40)
+    
+    if generated_files:
+        print(f"\n--- Generation Summary ---")
+        print(f"Successfully generated {total_jobs_generated} total jobs across {len(generated_files)} pack files:")
+        for f in generated_files:
+            print(f"  ✓ {f.name}")
+    else:
+        print("\nNo job packs were generated.")
+
+    print("\n")
+    input("Press Enter to continue...")
+
+def _interactive_submit(job_packs_dir: Path):
+    """Handle job pack submission workflow."""
+    print(f"\n--- Submit Job Pack ---")
+    
+    if not job_packs_dir.exists():
+        print(f"Directory not found: {job_packs_dir}")
+        return
+
+    # List pack files, sorted by modification time (newest first)
+    pack_files = sorted(job_packs_dir.glob("*.pack"), key=lambda f: f.stat().st_mtime, reverse=True)
+    
+    if not pack_files:
+        print("No .pack files found.")
+        return
+
+    choices = [f.name for f in pack_files]
+    choices.append("Cancel")
+    
+    selection = questionary.select(
+        "Select a job pack to submit:",
+        choices=choices,
+        style=_get_custom_style()
+    ).ask()
+    
+    if selection == "Cancel" or not selection:
+        return
+    
+    selected_file = job_packs_dir / selection
+    
+    # Preview
+    print(f"\nSelected: {selected_file}")
+    print("-" * 40)
+    with open(selected_file, 'r') as f:
+        head = [next(f) for _ in range(10)]
+    for line in head:
+        print(line.strip())
+    print("...")
+    print("-" * 40)
+
+    # Confirm
+    if not shutil.which("bsub"):
+        print("Error: 'bsub' command not found. Cannot submit.")
+        input("Press Enter to continue...")
+        return
+
+    should_submit = questionary.confirm(
+        f"Submit {selection} to LSF?",
+        default=False,
+        style=_get_custom_style()
+    ).ask()
+    
+    if should_submit:
+        print(f"Submitting {selection}...")
+        try:
+            subprocess.run(["bsub", "-pack", str(selected_file)], check=True)
+            print("Successfully submitted.")
+        except subprocess.CalledProcessError as e:
+            print(f"Submission failed: {e}")
+    else:
+        print("Submission cancelled.")
+    
+    input("Press Enter to continue...")
+
+def run_hpc_cli(config_path_str: str = None):
+    """Interactive CLI menu for HPC operations."""
+    
+    repo_root = Path.cwd()
+    
+    # Setup Paths
+    project_config_path = repo_root / "project_config.yaml"
+    project_config = {}
+    if project_config_path.exists():
+        try:
+            project_config = load_config(project_config_path)
+        except Exception:
+            pass
+
+    hpc_config = project_config.get("hpc", {})
+    job_packs_dir_str = hpc_config.get("job_packs", "Experiments/05-scaling/job-packs")
+    job_packs_dir = repo_root / job_packs_dir_str
+
+    if config_path_str:
+        config_path = repo_root / config_path_str
+    else:
+        config_path = job_packs_dir / "packs.yaml"
+
+    # Main Menu Loop
+    while True:
+        print("\n--- HPC Job Manager ---")
+        action = questionary.select(
+            "Choose an action:",
+            choices=["Generate Job Pack", "Submit Job Pack", "Exit"],
+            style=_get_custom_style()
+        ).ask()
+        
+        if action == "Generate Job Pack":
+            _interactive_generate(config_path, job_packs_dir)
+        elif action == "Submit Job Pack":
+            _interactive_submit(job_packs_dir)
+        else:
+            print("Exiting.")
+            break
