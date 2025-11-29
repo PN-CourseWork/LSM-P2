@@ -1,0 +1,38 @@
+# ============================================================================
+# LSF Scaling Experiment Configuration Template
+# ============================================================================
+
+lsf: 
+    name: strong # Name for the experiment 
+    script: Experiments/05-scaling/compute_scaling.py
+
+    # ============================================================================
+    # Global Parameters (Apply to all groups)
+    # ============================================================================
+    # Arguments passed to the python script
+    walltime: "00:10"   # -w: walltime (hh:mm)
+
+    queue: hpc          # -q: queue name
+
+    resources:
+      - "rusage[mem=4GB]"
+      - "span[hosts=1]"  # FORCE execution on a single node
+
+    exclusive: false    # -x: Exclusive node access
+
+    # Example: 2 processes per CPU socket (package)
+    mpi_options: "--map-by ppr:2:package --bind-to core --report-bindings"
+
+python_args: 
+
+  parameters:
+    tol: 1e-6
+    max-iter: 50000
+    numba: true # Always use numba
+
+  sweep:
+    N: [256]
+    ranks: [48, 96] # Must be multiples of ptile (24) for efficient packing
+    communicator: [custom, numpy]
+    strategy: [cubic, sliced]
+
