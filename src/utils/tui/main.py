@@ -2,8 +2,8 @@
 
 import sys
 
-from utils.tui.actions import hpc, run, data, docs, clean
-from utils.tui.io import getch, clear_screen
+from src.utils.tui.actions import hpc, run, data, docs, clean
+from src.utils.tui.io import getch, clear_screen
 
 
 def main_menu():

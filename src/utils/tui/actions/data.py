@@ -1,8 +1,8 @@
 import sys
 
-from utils import mlflow
-from utils.config import load_project_config, get_repo_root
-from utils.tui.io import getch, clear_screen
+from src.utils import mlflow
+from src.utils.config import load_project_config, get_repo_root
+from src.utils.tui.io import getch, clear_screen
 
 def run_data_menu():
     """Data & Results Submenu"""
@@ -22,15 +22,15 @@ def run_data_menu():
             mlflow_conf = config.get("mlflow", {})
             repo_root = get_repo_root()
 
-            mlflow.setup_mlflow_tracking()
+            mlflow.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
 
             output_dir = repo_root / mlflow_conf.get("download_dir", "data/downloaded")
-            
-            if mlflow_conf.get("databricks_dir"):
-                mlflow.fetch_project_artifacts(output_dir)
+            experiments = mlflow_conf.get("experiments", [])
+
+            if not experiments:
+                print("  (No experiments configured in project_config.yaml)")
             else:
-                print("  (No databricks_dir configured in project_config.yaml)")
-            
+                mlflow.fetch_project_artifacts(experiments, output_dir)
             input("Press Enter to continue...")
         elif key == 'q':
             clear_screen()
