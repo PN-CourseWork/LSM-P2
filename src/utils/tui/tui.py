@@ -9,7 +9,7 @@ from src.utils import runners, mlflow
 from src.utils.hpc import get_pack_files, get_available_groups, submit_pack
 from src.utils.hpc.submit import get_group_config_preview
 from src.utils.config import load_project_config, clean_all
-from src.utils.tui.monitor import get_jobs
+from src.utils.tui.monitor import get_jobs, get_finished_jobs_from_files
 from src.utils.tui.runner import TuiRunner
 from src.utils.tui.actions import docs
 
@@ -344,7 +344,14 @@ class TuiApp:
         self.hpc_jobs = get_jobs()
         self.hpc_jobs_active = [j for j in self.hpc_jobs if j.status == "RUN"]
         self.hpc_jobs_pending = [j for j in self.hpc_jobs if j.status == "PEND"]
-        self.hpc_jobs_finished = [j for j in self.hpc_jobs if j.status not in ("RUN", "PEND")]
+
+        # Get finished jobs from LSF + from output files
+        lsf_finished = [j for j in self.hpc_jobs if j.status not in ("RUN", "PEND")]
+        file_finished = get_finished_jobs_from_files()
+
+        # Merge: avoid duplicates by name
+        seen_names = {j.name for j in lsf_finished}
+        self.hpc_jobs_finished = lsf_finished + [j for j in file_finished if j.name not in seen_names]
 
     def get_current_job_list(self):
         """Get the job list for the current tab."""
@@ -384,30 +391,18 @@ class TuiApp:
 
     def get_job_output_lines(self, job) -> list[str]:
         """Get the tail of a job's output file."""
-        from src.utils.hpc.jobgen import get_job_output_dir
-
-        output_dir = get_job_output_dir()
-        out_file = output_dir / f"{job.name}.out"
-
-        lines = []
-        if out_file.exists():
+        # If job has output_file set (from file scan), read it directly
+        if job.output_file:
             try:
-                with open(out_file, "r") as f:
-                    # Read last N lines
-                    all_lines = f.readlines()
-                    lines = [l.rstrip() for l in all_lines[-100:]]  # Keep last 100 lines
+                with open(job.output_file, "r") as f:
+                    lines = f.readlines()
+                    return [l.rstrip() for l in lines[-100:]]
             except Exception as e:
-                lines = [f"Error reading output: {e}"]
-        else:
-            lines = [
-                f"Output file not found:",
-                f"  {out_file}",
-                "",
-                "Job may not have started yet,",
-                "or output is in a different location.",
-            ]
+                return [f"Error reading {job.output_file}: {e}"]
 
-        return lines
+        # Otherwise use bjobs to get output file path
+        from src.utils.tui.monitor import get_job_output
+        return get_job_output(job.id, tail_lines=100)
 
     # --- Drawing Methods ---
 

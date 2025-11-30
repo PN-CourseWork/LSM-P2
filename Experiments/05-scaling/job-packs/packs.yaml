@@ -31,7 +31,7 @@ SN_strong:
     - "-g /poisson_project/strong_scaling"
 
   command: >-
-    module load mpi4py && uv sync &&
+    module purge && module load python3/3.12 && uv sync &&
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba

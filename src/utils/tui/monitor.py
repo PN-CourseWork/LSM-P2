@@ -1,8 +1,12 @@
-"Live HPC job monitor TUI using blessed."
+"""Live HPC job monitor TUI using blessed."""
 
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+from datetime import datetime
+
 from blessed import Terminal
+
 
 @dataclass
 class Job:
@@ -14,6 +18,7 @@ class Job:
     cores: str
     start_time: str
     elapsed: str
+    output_file: str = ""
 
 
 def get_jobs() -> list[Job]:
@@ -63,6 +68,37 @@ def get_jobs() -> list[Job]:
     except Exception:
         pass
     return []
+
+
+def get_finished_jobs_from_files() -> list[Job]:
+    """Get finished jobs by scanning output files in the LSF output directory."""
+    from src.utils.hpc.jobgen import get_job_output_dir
+
+    output_dir = get_job_output_dir()
+    if not output_dir.exists():
+        return []
+
+    jobs = []
+    for out_file in output_dir.glob("*.out"):
+        name = out_file.stem
+        # Get file modification time as "finish time"
+        mtime = out_file.stat().st_mtime
+        time_str = datetime.fromtimestamp(mtime).strftime("%b %d %H:%M")
+
+        jobs.append(Job(
+            id="-",
+            name=name,
+            queue="-",
+            status="DONE",
+            cores="-",
+            start_time=time_str,
+            elapsed="-",
+            output_file=str(out_file),
+        ))
+
+    # Sort by modification time, newest first
+    jobs.sort(key=lambda j: Path(j.output_file).stat().st_mtime if j.output_file else 0, reverse=True)
+    return jobs
 
 
 def get_queue_info() -> list[str]:
