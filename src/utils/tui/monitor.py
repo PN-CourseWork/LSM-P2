@@ -88,8 +88,8 @@ def get_queue_info() -> list[str]:
     return lines
 
 
-def get_job_details(job_id: str) -> list[str]:
-    """Get detailed job information using bjobs -l."""
+def get_job_info(job_id: str) -> list[str]:
+    """Get job metadata (queue, status, etc.) using bjobs -l."""
     lines = []
     try:
         result = subprocess.run(
@@ -97,16 +97,19 @@ def get_job_details(job_id: str) -> list[str]:
             capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0 and result.stdout.strip():
-            lines.append("=== Job Details ===")
-            lines.append("")
             for line in result.stdout.split("\n"):
                 cleaned = " ".join(line.split())
                 if cleaned:
                     lines.append(cleaned)
-            lines.append("")
     except Exception as e:
-        lines.append(f"Error getting job details: {e}")
+        lines.append(f"Error: {e}")
 
+    return lines if lines else ["No job info available"]
+
+
+def get_job_output(job_id: str, tail_lines: int = 50) -> list[str]:
+    """Get trailing output from job's output file."""
+    lines = []
     try:
         peek = subprocess.run(
             ["bjobs", "-o", "output_file", "-noheader", job_id],
@@ -115,21 +118,35 @@ def get_job_details(job_id: str) -> list[str]:
         if peek.returncode == 0:
             output_file = peek.stdout.strip()
             if output_file and output_file not in ("-", ""):
-                lines.append("=== Output File ===")
                 lines.append(f"File: {output_file}")
                 lines.append("")
                 tail = subprocess.run(
-                    ["tail", "-n", "50", output_file],
+                    ["tail", "-n", str(tail_lines), output_file],
                     capture_output=True, text=True, timeout=10
                 )
                 if tail.returncode == 0:
                     lines.extend(tail.stdout.split("\n"))
                 else:
-                    lines.append("(file not yet available or not readable)")
+                    lines.append("(file not yet available)")
+            else:
+                lines.append("(no output file)")
     except Exception:
-        pass
+        lines.append("(unable to fetch output)")
 
-    return lines if lines else ["No information available"]
+    return lines if lines else ["No output available"]
+
+
+def get_job_details(job_id: str) -> list[str]:
+    """Get detailed job information using bjobs -l (legacy combined function)."""
+    lines = []
+    lines.append("=== Job Details ===")
+    lines.append("")
+    lines.extend(get_job_info(job_id))
+    lines.append("")
+    lines.append("=== Output ===")
+    lines.append("")
+    lines.extend(get_job_output(job_id))
+    return lines
 
 
 def kill_job(job_id: str) -> tuple[bool, str]:
