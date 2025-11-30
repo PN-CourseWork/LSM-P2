@@ -856,7 +856,7 @@ class TuiApp:
                                     self.refresh_jobs()
 
 
-def run_tui():
-    """Entry point to run the TUI application."""
+def run_tui_legacy():
+    """Entry point to run the legacy blessed-based TUI."""
     app = TuiApp()
     app.run()

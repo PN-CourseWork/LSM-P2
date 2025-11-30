@@ -1,0 +1,159 @@
+/* Project Manager TUI - Nord Theme Styles */
+
+/* Transparent background */
+Screen {
+    background: transparent;
+}
+
+TabbedContent, TabPane, Horizontal, Vertical {
+    background: transparent;
+}
+
+ListView {
+    background: transparent;
+}
+
+RichLog {
+    background: transparent;
+}
+
+Static {
+    background: transparent;
+}
+
+/* Remove default header */
+Header {
+    display: none;
+}
+
+/* Main layout */
+.main-layout {
+    height: 100%;
+    width: 100%;
+}
+
+.left-pane {
+    width: 40%;
+    height: 100%;
+}
+
+.output-pane {
+    width: 60%;
+    height: 100%;
+    border: solid $primary;
+    border-title-color: $text;
+    padding: 0 1;
+}
+
+/* Description pane */
+.desc-pane {
+    height: auto;
+    max-height: 6;
+    border: solid $primary;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+DescriptionPane {
+    height: auto;
+    max-height: 6;
+}
+
+/* List panes */
+.list-pane {
+    height: 1fr;
+    border: solid $primary;
+}
+
+.command-list {
+    height: 6;
+    border: solid $primary;
+    margin-bottom: 1;
+}
+
+.job-tabs {
+    height: 1fr;
+}
+
+/* List items */
+ListItem {
+    padding: 0 1;
+    height: 1;
+}
+
+ListView {
+    height: 1fr;
+    scrollbar-size: 1 1;
+}
+
+ListView > ListItem.--highlight {
+    background: $primary 30%;
+}
+
+ListView:focus > ListItem.--highlight {
+    background: $primary;
+}
+
+/* Log styling */
+RichLog {
+    scrollbar-size: 1 1;
+    scrollbar-gutter: stable;
+}
+
+/* Tab styling */
+#main-tabs {
+    height: 100%;
+}
+
+TabPane {
+    padding: 0;
+    height: 100%;
+}
+
+TabbedContent ContentSwitcher {
+    height: 1fr;
+}
+
+/* Underline tabs instead of full bar */
+Tabs {
+    height: 3;
+}
+
+Tab {
+    padding: 0 2;
+}
+
+Tab.-active {
+    text-style: bold;
+}
+
+/* Job tabs nested */
+#job-tabs {
+    height: 1fr;
+    border: solid $secondary;
+}
+
+#job-tabs Tabs {
+    height: 2;
+}
+
+#job-tabs TabPane {
+    height: 100%;
+    padding: 0;
+}
+
+/* Job list items */
+#active-jobs,
+#pending-jobs,
+#done-jobs {
+    height: 100%;
+}
+
+/* Footer */
+Footer {
+    height: 1;
+}
+
+FooterKey {
+    background: transparent;
+}

@@ -13,8 +13,7 @@ from pathlib import Path
 import mlflow
 from scipy.ndimage import laplace
 
-from Poisson import problems, get_project_root
-from Poisson.kernels import NumPyKernel, NumbaKernel
+from Poisson import get_project_root, NumPyKernel, NumbaKernel, sinusoidal_source_term
 from utils.mlflow.io import setup_mlflow_tracking
 
 # --- MLflow Setup ---
@@ -70,7 +69,7 @@ max_iter = 5000
 all_dfs_conv = []
 
 for N in [25]:
-    f = problems.sinusoidal_source_term(N)
+    f = sinusoidal_source_term(N)
 
     numpy_kernel = NumPyKernel(N=N, omega=omega, tolerance=0.0, max_iter=max_iter)
     numba_kernel = NumbaKernel(
@@ -139,7 +138,7 @@ print(f"  ✓ Saved benchmark data to {bench_output_file.name}")
 # --- MLflow Logging ---
 # To disable MLflow logging, comment out the following lines.
 try:
-    mlflow.set_experiment("Experiment-01-Kernels")
+    mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-01-Kernels")
     with mlflow.start_run(run_name="Kernel-Compute-Data") as run:
         print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
         

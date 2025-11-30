@@ -22,15 +22,15 @@ def run_data_menu():
             mlflow_conf = config.get("mlflow", {})
             repo_root = get_repo_root()
 
-            mlflow.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
+            mlflow.setup_mlflow_tracking()
 
             output_dir = repo_root / mlflow_conf.get("download_dir", "data/downloaded")
-            experiments = mlflow_conf.get("experiments", [])
-
-            if not experiments:
-                print("  (No experiments configured in project_config.yaml)")
+            
+            if mlflow_conf.get("databricks_dir"):
+                mlflow.fetch_project_artifacts(output_dir)
             else:
-                mlflow.fetch_project_artifacts(experiments, output_dir)
+                print("  (No databricks_dir configured in project_config.yaml)")
+            
             input("Press Enter to continue...")
         elif key == 'q':
             clear_screen()

@@ -74,6 +74,7 @@ Examples:
         mlflow_conf = config.get("mlflow", {})
         repo_root = get_repo_root()
 
+        # No, it's better to set it up here to be explicit
         mlflow.setup_mlflow_tracking() 
 
         output_dir = repo_root / mlflow_conf.get("download_dir", "data/")

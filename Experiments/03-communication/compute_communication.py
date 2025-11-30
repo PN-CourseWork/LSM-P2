@@ -58,7 +58,7 @@ def _run_benchmark():
     size = comm.Get_size()
 
     # Config
-    PROBLEM_SIZES = [32, 48, 64, 80, 100, 120, 140, 160, 180, 200]
+    PROBLEM_SIZES = [32, 48, 64, 80, 100]
     ITERATIONS = 500  # Per-iteration data gives us 500 samples each
     WARMUP = 50
 
@@ -70,7 +70,7 @@ def _run_benchmark():
     ]
 
     repo_root = get_project_root()
-    data_dir = repo_root / "data" / "communication"
+    data_dir = repo_root / "data" / "03-communication"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     if rank == 0:
@@ -132,7 +132,7 @@ def _run_benchmark():
         # --- MLflow Logging ---
         # To disable MLflow logging, comment out the following lines.
         try:
-            mlflow.set_experiment("Experiment-03-Communication")
+            mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-03-Communication")
             with mlflow.start_run(run_name=f"Communication-Data-np{size}") as run:
                 print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
                 

@@ -1,11 +1,11 @@
-"MLflow I/O utilities for experiment tracking, and fetching runs and artifacts.
+"""MLflow I/O utilities for experiment tracking, and fetching runs and artifacts.
 
 This module provides helpers for:
 - Setting up MLflow tracking (local or Databricks) via environment variables.
 - Orchestrating MLflow runs (context manager for parent/nested runs).
 - Logging parameters, metrics, and artifacts.
 - Retrieving experiment data from MLflow.
-"
+"""
 
 import os
 import shutil
@@ -19,7 +19,6 @@ from contextlib import contextmanager
 
 import mlflow
 import pandas as pd
-from dotenv import load_dotenv
 
 # Conditional import for type hint to avoid circular dependency
 try:
@@ -29,24 +28,19 @@ except ImportError:
 
 
 def setup_mlflow_tracking():
-    """Configure MLflow tracking URI based on environment variables.
-
-    Loads .env and default.env, then sets the tracking URI.
-    If DATABRICKS_HOST is set, it configures tracking for Databricks.
-    Otherwise, it falls back to MLFLOW_TRACKING_URI.
     """
-    # Load environment variables from .env files
-    load_dotenv(dotenv_path=".env", override=True)  # User-specific .env first
-    load_dotenv(dotenv_path="default.env")  # Defaults for missing vars
-
-    if os.getenv("DATABRICKS_HOST"):
-        print("INFO: DATABRICKS_HOST found, setting tracking URI to 'databricks'.")
+    Configures MLflow tracking via Databricks.
+    Attempts a non-interactive login assuming credentials have been
+    previously configured via 'uv run python setup_mlflow.py'.
+    """
+    try:
+        mlflow.login(backend="databricks", interactive=False)
         mlflow.set_tracking_uri("databricks")
-    else:
-        tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns")
-        print(f"INFO: Using MLflow tracking URI: {tracking_uri}")
-        mlflow.set_tracking_uri(tracking_uri)
-
+        print("INFO: Connected to Databricks MLflow tracking.")
+    except Exception as e:
+        raise RuntimeError(
+            "MLflow setup failed. Please run 'uv run python setup_mlflow.py' first."
+        ) from e
 
 def get_mlflow_client() -> mlflow.tracking.MlflowClient:
     """Get an MLflow tracking client."""
@@ -58,7 +52,7 @@ def start_mlflow_run_context(
     experiment_name: str,
     parent_run_name: str,
     child_run_name: str,
-    project_prefix: str = "/Shared/LSM-Project-2",
+    project_prefix: str = "/Shared/LSM-PoissonMPI",
     args: Optional[argparse.Namespace] = None,
 ):
     """
@@ -222,23 +216,27 @@ def load_runs(
 def download_artifacts(
     experiment_name: str,
     output_dir: Path,
-    run_filter: Optional[str] = "tags.is_parent IS NULL OR tags.is_parent = 'false'",
+    exclude_parent_runs: bool = True,
 ) -> List[Path]:
     """
     Download all artifacts from all non-parent runs in a given experiment.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     client = get_mlflow_client()
     exp = client.get_experiment_by_name(experiment_name)
     if not exp:
         print(f"  - Experiment '{experiment_name}' not found.")
         return []
 
-    runs = client.search_runs(experiment_ids=[exp.experiment_id], filter_string=run_filter)
+    runs = client.search_runs(experiment_ids=[exp.experiment_id])
     if not runs:
         return []
+
+    # Filter out parent runs in Python (Databricks doesn't support OR in filters)
+    if exclude_parent_runs:
+        runs = [r for r in runs if r.data.tags.get("is_parent") != "true"]
 
     downloaded = []
     for run in runs:

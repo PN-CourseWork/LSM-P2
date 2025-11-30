@@ -1,7 +1,6 @@
 """MLflow utilities for experiment tracking and artifact management.
 
 Provides:
-- Authentication setup for MLflow/Databricks
 - Context manager for MLflow run orchestration
 - Granular logging functions for parameters, metrics, time-series, and artifacts
 - Run fetching and filtering
@@ -19,7 +18,6 @@ from .io import (
     fetch_project_artifacts,
     load_runs,
     download_artifacts,
-    download_artifacts_with_naming,
 )
 from .logs import upload_logs
 
@@ -33,6 +31,5 @@ __all__ = [
     "fetch_project_artifacts",
     "load_runs",
     "download_artifacts",
-    "download_artifacts_with_naming",
     "upload_logs",
 ]

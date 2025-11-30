@@ -13,8 +13,8 @@ Usage:
 """
 
 import argparse
-import os
 import sys
+from dataclasses import asdict
 from mpi4py import MPI
 import mlflow
 
@@ -94,18 +94,13 @@ if rank == 0:
 
     # Save solution to HDF5
     project_root = get_project_root()
-    data_dir = project_root / "data" / "scaling"
+    data_dir = project_root / "data" / "05-scaling"
     data_dir.mkdir(parents=True, exist_ok=True)
     output_file = data_dir / f"poisson_N{args.N}_p{n_ranks}.h5"
     solver.save_hdf5(output_file)
 
     # --- MLflow Logging ---
-    # Determine experiment name
-    if args.experiment_name:
-        experiment_name = args.experiment_name
-    else:
-        is_hpc = "LSB_JOBID" in os.environ
-        experiment_name = "HPC-Poisson-Scaling" if is_hpc else "Poisson-Scaling"
+    experiment_name = args.experiment_name or "Experiment-05-Scaling"
 
     # Find or create parent run, then start nested child run
     parent_run_name = f"N{args.N}"

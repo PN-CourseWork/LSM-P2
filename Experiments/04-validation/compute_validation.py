@@ -16,7 +16,7 @@ setup_mlflow_tracking()
 
 # --- Script Setup ---
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "validation"
+data_dir = repo_root / "data" / "04-validation"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
@@ -37,7 +37,7 @@ print("=" * 60)
 # --- MLflow Logging ---
 # To disable MLflow logging, comment out the following lines.
 try:
-    mlflow.set_experiment("Experiment-04-Validation")
+    mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-04-Validation")
     with mlflow.start_run(run_name="Validation-Results-Set") as run:
         print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
         
