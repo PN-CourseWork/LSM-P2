@@ -382,7 +382,70 @@ class TuiApp:
 
         return []
 
+    def get_job_output_lines(self, job) -> list[str]:
+        """Get the tail of a job's output file."""
+        from src.utils.hpc.jobgen import get_job_output_dir
+
+        output_dir = get_job_output_dir()
+        out_file = output_dir / f"{job.name}.out"
+
+        lines = []
+        if out_file.exists():
+            try:
+                with open(out_file, "r") as f:
+                    # Read last N lines
+                    all_lines = f.readlines()
+                    lines = [l.rstrip() for l in all_lines[-100:]]  # Keep last 100 lines
+            except Exception as e:
+                lines = [f"Error reading output: {e}"]
+        else:
+            lines = [
+                f"Output file not found:",
+                f"  {out_file}",
+                "",
+                "Job may not have started yet,",
+                "or output is in a different location.",
+            ]
+
+        return lines
+
     # --- Drawing Methods ---
+
+    def _draw_job_output_pane(self, x: int, y: int, width: int, height: int):
+        """Draw the job output pane showing tail of selected job's output file."""
+        term = self.term
+        jobs = self.get_current_job_list()
+
+        if not jobs or self.hpc_job_idx >= len(jobs):
+            print(term.move_xy(x, y) + term.bold(" Job Output "))
+            print(term.move_xy(x, y + 2) + term.bright_black("(no job selected)"))
+            return
+
+        job = jobs[self.hpc_job_idx]
+        lines = self.get_job_output_lines(job)
+
+        # Title with job name
+        title = f" {job.name} "
+        if len(title) > width:
+            title = title[:width-3] + "..."
+        print(term.move_xy(x, y) + term.bold(title))
+
+        if not lines:
+            print(term.move_xy(x, y + 2) + term.bright_black("(no output yet)"))
+            return
+
+        # Show last lines that fit in the pane (auto-scroll to bottom)
+        visible_height = height - 2
+        visible = lines[-visible_height:] if len(lines) > visible_height else lines
+
+        for i, line in enumerate(visible):
+            line_y = y + 2 + i
+            disp = line[:width] if len(line) > width else line
+            print(term.move_xy(x, line_y) + disp)
+
+        # Line count indicator
+        info = f"[{len(lines)} lines]"
+        print(term.move_xy(x + width - len(info), y) + term.bright_black(info))
 
     def _draw_output_pane(self, x: int, y: int, width: int, height: int):
         """Draw the persistent output pane on the right."""
@@ -498,6 +561,9 @@ class TuiApp:
         if self.hpc_mode in ("generate_select", "submit_select"):
             # Show selection preview in right pane
             self._draw_selection_preview(sep_x + 2, content_start_y, output_width, output_height)
+        elif self.hpc_focus == "jobs" and self.get_current_job_list():
+            # Show job output when focused on jobs pane
+            self._draw_job_output_pane(sep_x + 2, content_start_y, output_width, output_height)
         else:
             self._draw_output_pane(sep_x + 2, content_start_y, output_width, output_height)
 
