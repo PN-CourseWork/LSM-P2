@@ -824,7 +824,7 @@ class TuiApp:
                             if key.name == "KEY_UP" or key == "k":
                                 self.hpc_job_idx = max(0, self.hpc_job_idx - 1)
                             elif key.name == "KEY_DOWN" or key == "j":
-                                self.hpc_job_idx = min(len(jobs) - 1, self.hpc_job_idx) if jobs else 0
+                                self.hpc_job_idx = min(len(jobs) - 1, self.hpc_job_idx + 1) if jobs else 0
                             elif key.name == "KEY_ENTER" and jobs:
                                 # Show job details in output pane
                                 job = jobs[self.hpc_job_idx]

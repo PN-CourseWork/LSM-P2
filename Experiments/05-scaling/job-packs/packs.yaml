@@ -31,6 +31,7 @@ SN_strong:
     - "-g /poisson_project/strong_scaling"
 
   command: >-
+    module load python3/3.12.9 && module load mpi4py/4.0.1-python-3.12.9 && uv sync &&
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
@@ -63,6 +64,7 @@ MN_strong:
     - "-g /poisson_project/strong_scaling"
 
   command: >-
+    module load python3/3.12.9 && module load mpi4py/4.0.1-python-3.12.9 && uv sync &&
     mpiexec -n {ranks} --map-by ppr:24:node --bind-to core
     uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
