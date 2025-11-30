@@ -1,86 +1,80 @@
-# ============================================================================ 
+# ============================================================================
 # LSF Experiment Configuration
-# ============================================================================ 
+# ============================================================================
 # Format:
 # GroupName:
 #   lsf_options: [...]    # List of LSF bsub flags, can use placeholders {var}
-#   executable: str       # Command to execute, can use placeholders {var}
-#   script: str           # Path to the script to run
-#   static_args: { ... }  # Arguments passed to the script, same for all sweep combinations
-#   env_vars: { ... }     # Environment variables to set for the job
+#   command: str          # Full command template with placeholders for sweep/static args
+#   static_args: { ... }  # Static arguments (always applied, can be used in command template)
 #   sweep: { ... }        # Arguments to sweep over (cartesian product)
+#   env_vars: { ... }     # Environment variables to set for the job (optional)
 
-# Placeholders available for formatting in lsf_options, executable, script_args, and env_vars:
+# Placeholders available for formatting:
 #   - Any key from static_args or sweep
 #   - job_name (generated uniquely per job)
 #   - LSF_OUTPUT_DIR (absolute path to session-specific output directory for job logs)
+#   - experiment_name (set to group name by default)
 
-# ---------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------
 # Group 1: Single Node Strong Scaling
-# ---------------------------------------------------------------------------- 
+# ----------------------------------------------------------------------------
 SN_strong:
   lsf_options:
     - "-q hpc"
-    - "-W 00:10" # Wall time
-    - "-n {ranks}" # Number of cores/tasks requested for the job
-    - "-J {job_name}" # Job name, often seen in bjobs output
-    - "-o {LSF_OUTPUT_DIR}/{job_name}.out" # Absolute path for stdout
-    - "-e {LSF_OUTPUT_DIR}/{job_name}.err" # Absolute path for stderr
-    - "-R 'rusage[mem=4GB]'" # Resource requirement: 4GB memory
-    - "-R 'span[hosts=1]'" # Request all ranks to be on a single host
-    - "-m \"\"" # Send mail to user about job (empty string to disable default behavior)
-    - "-g /poisson_project/strong_scaling" # Job group for easier management
-    # -x # Uncomment for exclusive execution
-
-  executable: "mpiexec -n {ranks} uv run python"
-  script: "Experiments/05-scaling/compute_scaling.py"
-
-  static_args:
-    tol: 0.0
-    max-iter: 200
-    numba: true
-    # experiment-name is automatically set to the group name by jobgen.py by default
-
-  env_vars: # Environment variables specific to this job group
-    OMP_NUM_THREADS: "1" # Example: Force single-threaded OpenMP
-
-  sweep:
-    N: [64, 128]
-    ranks: [1, 2, 4, 8]
-    strategy: ["sliced", "cubic"]
-    communicator: ["numpy", "custom"]
-
-# ---------------------------------------------------------------------------- 
-# Group 2: Multi Node Strong Scaling
-# ---------------------------------------------------------------------------- 
-MN_strong:
-  lsf_options:
-    - "-q hpc"
-    - "-W 00:20" # Wall time
-    - "-x" # Exclusive execution on allocated hosts
-    - "-n {ranks}" # Total number of cores/tasks
+    - "-W 00:10"
+    - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-    - "-R 'rusage[mem=8GB]'" # Resource requirement: 8GB memory
-    - "-R 'span[ptile=24]'" # 24 ranks per host (e.g., node)
-    - "-m \"\""
-    - "-g /poisson_project/strong_scaling" # Job group for easier management
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[hosts=1]'"
+    - "-g /poisson_project/strong_scaling"
 
-  executable: "mpiexec -n {ranks} --map-by ppr:24:node --bind-to core uv run python"
-  script: "Experiments/05-scaling/compute_scaling.py"
+  command: >-
+    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name {experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 200
+
+  sweep:
+    N: [32]
+    ranks: [8]
+    strategy: ["sliced", "cubic"]
+    communicator: ["numpy", "custom"]
+
+# ----------------------------------------------------------------------------
+# Group 2: Multi Node Strong Scaling
+# ----------------------------------------------------------------------------
+MN_strong:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:20"
+    - "-x"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=8GB]'"
+    - "-R 'span[ptile=24]'"
+    - "-g /poisson_project/strong_scaling"
+
+  command: >-
+    mpiexec -n {ranks} --map-by ppr:24:node --bind-to core
+    uv run python Experiments/05-scaling/runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name {experiment_name}
 
   static_args:
     tol: 1e-6
-    max-iter: 10000
-    numba: true
-
-  env_vars: # Environment variables specific to this job group
-    OMP_NUM_THREADS: "1" # Example: Force single-threaded OpenMP
-    MPI_BUFFER_SIZE: "256MB" # Example: Custom MPI buffer size
+    max_iter: 10000
 
   sweep:
     N: [256]
-    ranks: [24, 48, 96] # e.g., 1, 2, 4 nodes (24 ranks/node)
+    ranks: [24, 48, 96]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]

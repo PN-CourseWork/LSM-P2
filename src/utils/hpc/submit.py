@@ -243,8 +243,6 @@ def get_group_config_preview(config_path: Path, group_name: str) -> list[str]:
     list[str]
         Formatted lines for display
     """
-    import yaml
-
     lines = []
 
     try:
@@ -252,46 +250,48 @@ def get_group_config_preview(config_path: Path, group_name: str) -> list[str]:
     except FileNotFoundError:
         return [f"Config not found: {config_path}"]
 
-    # Find the group in various schema formats
-    group_config = None
-
-    if "jobs" in config:
-        for job in config["jobs"]:
-            if job.get("name") == group_name:
-                group_config = job
-                break
-    elif "groups" in config:
-        for group in config["groups"]:
-            if group.get("name") == group_name:
-                group_config = group
-                break
-    elif group_name in config:
-        group_config = config[group_name]
-
-    if not group_config:
+    # Find the group (top-level key)
+    if group_name not in config:
         return [f"Group '{group_name}' not found in config"]
+
+    group_config = config[group_name]
 
     # Format the config nicely
     lines.append(f"Group: {group_name}")
     lines.append("=" * 50)
     lines.append("")
 
-    # LSF settings
-    if "lsf" in group_config:
-        lines.append("LSF Settings:")
-        for key, value in group_config["lsf"].items():
-            if isinstance(value, list):
-                lines.append(f"  {key}:")
-                for item in value:
-                    lines.append(f"    - {item}")
-            else:
-                lines.append(f"  {key}: {value}")
+    # LSF options
+    if "lsf_options" in group_config:
+        lines.append("LSF Options:")
+        for opt in group_config["lsf_options"]:
+            lines.append(f"  {opt}")
         lines.append("")
 
-    # Static args / execution
-    static = group_config.get("static_args", group_config.get("execution", {}))
+    # Command template
+    if "command" in group_config:
+        lines.append("Command Template:")
+        cmd = group_config["command"]
+        # Wrap long commands
+        if len(cmd) > 60:
+            words = cmd.split()
+            current_line = " "
+            for word in words:
+                if len(current_line) + len(word) > 60:
+                    lines.append(current_line)
+                    current_line = "   " + word
+                else:
+                    current_line += " " + word
+            if current_line.strip():
+                lines.append(current_line)
+        else:
+            lines.append(f"  {cmd}")
+        lines.append("")
+
+    # Static args
+    static = group_config.get("static_args", {})
     if static:
-        lines.append("Execution:")
+        lines.append("Static Args:")
         for key, value in static.items():
             lines.append(f"  {key}: {value}")
         lines.append("")

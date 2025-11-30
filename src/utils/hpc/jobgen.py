@@ -16,18 +16,10 @@ def get_project_root() -> Path:
     """Returns the project root folder (LSM-P2)."""
     return Path(__file__).parents[3] # src/utils/hpc is 3 levels deep from root
 
-def get_job_output_dir(job_name_base: str, create: bool = True) -> Path:
+def get_job_output_dir() -> Path:
     """Get the directory for job output files (e.g., .out, .err).
 
-    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to project_root/logs/hpc-jobs.
-    Creates the directory if it doesn't exist.
-
-    Parameters
-    ----------
-    job_name_base : str
-        Base name for the job group, used to create a subdirectory.
-    create : bool
-        If True, create the directory if it doesn't exist.
+    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to /tmp/lsf.
 
     Returns
     -------
@@ -35,14 +27,8 @@ def get_job_output_dir(job_name_base: str, create: bool = True) -> Path:
         Directory path for job outputs
     """
     if "HPC_OUTPUT_DIR" in os.environ:
-        base_dir = Path(os.environ["HPC_OUTPUT_DIR"])
-    else:
-        base_dir = get_project_root() / "logs" / "hpc-jobs"
-
-    output_dir = base_dir / job_name_base
-    if create:
-        output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
+        return Path(os.environ["HPC_OUTPUT_DIR"])
+    return Path("/tmp/lsf")
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
@@ -91,9 +77,7 @@ def generate_pack_lines(
         Lines for the job pack file, each representing a single LSF job submission.
     """
     lines = []
-    
-    # Ensure a consistent output directory for this pack generation session
-    session_output_dir = get_job_output_dir(job_name_prefix)
+    output_dir = get_job_output_dir()
 
     for group_name, group_config in config.items():
         # Filter based on selection
@@ -103,14 +87,15 @@ def generate_pack_lines(
         lines.append(f"\n# --- Group: {group_name} ---")
 
         lsf_options_templates: List[str] = group_config.get("lsf_options", [])
-        executable_template: str = group_config.get("executable", "python")
-        script_path: str = group_config.get("script", "")
+        command_template: str = group_config.get("command", "")
         static_args: Dict[str, Any] = group_config.get("static_args", {})
         sweep: Dict[str, List[Any]] = group_config.get("sweep", {})
-        
+
+        if not command_template:
+            raise ValueError(f"Group '{group_name}' is missing required 'command' field")
+
         # Prepare sweep combinations
         if not sweep:
-            # If no sweep, generate a single combination for static args
             combinations = [{}]
         else:
             sweep_keys = list(sweep.keys())
@@ -119,51 +104,42 @@ def generate_pack_lines(
 
         for i, combo_dict in enumerate(combinations):
             # Combine all arguments (static + sweep) into one dictionary for formatting
-            # This dictionary will be used to format all template strings
-            all_args_for_formatting = {**static_args, **combo_dict}
-            
-            # Dynamically generate a job name base for output files, using group name and counter
-            # Ensure job_name is available for templates (e.g., in lsf_options or command)
-            job_name_suffix = "_".join([f"{k}{v}" for k,v in combo_dict.items()]) if combo_dict else "base"
-            current_job_name = f"{job_name_prefix}_{group_name}_{job_name_suffix}_{i:03d}"
-            all_args_for_formatting["job_name"] = current_job_name # Make it available for formatting
-            all_args_for_formatting["LSF_OUTPUT_DIR"] = session_output_dir # Make path available
+            all_args = {**static_args, **combo_dict}
+
+            # Generate job name: group_val1_val2_..._idx
+            sweep_values = [str(v) for v in combo_dict.values()]
+            job_suffix = "_".join(sweep_values) if sweep_values else "base"
+            current_job_name = f"{group_name}_{job_suffix}_{i:03d}"
+
+            # Add special variables available for formatting
+            all_args["job_name"] = current_job_name
+            all_args["experiment_name"] = group_name
+            all_args["LSF_OUTPUT_DIR"] = output_dir
 
             # --- Format LSF Options ---
             formatted_lsf_options = []
             for opt_template in lsf_options_templates:
                 try:
-                    formatted_lsf_options.append(opt_template.format(**all_args_for_formatting))
+                    formatted_lsf_options.append(opt_template.format(**all_args))
                 except KeyError as e:
-                    raise ValueError(f"Missing key in LSF option template '{opt_template}': {e}. Available keys: {list(all_args_for_formatting.keys())}")
+                    raise ValueError(
+                        f"Missing key in LSF option template '{opt_template}': {e}. "
+                        f"Available keys: {list(all_args.keys())}"
+                    )
 
-            # --- Construct Script Arguments String ---
-            script_args_list = []
-            # Combine static and sweep args for the script itself
-            combined_script_args = {**static_args, **combo_dict}
-            for k, v in combined_script_args.items():
-                if isinstance(v, bool):
-                    if v: # Only add flag if True
-                        script_args_list.append(f"--{k}")
-                elif v is not None: # Only add if not None
-                    script_args_list.append(f"--{k} {v}")
-            
-            # Also add job-name, log-dir, experiment-name as standard arguments
-            script_args_list.append(f"--job-name {current_job_name}")
-            script_args_list.append(f"--log-dir logs") # Assumes 'logs' is relative to project root
-            script_args_list.append(f"--experiment-name {group_name}")
-
-            formatted_script_args = " ".join(script_args_list)
-
-            # --- Assemble Full Command ---
-            # The executable and script path might also contain placeholders
-            formatted_executable = executable_template.format(**all_args_for_formatting)
-            full_command = f"{formatted_executable} {script_path} {formatted_script_args}"
+            # --- Format Command ---
+            try:
+                formatted_command = command_template.format(**all_args)
+            except KeyError as e:
+                raise ValueError(
+                    f"Missing key in command template: {e}. "
+                    f"Available keys: {list(all_args.keys())}"
+                )
 
             # --- Assemble Final LSF Line ---
-            final_lsf_line = " ".join(formatted_lsf_options) + " " + full_command
+            final_lsf_line = " ".join(formatted_lsf_options) + " " + formatted_command
             lines.append(final_lsf_line)
-            
+
     return lines
 
 
