@@ -5,9 +5,31 @@ LSF-compatible job pack files with parameter sweeps.
 """
 
 import itertools
+import os
 import yaml
 from pathlib import Path
 from typing import List, Dict, Any
+
+
+def get_job_output_dir() -> Path:
+    """Get the directory for job output files.
+
+    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to /tmp/<user>/hpc-jobs.
+    Creates the directory if it doesn't exist.
+
+    Returns
+    -------
+    Path
+        Directory path for job outputs
+    """
+    if "HPC_OUTPUT_DIR" in os.environ:
+        output_dir = Path(os.environ["HPC_OUTPUT_DIR"])
+    else:
+        user = os.environ.get("USER", "unknown")
+        output_dir = Path(f"/tmp/{user}/hpc-jobs")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
@@ -102,6 +124,7 @@ def generate_pack_lines(
     config: Dict[str, Any],
     job_name_base: str,
     selected_groups: List[str] = None,
+    output_dir: Path = None,
 ) -> List[str]:
     """Generate list of job pack lines (LSF options + command).
 
@@ -113,6 +136,8 @@ def generate_pack_lines(
         Base name for generated jobs
     selected_groups : list of str, optional
         Only generate jobs for these groups
+    output_dir : Path, optional
+        Directory for job output files. If None, uses get_job_output_dir()
 
     Returns
     -------
@@ -120,6 +145,12 @@ def generate_pack_lines(
         Lines for the job pack file
     """
     normalized_jobs = _normalize_jobs(config)
+
+    # Get output directory for job logs
+    if output_dir is None:
+        output_dir = get_job_output_dir()
+    job_output_dir = output_dir / job_name_base
+    job_output_dir.mkdir(parents=True, exist_ok=True)
 
     lines = []
     global_job_counter = 1
@@ -240,9 +271,9 @@ def generate_pack_lines(
             for r in resources:
                 lsf_opts.append(f'-R "{r}"')
 
-            # Logs
-            lsf_opts.append(f"-o logs/{current_job_name}.out")
-            lsf_opts.append(f"-e logs/{current_job_name}.err")
+            # Output files (absolute paths outside repo)
+            lsf_opts.append(f"-o {job_output_dir}/{current_job_name}.out")
+            lsf_opts.append(f"-e {job_output_dir}/{current_job_name}.err")
 
             line = " ".join(lsf_opts) + " " + cmd
             lines.append(line)
