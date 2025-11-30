@@ -7,7 +7,7 @@ name = "poisson_solver"
 version = "0.1.0"
 description = "MPI Poisson Solver"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "==3.12"
 license = { text = "MIT" }
 authors = [
     { name = "Alexander Elbæk Nielsen" },
