@@ -1,7 +1,12 @@
+"""Batch/CLI mode for running commands without TUI."""
+
 import argparse
 import sys
-from src.utils import manage, mlflow_io
-from src.utils.TUI.actions import hpc
+
+from src.utils import runners, mlflow
+from src.utils.config import get_repo_root, load_project_config, clean_all
+from src.utils.tui.actions import hpc, docs
+
 
 def handle_args():
     """Handle command line arguments for batch/automation mode."""
@@ -45,7 +50,7 @@ Examples:
     actions.add_argument(
         "--hpc",
         nargs="?",
-        const="DEFAULT", # Sentinel value to distinguish flag presence from None
+        const="DEFAULT",
         help="Generate and submit LSF job pack (optional: specify config path)",
     )
 
@@ -53,43 +58,41 @@ Examples:
 
     # Execute commands in logical order
     if args.clean:
-        manage.clean_all()
+        clean_all()
 
     if args.compute:
-        manage.run_compute_scripts()
+        runners.run_compute_scripts()
 
     if args.plot:
-        manage.run_plot_scripts()
+        runners.run_plot_scripts()
 
     if args.copy_plots:
-        manage.copy_plots()
+        runners.copy_to_report()
 
     if args.fetch:
-        config = manage.load_project_config()
+        config = load_project_config()
         mlflow_conf = config.get("mlflow", {})
-        repo_root = manage.get_repo_root()
-        
-        # Setup Auth
-        mlflow_io.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
-        
-        # Fetch
+        repo_root = get_repo_root()
+
+        mlflow.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
+
         output_dir = repo_root / mlflow_conf.get("download_dir", "data/downloaded")
         experiments = mlflow_conf.get("experiments", [])
         if not experiments:
             print("  (No experiments configured in project_config.yaml)")
         else:
-            mlflow_io.fetch_project_artifacts(experiments, output_dir)
+            mlflow.fetch_project_artifacts(experiments, output_dir)
 
-    # Handle HPC pack submission
     if args.hpc:
-        config = manage.load_project_config()
-        default_conf = config.get("hpc", {}).get("default_config", "Experiments/05-scaling/configs/template.yaml")
-        
+        config = load_project_config()
+        default_conf = config.get("hpc", {}).get(
+            "default_config", "Experiments/05-scaling/configs/template.yaml"
+        )
+
         config_path = default_conf if args.hpc == "DEFAULT" else args.hpc
-        
-        # Call the menu from actions
+
         hpc.run_hpc_menu(config_path)
 
     if args.docs:
-        if not manage.build_docs():
+        if not docs.build_docs():
             sys.exit(1)

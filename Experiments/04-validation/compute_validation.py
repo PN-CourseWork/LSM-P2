@@ -14,7 +14,7 @@ data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
 problem_sizes = [16, 32, 48]
-rank_counts = [8]
+rank_counts = [4]
 configurations = [
     ("sliced", "numpy"),
     ("sliced", "custom"),

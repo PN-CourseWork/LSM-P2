@@ -1,6 +1,6 @@
 import sys
-from src.utils import manage
-from src.utils.TUI.io import getch, clear_screen
+from src.utils import runners
+from src.utils.tui.io import getch, clear_screen
 
 def run_execution_menu():
     """Execution Submenu"""
@@ -14,17 +14,17 @@ def run_execution_menu():
         print("  [b] Back")
         print("  [q] Quit")
         print("\nSelect an action: ", end="", flush=True)
-        
+
         key = getch().lower()
-        
+
         if key == 'c':
-            manage.run_compute_scripts()
+            runners.run_compute_scripts()
             input("Press Enter to continue...")
         elif key == 'p':
-            manage.run_plot_scripts()
+            runners.run_plot_scripts()
             input("Press Enter to continue...")
         elif key == 'r':
-            manage.copy_plots()
+            runners.copy_to_report()
             input("Press Enter to continue...")
         elif key == 'q':
             clear_screen()

@@ -5,22 +5,32 @@ MLflow/Databricks and downloading artifacts to the local data directory.
 """
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import List, Optional
+
 import mlflow
 import pandas as pd
 
 
-def setup_mlflow_auth(tracking_uri: Optional[str] = None):
+def setup_mlflow_auth(tracking_uri: Optional[str] = None) -> None:
     """Configure MLflow authentication.
 
     Uses DATABRICKS_TOKEN environment variable if available (for CI),
     otherwise falls back to interactive login or provided tracking URI.
+
+    Parameters
+    ----------
+    tracking_uri : str, optional
+        MLflow tracking URI. If not provided, uses environment or interactive login.
     """
     token = os.environ.get("DATABRICKS_TOKEN")
     if token:
         # CI environment - set both host and token for Databricks auth
-        host = "https://dbc-6756e917-e5fc.cloud.databricks.com"
+        host = os.environ.get(
+            "DATABRICKS_HOST", "https://dbc-6756e917-e5fc.cloud.databricks.com"
+        )
         os.environ["DATABRICKS_HOST"] = host
         mlflow.set_tracking_uri("databricks")
     elif tracking_uri:
@@ -30,12 +40,12 @@ def setup_mlflow_auth(tracking_uri: Optional[str] = None):
         mlflow.login()
 
 
-def fetch_project_artifacts(experiments: List[str], output_dir: Path):
+def fetch_project_artifacts(experiments: List[str], output_dir: Path) -> None:
     """Fetch artifacts for a list of experiments.
 
     Parameters
     ----------
-    experiments : List[str]
+    experiments : list of str
         List of experiment names.
     output_dir : Path
         Base directory to save artifacts.
@@ -44,10 +54,9 @@ def fetch_project_artifacts(experiments: List[str], output_dir: Path):
 
     for exp in experiments:
         print(f"\nProcessing Experiment: {exp}")
-        # Ensure output directory for this experiment exists
         exp_dir = output_dir / exp
         exp_dir.mkdir(parents=True, exist_ok=True)
-        
+
         try:
             paths = download_artifacts_with_naming(exp, exp_dir)
             print(f"  ✓ Downloaded {len(paths)} files to {exp_dir}")
@@ -59,32 +68,29 @@ def load_runs(
     experiment: str,
     converged_only: bool = True,
     exclude_parent_runs: bool = True,
+    experiment_prefix: str = "/Shared/LSM-Project-2",
 ) -> pd.DataFrame:
     """Load runs from an MLflow experiment.
 
     Parameters
     ----------
     experiment : str
-        Experiment name (e.g., "HPC-FV-Solver" or full path "/Shared/ANA-P3/HPC-FV-Solver").
+        Experiment name (e.g., "HPC-Solver" or full path "/Shared/Project/HPC-Solver").
     converged_only : bool, default True
         Only return runs where metrics.converged = 1.
     exclude_parent_runs : bool, default True
         Exclude parent runs (nested run containers).
+    experiment_prefix : str
+        Prefix to prepend if experiment doesn't start with "/".
 
     Returns
     -------
     pd.DataFrame
         DataFrame with run info, parameters (params.*), and metrics (metrics.*).
-
-    Examples
-    --------
-    >>> df = load_runs("HPC-FV-Solver")
-    >>> df[["run_id", "params.nx", "metrics.wall_time_seconds"]]
     """
     # Normalize experiment name
     if not experiment.startswith("/"):
-        # Note: Adapted for LSM Project 2, assuming same shared folder structure or user should adjust
-        experiment = f"/Shared/LSM-Project-2/{experiment}"
+        experiment = f"{experiment_prefix}/{experiment}"
 
     # Build filter string
     filters = []
@@ -118,30 +124,22 @@ def download_artifacts(
     Parameters
     ----------
     experiment : str
-        Experiment name (e.g., "HPC-FV-Solver").
+        Experiment name (e.g., "HPC-Solver").
     output_dir : Path
-        Directory to save artifacts. Files are named based on run parameters.
+        Directory to save artifacts.
     converged_only : bool, default True
         Only download from converged runs.
     artifact_filter : list of str, optional
-        Only download artifacts matching these patterns (e.g., ["*.h5", "*.png"]).
-        If None, downloads all artifacts.
+        Only download artifacts matching these extensions (e.g., [".h5", ".png"]).
 
     Returns
     -------
     list of Path
         Paths to downloaded files.
-
-    Examples
-    --------
-    >>> paths = download_artifacts("HPC-FV-Solver", Path("data/FV-Solver"))
-    >>> print(paths)
-    [Path('data/FV-Solver/LDC_N32_Re100.h5'), ...]
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get runs
     df = load_runs(experiment, converged_only=converged_only)
     if df.empty:
         print(f"No runs found for {experiment}")
@@ -152,17 +150,13 @@ def download_artifacts(
 
     for _, row in df.iterrows():
         run_id = row["run_id"]
-
-        # List artifacts
         artifacts = client.list_artifacts(run_id)
 
         for artifact in artifacts:
-            # Apply filter if specified
             if artifact_filter:
-                if not any(artifact.path.endswith(f) for f in artifact_filter):
+                if not any(artifact.path.endswith(ext) for ext in artifact_filter):
                     continue
 
-            # Download to output directory
             local_path = client.download_artifacts(run_id, artifact.path, output_dir)
             downloaded.append(Path(local_path))
             print(f"  Downloaded: {artifact.path}")
@@ -174,10 +168,10 @@ def download_artifacts_with_naming(
     experiment: str,
     output_dir: Path,
     converged_only: bool = True,
+    name_template: str = "{prefix}_N{n}_{filename}",
+    prefix: str = "Result",
 ) -> List[Path]:
     """Download HDF5 artifacts with standardized naming.
-
-    Names files as: POISSON_N{n}_Iter{iter}.h5 (Adapted for LSM)
 
     Parameters
     ----------
@@ -187,15 +181,16 @@ def download_artifacts_with_naming(
         Directory to save artifacts.
     converged_only : bool, default True
         Only download from converged runs.
+    name_template : str
+        Template for output filenames. Available placeholders: {prefix}, {n}, {filename}.
+    prefix : str
+        Prefix for output filenames.
 
     Returns
     -------
     list of Path
         Paths to downloaded files.
     """
-    import tempfile
-    import shutil
-
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -210,21 +205,20 @@ def download_artifacts_with_naming(
     for _, row in df.iterrows():
         run_id = row["run_id"]
 
-        # Extract parameters for naming - Adapting to typical Poisson params
-        # Assuming 'n' is grid size, 'max_iter' or 'iterations' might be useful
+        # Extract parameters for naming
         n = row.get("params.n", row.get("params.N", "unknown"))
 
-        # List artifacts and find HDF5 files
         artifacts = client.list_artifacts(run_id)
 
         for artifact in artifacts:
             if artifact.path.endswith(".h5"):
-                # Download to temp location first
                 with tempfile.TemporaryDirectory() as tmpdir:
                     tmp_path = client.download_artifacts(run_id, artifact.path, tmpdir)
 
-                    # Rename with standardized naming
-                    new_name = f"Poisson_N{n}_{artifact.path.split('/')[-1]}"
+                    filename = artifact.path.split("/")[-1]
+                    new_name = name_template.format(
+                        prefix=prefix, n=n, filename=filename
+                    )
                     final_path = output_dir / new_name
 
                     shutil.copy(tmp_path, final_path)
