@@ -1,8 +1,10 @@
 """TUI-integrated action runner with output capture and selection."""
 
 import io
+import os
 import sys
-from contextlib import redirect_stdout, redirect_stderr
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Any
 from blessed import Terminal
@@ -32,6 +34,41 @@ class TuiRunner:
         self.output_lines: List[str] = []
         self.scroll_offset = 0
 
+    @contextmanager
+    def _capture_fd(self):
+        """Context manager to capture stdout/stderr at the file descriptor level.
+
+        This captures ALL output including from C libraries, subprocesses, and
+        third-party packages that write directly to file descriptors.
+        """
+        # Save original file descriptors
+        stdout_fd = sys.stdout.fileno()
+        stderr_fd = sys.stderr.fileno()
+        saved_stdout_fd = os.dup(stdout_fd)
+        saved_stderr_fd = os.dup(stderr_fd)
+
+        # Create temp files to capture output
+        stdout_tmp = tempfile.TemporaryFile(mode='w+')
+        stderr_tmp = tempfile.TemporaryFile(mode='w+')
+
+        try:
+            # Redirect file descriptors to temp files
+            os.dup2(stdout_tmp.fileno(), stdout_fd)
+            os.dup2(stderr_tmp.fileno(), stderr_fd)
+
+            yield stdout_tmp, stderr_tmp
+
+        finally:
+            # Flush Python buffers
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+            # Restore original file descriptors
+            os.dup2(saved_stdout_fd, stdout_fd)
+            os.dup2(saved_stderr_fd, stderr_fd)
+            os.close(saved_stdout_fd)
+            os.close(saved_stderr_fd)
+
     def capture_output(self, func: Callable, *args, **kwargs) -> ActionResult:
         """Run a function and capture its stdout/stderr.
 
@@ -47,15 +84,17 @@ class TuiRunner:
         ActionResult
             Result with captured output
         """
-        stdout_capture = io.StringIO()
-        stderr_capture = io.StringIO()
-
         try:
-            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            with self._capture_fd() as (stdout_tmp, stderr_tmp):
                 result = func(*args, **kwargs)
 
-            output = stdout_capture.getvalue().splitlines()
-            errors = stderr_capture.getvalue()
+            # Read captured output
+            stdout_tmp.seek(0)
+            stderr_tmp.seek(0)
+            output = stdout_tmp.read().splitlines()
+            errors = stderr_tmp.read()
+            stdout_tmp.close()
+            stderr_tmp.close()
 
             return ActionResult(
                 success=True,
@@ -65,7 +104,7 @@ class TuiRunner:
         except Exception as e:
             return ActionResult(
                 success=False,
-                output=stdout_capture.getvalue().splitlines(),
+                output=[],
                 error=str(e),
             )
 

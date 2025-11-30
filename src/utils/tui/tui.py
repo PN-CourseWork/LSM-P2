@@ -314,13 +314,9 @@ class TuiApp:
         mlflow_conf = config.get("mlflow", {})
 
         def _fetch():
-            mlflow.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
-            output_dir = repo_root / mlflow_conf.get("download_dir", "data/downloaded")
-            experiments = mlflow_conf.get("experiments", [])
-            if not experiments:
-                print("No experiments configured in project.yaml")
-                return
-            mlflow.fetch_project_artifacts(experiments, output_dir)
+            mlflow.setup_mlflow_tracking()
+            output_dir = repo_root / mlflow_conf.get("download_dir", "data")
+            mlflow.fetch_project_artifacts(output_dir)
 
         self._run_action("Fetch MLflow Artifacts", _fetch)
 
