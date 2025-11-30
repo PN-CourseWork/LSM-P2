@@ -19,7 +19,7 @@ def get_project_root() -> Path:
 def get_job_output_dir() -> Path:
     """Get the directory for job output files (e.g., .out, .err).
 
-    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to /tmp/lsf.
+    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to project_root/logs/lsf.
 
     Returns
     -------
@@ -28,7 +28,7 @@ def get_job_output_dir() -> Path:
     """
     if "HPC_OUTPUT_DIR" in os.environ:
         return Path(os.environ["HPC_OUTPUT_DIR"])
-    return Path("/tmp/lsf")
+    return get_project_root() / "logs" / "lsf"
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
