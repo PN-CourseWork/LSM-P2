@@ -25,12 +25,12 @@ SN_strong:
     interpreter: "uv run python"
     script: "Experiments/05-scaling/compute_scaling.py"
     tol: 0.0
-    max-iter: 500
+    max-iter: 200
     numba: true
 
   sweep:
-    N: [64, 128]
-    ranks: [1, 2, 4, 8]
+    N: [64]
+    ranks: [1, 8]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 

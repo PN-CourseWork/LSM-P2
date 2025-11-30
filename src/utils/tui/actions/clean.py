@@ -2,9 +2,9 @@ import sys
 
 import questionary
 
-from src.utils.config import clean_all
-from src.utils.tui.io import getch, clear_screen
-from src.utils.tui.styles import get_custom_style
+from utils.config import clean_all
+from utils.tui.io import getch, clear_screen
+from utils.tui.styles import get_custom_style
 
 def run_clean_menu():
     """Clean & Maintenance Submenu"""

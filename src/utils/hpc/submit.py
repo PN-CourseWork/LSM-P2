@@ -15,7 +15,7 @@ from typing import List, Optional, TYPE_CHECKING
 from .jobgen import load_config, generate_pack_lines, write_pack_file
 
 if TYPE_CHECKING:
-    from src.utils.tui.runner import TuiRunner
+    from utils.tui.runner import TuiRunner
 
 
 def generate_pack(
@@ -198,7 +198,7 @@ def tui_generate_pack(
     job_packs_dir : Path
         Output directory for pack files
     """
-    from src.utils.tui.runner import SelectOption
+    from utils.tui.runner import SelectOption
 
     # Get available groups
     groups = get_available_groups(config_path)
@@ -325,7 +325,7 @@ def tui_submit_pack(
     job_packs_dir : Path
         Directory containing pack files
     """
-    from src.utils.tui.runner import SelectOption
+    from utils.tui.runner import SelectOption
 
     # Get pack files
     pack_files = get_pack_files(job_packs_dir)
@@ -406,7 +406,7 @@ def tui_submit_pack(
 def interactive_generate(config_path: Path, job_packs_dir: Path) -> None:
     """Handle job pack generation workflow (legacy questionary version)."""
     import questionary
-    from src.utils.tui.styles import get_custom_style
+    from utils.tui.styles import get_custom_style
 
     print(f"\n--- Generate Job Pack ---")
 
@@ -435,7 +435,7 @@ def interactive_generate(config_path: Path, job_packs_dir: Path) -> None:
 def interactive_submit(job_packs_dir: Path) -> None:
     """Handle job pack submission workflow (legacy questionary version)."""
     import questionary
-    from src.utils.tui.styles import get_custom_style
+    from utils.tui.styles import get_custom_style
 
     print(f"\n--- Submit Job Pack ---")
 

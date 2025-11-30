@@ -3,9 +3,9 @@
 import argparse
 import sys
 
-from src.utils import runners, mlflow
-from src.utils.config import get_repo_root, load_project_config, clean_all
-from src.utils.tui.actions import hpc, docs
+from utils import runners, mlflow
+from utils.config import get_repo_root, load_project_config, clean_all
+from utils.tui.actions import hpc, docs
 
 
 def handle_args():

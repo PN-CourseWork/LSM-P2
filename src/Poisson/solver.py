@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import asdict
 from mpi4py import MPI
 from numba import get_num_threads
-import mlflow
+
 
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import GlobalParams, GlobalMetrics, LocalSeries
@@ -114,17 +114,8 @@ class JacobiPoisson:
         """Execute Jacobi iteration loop."""
         uold, u = self.u1_local, self.u2_local
 
-        # MLflow timing
-        mlflow_time = 0.0
-
         for i in range(self.config.max_iter):
             residual = self._step(uold, u)
-
-            # Live MLflow logging every 50 iterations
-            if self.rank == 0 and i % 50 == 0 and mlflow.active_run():
-                t_log_start = time.time()
-                mlflow.log_metrics({"residual": residual}, step=i)
-                mlflow_time += time.time() - t_log_start
 
             if residual < self.config.tolerance:
                 self._record_convergence(i + 1, converged=True)
@@ -277,121 +268,3 @@ class JacobiPoisson:
         row = {**asdict(self.config), **asdict(self.results)}
         pd.DataFrame([row]).to_hdf(path, key="results", mode="w")
 
-    # ========================================================================
-    # MLflow Integration
-    # ========================================================================
-
-    def mlflow_start(
-        self, experiment_name: str, run_name: str = None, parent_run_name: str = None
-    ):
-        """Start MLflow run and log parameters (rank 0 only)."""
-        if self.rank != 0:
-            return
-
-        mlflow.login()
-
-        # Databricks requires absolute paths - using a standard project prefix if not present
-        if not experiment_name.startswith("/"):
-            experiment_name = f"/Shared/LSM-Project-2/{experiment_name}"
-
-        if mlflow.get_experiment_by_name(experiment_name) is None:
-            mlflow.create_experiment(name=experiment_name)
-
-        mlflow.set_experiment(experiment_name)
-
-        # Handle parent run if specified
-        if parent_run_name:
-            experiment = mlflow.get_experiment_by_name(experiment_name)
-            client = mlflow.tracking.MlflowClient()
-
-            # Search for existing parent run
-            runs = client.search_runs(
-                experiment_ids=[experiment.experiment_id],
-                filter_string=f"tags.mlflow.runName = '{parent_run_name}' AND tags.is_parent = 'true'",
-                max_results=1,
-            )
-
-            if runs:
-                parent_run_id = runs[0].info.run_id
-            else:
-                parent_run = client.create_run(
-                    experiment_id=experiment.experiment_id,
-                    run_name=parent_run_name,
-                    tags={"is_parent": "true"},
-                )
-                parent_run_id = parent_run.info.run_id
-
-            # Start nested child run
-            mlflow.start_run(run_id=parent_run_id, log_system_metrics=False)
-            mlflow.start_run(run_name=run_name, nested=True, log_system_metrics=True)
-            self._mlflow_nested = True
-        else:
-            mlflow.start_run(log_system_metrics=True, run_name=run_name)
-            self._mlflow_nested = False
-
-        # Log all parameters from config
-        mlflow.log_params(asdict(self.config))
-
-    def mlflow_end(self, log_time_series: bool = True):
-        """End MLflow run and log metrics (rank 0 only)."""
-        if self.rank != 0:
-            return
-
-        # Populate timing totals in results if timeseries exists
-        if self.timeseries.compute_times:
-            self.results.total_compute_time = sum(self.timeseries.compute_times)
-        if self.timeseries.halo_exchange_times:
-            self.results.total_halo_time = sum(self.timeseries.halo_exchange_times)
-        if self.timeseries.mpi_comm_times:
-            self.results.total_mpi_comm_time = sum(self.timeseries.mpi_comm_times)
-
-        # Log final metrics
-        mlflow.log_metrics(asdict(self.results))
-
-        # Log time series as step-based metrics
-        if log_time_series:
-            self._mlflow_log_time_series()
-
-        # End child run
-        mlflow.end_run()
-
-        # End parent run if nested
-        if getattr(self, "_mlflow_nested", False):
-            mlflow.end_run()
-
-    def _mlflow_log_time_series(self):
-        """Log time series as step-based metrics using async batch logging."""
-        from mlflow.entities import Metric
-
-        if not mlflow.active_run():
-            return
-
-        run_id = mlflow.active_run().info.run_id
-        client = mlflow.tracking.MlflowClient()
-        timestamp = int(time.time() * 1000)
-
-        # Build all metrics from timeseries
-        metrics = []
-        ts_dict = asdict(self.timeseries)
-        for name, values in ts_dict.items():
-            if values:  # Skip empty lists
-                for step, value in enumerate(values):
-                    # Ensure value is float
-                    try:
-                        val = float(value)
-                        metrics.append(Metric(name, val, timestamp, step))
-                    except (ValueError, TypeError):
-                        continue
-
-        # Async batch log (non-blocking) - split into chunks of 1000 (MLflow limit)
-        batch_size = 1000
-        for i in range(0, len(metrics), batch_size):
-            chunk = metrics[i : i + batch_size]
-            if chunk:
-                client.log_batch(run_id, metrics=chunk, synchronous=False)
-
-    def mlflow_log_artifact(self, filepath: str):
-        """Log an artifact to MLflow (rank 0 only)."""
-        if self.rank != 0:
-            return
-        mlflow.log_artifact(filepath)

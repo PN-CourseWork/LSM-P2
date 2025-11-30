@@ -5,13 +5,13 @@ from pathlib import Path
 
 from blessed import Terminal
 
-from src.utils import runners, mlflow
-from src.utils.hpc import get_pack_files, get_available_groups, submit_pack
-from src.utils.hpc.submit import get_group_config_preview
-from src.utils.config import load_project_config, clean_all
-from src.utils.tui.monitor import get_jobs
-from src.utils.tui.runner import TuiRunner
-from src.utils.tui.actions import docs
+from utils import runners, mlflow
+from utils.hpc import get_pack_files, get_available_groups, submit_pack
+from utils.hpc.submit import get_group_config_preview
+from utils.config import load_project_config, clean_all
+from utils.tui.monitor import get_jobs
+from utils.tui.runner import TuiRunner
+from utils.tui.actions import docs
 
 
 class TuiApp:
@@ -194,7 +194,7 @@ class TuiApp:
         self.log(f"Groups: {', '.join(selected_groups)}")
 
         # Import and run generation
-        from src.utils.hpc.submit import generate_pack
+        from utils.hpc.submit import generate_pack
         files, log = generate_pack(config_path, job_packs_dir, selected_groups)
 
         # Log output

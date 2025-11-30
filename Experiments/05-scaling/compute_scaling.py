@@ -4,6 +4,9 @@ Poisson Scaling Experiment
 
 MPI Jacobi solver for 3D Poisson equation with MLflow logging.
 
+This script is responsible for orchestrating the experiment, including
+setting up MLflow, running the solver, and logging the results.
+
 Usage:
     mpiexec -n 4 uv run python compute_scaling.py --N 64
     mpiexec -n 8 uv run python compute_scaling.py --N 128 --tol 1e-8 --numba
@@ -12,9 +15,10 @@ Usage:
 import argparse
 import os
 import sys
-
 from mpi4py import MPI
+import mlflow
 
+# Project-specific imports
 from Poisson import (
     JacobiPoisson,
     DomainDecomposition,
@@ -22,54 +26,39 @@ from Poisson import (
     CustomHaloExchange,
     get_project_root,
 )
+from utils.mlflow.io import (
+    setup_mlflow_tracking,
+    start_mlflow_run_context,
+    log_parameters,
+    log_metrics_dict,
+    log_timeseries_metrics,
+    log_artifact_file,
+)
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(
-    description="MPI Jacobi solver for 3D Poisson equation"
-)
-parser.add_argument("--N", type=int, default=64, help="Grid size N³ (default: 64)")
-parser.add_argument(
-    "--tol", type=float, default=1e-6, help="Convergence tolerance (default: 1e-6)"
-)
-parser.add_argument(
-    "--max-iter", type=int, default=50000, help="Max iterations (default: 50000)"
-)
-parser.add_argument(
-    "--omega", type=float, default=0.8, help="Relaxation parameter (default: 0.8)"
-)
-parser.add_argument(
-    "--strategy",
-    choices=["sliced", "cubic"],
-    default="sliced",
-    help="Decomposition strategy",
-)
-parser.add_argument(
-    "--communicator",
-    choices=["numpy", "custom"],
-    default="numpy",
-    help="Halo exchange communicator",
-)
+# --- Argument Parsing ---
+parser = argparse.ArgumentParser(description="MPI Jacobi solver for 3D Poisson equation")
+parser.add_argument("--N", type=int, default=64, help="Grid size N³")
+parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
+parser.add_argument("--max-iter", type=int, default=50000, help="Max iterations")
+parser.add_argument("--omega", type=float, default=0.8, help="Relaxation parameter")
+parser.add_argument("--strategy", choices=["sliced", "cubic"], default="sliced", help="Decomposition strategy")
+parser.add_argument("--communicator", choices=["numpy", "custom"], default="numpy", help="Halo exchange communicator")
 parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
 parser.add_argument("--job-name", type=str, default=None, help="LSF Job Name for log retrieval")
-parser.add_argument("--log-dir", type=str, default="logs", help="Directory containing LSF logs")
+parser.add_argument("--log-dir", type=str, default="logs", help="Directory for LSF logs")
 parser.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name")
 args = parser.parse_args()
 
-N = args.N
+# --- MPI and Setup ---
 comm = MPI.COMM_WORLD
-n_ranks = comm.Get_size()
 rank = comm.Get_rank()
+n_ranks = comm.Get_size()
 
-# Setup directories
-project_root = get_project_root()
-data_dir = project_root / "data" / "scaling"
-data_dir.mkdir(parents=True, exist_ok=True)
-
-# Create solver
-decomp = DomainDecomposition(N=N, size=n_ranks, strategy=args.strategy)
+# --- Solver Configuration ---
+decomp = DomainDecomposition(N=args.N, size=n_ranks, strategy=args.strategy)
 halo = CustomHaloExchange() if args.communicator == "custom" else NumpyHaloExchange()
 solver = JacobiPoisson(
-    N=N,
+    N=args.N,
     omega=args.omega,
     tolerance=args.tol,
     max_iter=args.max_iter,
@@ -79,90 +68,73 @@ solver = JacobiPoisson(
 )
 
 if rank == 0:
-    print(
-        f"Solver configured: N={N}³, ranks={n_ranks}, strategy={args.strategy}, comm={args.communicator}"
-    )
+    print("INFO: Setting up MLflow tracking...")
+    setup_mlflow_tracking()
+    print(f"Solver configured: N={args.N}³, ranks={n_ranks}, strategy={args.strategy}, comm={args.communicator}")
     print(f"  Kernel: {'Numba' if args.numba else 'NumPy'}, omega={args.omega}")
 
-# MLflow setup with nested runs (auto-detect HPC via LSF env vars)
-if args.experiment_name:
-    experiment_name = args.experiment_name
-else:
-    is_hpc = "LSB_JOBID" in os.environ
-    experiment_name = "HPC-Poisson-Scaling" if is_hpc else "Poisson-Scaling"
-
-parent_run = f"N{N}"
-run_name = f"N{N}_p{n_ranks}_{args.strategy}"
-solver.mlflow_start(experiment_name, run_name, parent_run_name=parent_run)
-
-# Save Run ID for external log uploader
-if rank == 0 and args.job_name:
-    try:
-        run_id = mlflow.active_run().info.run_id
-        log_path = project_root / args.log_dir
-        log_path.mkdir(parents=True, exist_ok=True)
-        run_id_file = log_path / f"{args.job_name}.runid"
-        with open(run_id_file, "w") as f:
-            f.write(run_id)
-    except Exception as e:
-        print(f"Warning: Could not save run ID to file: {e}")
-
-# Warmup Numba if needed
+# --- Solver Execution ---
+# All ranks participate in the solve process.
 if args.numba:
     solver.warmup()
 
-# Solve with timing
+# Synchronize before timing
+if n_ranks > 1:
+    comm.Barrier()
+
 t0 = MPI.Wtime()
 solver.solve()
 wall_time = MPI.Wtime() - t0
 
-# Store timing metrics
+# --- Post-processing, Logging, and Summary on Rank 0 ---
 if rank == 0:
+    # Populate final metrics
     solver.results.wall_time = wall_time
-    solver.results.total_compute_time = sum(solver.timeseries.compute_times)
-    solver.results.total_halo_time = sum(solver.timeseries.halo_exchange_times)
-    solver.results.total_mpi_comm_time = sum(solver.timeseries.mpi_comm_times)
+    solver.compute_l2_error()
 
-# Compute L2 error
-solver.compute_l2_error()
+    # Save solution to HDF5
+    project_root = get_project_root()
+    data_dir = project_root / "data" / "scaling"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    output_file = data_dir / f"poisson_N{args.N}_p{n_ranks}.h5"
+    solver.save_hdf5(output_file)
 
-# Save solution
-output_file = data_dir / f"poisson_N{N}_p{n_ranks}.h5"
-solver.save_hdf5(output_file)
-solver.mlflow_log_artifact(str(output_file))
+    # --- MLflow Logging ---
+    # Determine experiment name
+    if args.experiment_name:
+        experiment_name = args.experiment_name
+    else:
+        is_hpc = "LSB_JOBID" in os.environ
+        experiment_name = "HPC-Poisson-Scaling" if is_hpc else "Poisson-Scaling"
 
-if rank == 0:
-    print(f"\nResults saved to: {output_file}")
+    # Find or create parent run, then start nested child run
+    parent_run_name = f"N{args.N}"
+    run_name = f"N{args.N}_p{n_ranks}_{args.strategy}"
     
-    # Flush streams to ensure logs on disk are up to date for the external uploader
-    sys.stdout.flush()
-    sys.stderr.flush()
+    with start_mlflow_run_context(experiment_name, parent_run_name, run_name, args=args):
+        # Log all data
+        log_parameters(asdict(solver.config))
+        log_metrics_dict(asdict(solver.results))
+        log_timeseries_metrics(solver.timeseries)
+        log_artifact_file(output_file)
 
-# End MLflow run
-solver.mlflow_end()
-
-# Summary
-if rank == 0:
+    # --- Final Summary ---
+    print("\n--- Run Complete ---")
+    print(f"Results saved to: {output_file}")
     print("\nSolution Status:")
     print(f"  Converged: {solver.results.converged}")
     print(f"  Iterations: {solver.results.iterations}")
     print(f"  L2 error: {solver.results.final_error:.6e}")
-    print(f"  Wall time: {wall_time:.2f} seconds")
+    print(f"  Wall time: {solver.results.wall_time:.2f} seconds")
 
     # Timing breakdown
-    total = (
-        solver.results.total_compute_time
-        + solver.results.total_halo_time
-        + solver.results.total_mpi_comm_time
-    )
-    if total > 0:
+    total_time = (solver.results.total_compute_time or 0) + (solver.results.total_halo_time or 0) + (solver.results.total_mpi_comm_time or 0)
+    if total_time > 0:
         print("\nTiming breakdown:")
-        print(
-            f"  Compute:      {solver.results.total_compute_time:.3f}s ({100 * solver.results.total_compute_time / total:.1f}%)"
-        )
-        print(
-            f"  Halo exchange:{solver.results.total_halo_time:.3f}s ({100 * solver.results.total_halo_time / total:.1f}%)"
-        )
-        print(
-            f"  MPI allreduce:{solver.results.total_mpi_comm_time:.3f}s ({100 * solver.results.total_mpi_comm_time / total:.1f}%)"
-        )
+        print(f"  Compute:      {solver.results.total_compute_time or 0:.3f}s ({100 * (solver.results.total_compute_time or 0) / total_time:.1f}%)")
+        print(f"  Halo exchange:{solver.results.total_halo_time or 0:.3f}s ({100 * (solver.results.total_halo_time or 0) / total_time:.1f}%)")
+        print(f"  MPI allreduce:{solver.results.total_mpi_comm_time or 0:.3f}s ({100 * (solver.results.total_mpi_comm_time or 0) / total_time:.1f}%)")
+
+# Final barrier for clean exit
+if n_ranks > 1:
+    comm.Barrier()
