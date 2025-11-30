@@ -31,6 +31,7 @@ SN_strong:
     - "-g /poisson_project/strong_scaling"
 
   command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
@@ -64,6 +65,7 @@ MN_strong:
     - "-g /poisson_project/strong_scaling"
 
   command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module load python3/3.12.9 && module load mpi4py/4.0.1-python-3.12.9 && uv sync &&
     mpiexec -n {ranks} --map-by ppr:24:node --bind-to core
     uv run python Experiments/05-scaling/runner.py
