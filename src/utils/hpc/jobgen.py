@@ -1,21 +1,33 @@
 """Job pack generation utilities for HPC schedulers.
 
-Supports multiple configuration schemas and generates
-LSF-compatible job pack files with parameter sweeps.
+Generates LSF-compatible job pack files based on a declarative YAML configuration
+with parameter sweeps.
 """
 
 import itertools
 import os
 import yaml
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
+# --- Helper Functions ---
 
-def get_job_output_dir() -> Path:
-    """Get the directory for job output files.
+def get_project_root() -> Path:
+    """Returns the project root folder (LSM-P2)."""
+    return Path(__file__).parents[3] # src/utils/hpc is 3 levels deep from root
 
-    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to /tmp/<user>/hpc-jobs.
+def get_job_output_dir(job_name_base: str, create: bool = True) -> Path:
+    """Get the directory for job output files (e.g., .out, .err).
+
+    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to project_root/logs/hpc-jobs.
     Creates the directory if it doesn't exist.
+
+    Parameters
+    ----------
+    job_name_base : str
+        Base name for the job group, used to create a subdirectory.
+    create : bool
+        If True, create the directory if it doesn't exist.
 
     Returns
     -------
@@ -23,12 +35,13 @@ def get_job_output_dir() -> Path:
         Directory path for job outputs
     """
     if "HPC_OUTPUT_DIR" in os.environ:
-        output_dir = Path(os.environ["HPC_OUTPUT_DIR"])
+        base_dir = Path(os.environ["HPC_OUTPUT_DIR"])
     else:
-        user = os.environ.get("USER", "unknown")
-        output_dir = Path(f"/tmp/{user}/hpc-jobs")
+        base_dir = get_project_root() / "logs" / "hpc-jobs"
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = base_dir / job_name_base
+    if create:
+        output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
@@ -38,7 +51,7 @@ def load_config(config_path: Path) -> Dict[str, Any]:
     Parameters
     ----------
     config_path : Path
-        Path to YAML config file
+2        Path to YAML config file
 
     Returns
     -------
@@ -56,229 +69,101 @@ def load_config(config_path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def _normalize_jobs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Normalize various config schemas to a standard format.
-
-    Supports three schemas:
-    1. Preferred: {"jobs": [{"name": ..., "lsf": ..., "sweep": ...}, ...]}
-    2. Legacy: {"groups": [{"name": ..., "parameters": ..., ...}, ...]}
-    3. Dictionary: {"job_name": {"lsf": ..., "sweep": ...}, ...}
-    """
-    input_jobs_raw = []
-
-    if "jobs" in config:
-        input_jobs_raw = config["jobs"]
-    elif "groups" in config:
-        for g in config["groups"]:
-            job_entry = {
-                "name": g.get("name", "job"),
-                "lsf": g.get("lsf", {}),
-                "sweep": g.get("sweep", {}),
-            }
-            if "parameters" in g:
-                job_entry["execution"] = {"arguments": g["parameters"]}
-            if "mpi_options" in g:
-                job_entry.setdefault("lsf", {})["mpi_options"] = g["mpi_options"]
-            input_jobs_raw.append(job_entry)
-    else:
-        for key, value in config.items():
-            if key == "defaults":
-                continue
-            if isinstance(value, dict):
-                job_entry = value.copy()
-                job_entry["name"] = key
-                input_jobs_raw.append(job_entry)
-
-    # Convert to normalized 'execution' format
-    normalized_jobs = []
-    for input_job in input_jobs_raw:
-        normalized_job = {
-            "name": input_job.get("name", "unnamed"),
-            "lsf": input_job.get("lsf", {}),
-            "sweep": input_job.get("sweep", {}),
-        }
-
-        if "static_args" in input_job:
-            normalized_job["execution"] = {
-                "script": input_job["static_args"].get("script"),
-                "interpreter": input_job["static_args"].get(
-                    "interpreter", "uv run python"
-                ),
-                "arguments": {
-                    k: v
-                    for k, v in input_job["static_args"].items()
-                    if k not in ["script", "interpreter"]
-                },
-            }
-        elif "execution" in input_job:
-            normalized_job["execution"] = input_job["execution"]
-        else:
-            normalized_job["execution"] = {}
-
-        normalized_jobs.append(normalized_job)
-
-    return normalized_jobs
-
-
 def generate_pack_lines(
     config: Dict[str, Any],
-    job_name_base: str,
-    selected_groups: List[str] = None,
-    output_dir: Path = None,
+    job_name_prefix: str,
+    selected_groups: Optional[List[str]] = None,
 ) -> List[str]:
-    """Generate list of job pack lines (LSF options + command).
+    """Generate list of LSF job pack lines.
 
     Parameters
     ----------
     config : dict
-        Parsed configuration dictionary
-    job_name_base : str
-        Base name for generated jobs
+        Parsed configuration dictionary for job groups.
+    job_name_prefix : str
+        Prefix for generated job names (e.g., from the pack filename).
     selected_groups : list of str, optional
-        Only generate jobs for these groups
-    output_dir : Path, optional
-        Directory for job output files. If None, uses get_job_output_dir()
+        If provided, only generate jobs for these specified groups.
 
     Returns
     -------
     list of str
-        Lines for the job pack file
+        Lines for the job pack file, each representing a single LSF job submission.
     """
-    normalized_jobs = _normalize_jobs(config)
-
-    # Get output directory for job logs
-    if output_dir is None:
-        output_dir = get_job_output_dir()
-    job_output_dir = output_dir / job_name_base
-    job_output_dir.mkdir(parents=True, exist_ok=True)
-
     lines = []
-    global_job_counter = 1
+    
+    # Ensure a consistent output directory for this pack generation session
+    session_output_dir = get_job_output_dir(job_name_prefix)
 
-    for job in normalized_jobs:
-        job_name_group = job.get("name", "job")
-
+    for group_name, group_config in config.items():
         # Filter based on selection
-        if selected_groups and job_name_group not in selected_groups:
+        if selected_groups and group_name not in selected_groups:
             continue
 
-        # Add Group Comment Header
-        lines.append(f"\n# --- Group: {job_name_group} ---")
+        lines.append(f"\n# --- Group: {group_name} ---")
 
-        # LSF Settings
-        job_lsf = job.get("lsf", {})
-
-        # Execution Settings
-        job_exec = job.get("execution", {})
-        script = job_exec.get("script", "compute_scaling.py")
-        interpreter = job_exec.get("interpreter", "uv run python")
-
-        # Base arguments
-        current_args_base = job_exec.get("arguments", {})
-
-        # Sweep
-        sweep = job.get("sweep", {})
-
+        lsf_options_templates: List[str] = group_config.get("lsf_options", [])
+        executable_template: str = group_config.get("executable", "python")
+        script_path: str = group_config.get("script", "")
+        static_args: Dict[str, Any] = group_config.get("static_args", {})
+        sweep: Dict[str, List[Any]] = group_config.get("sweep", {})
+        
+        # Prepare sweep combinations
         if not sweep:
-            combinations = [()]
-            keys = []
+            # If no sweep, generate a single combination for static args
+            combinations = [{}]
         else:
-            keys = list(sweep.keys())
-            values = list(sweep.values())
-            combinations = list(itertools.product(*values))
+            sweep_keys = list(sweep.keys())
+            sweep_values = list(sweep.values())
+            combinations = [dict(zip(sweep_keys, combo)) for combo in itertools.product(*sweep_values)]
 
-        for combo in combinations:
-            run_args = current_args_base.copy()
-            sweep_args = dict(zip(keys, combo))
-            run_args.update(sweep_args)
+        for i, combo_dict in enumerate(combinations):
+            # Combine all arguments (static + sweep) into one dictionary for formatting
+            # This dictionary will be used to format all template strings
+            all_args_for_formatting = {**static_args, **combo_dict}
+            
+            # Dynamically generate a job name base for output files, using group name and counter
+            # Ensure job_name is available for templates (e.g., in lsf_options or command)
+            job_name_suffix = "_".join([f"{k}{v}" for k,v in combo_dict.items()]) if combo_dict else "base"
+            current_job_name = f"{job_name_prefix}_{group_name}_{job_name_suffix}_{i:03d}"
+            all_args_for_formatting["job_name"] = current_job_name # Make it available for formatting
+            all_args_for_formatting["LSF_OUTPUT_DIR"] = session_output_dir # Make path available
 
-            # Extract Special Args for Infrastructure
-            ranks = run_args.pop("ranks", 1)
+            # --- Format LSF Options ---
+            formatted_lsf_options = []
+            for opt_template in lsf_options_templates:
+                try:
+                    formatted_lsf_options.append(opt_template.format(**all_args_for_formatting))
+                except KeyError as e:
+                    raise ValueError(f"Missing key in LSF option template '{opt_template}': {e}. Available keys: {list(all_args_for_formatting.keys())}")
 
-            # Construct Job Name
-            current_job_name = f"{job_name_base}_{job_name_group}_{global_job_counter}"
-
-            # Build Script Arguments
-            args_list = []
-            for k, v in run_args.items():
+            # --- Construct Script Arguments String ---
+            script_args_list = []
+            # Combine static and sweep args for the script itself
+            combined_script_args = {**static_args, **combo_dict}
+            for k, v in combined_script_args.items():
                 if isinstance(v, bool):
-                    if v:
-                        args_list.append(f"--{k}")
-                else:
-                    args_list.append(f"--{k} {v}")
+                    if v: # Only add flag if True
+                        script_args_list.append(f"--{k}")
+                elif v is not None: # Only add if not None
+                    script_args_list.append(f"--{k} {v}")
+            
+            # Also add job-name, log-dir, experiment-name as standard arguments
+            script_args_list.append(f"--job-name {current_job_name}")
+            script_args_list.append(f"--log-dir logs") # Assumes 'logs' is relative to project root
+            script_args_list.append(f"--experiment-name {group_name}")
 
-            # Add Standard Logging Args
-            args_list.append(f"--job-name {current_job_name}")
-            args_list.append("--log-dir logs")
-            args_list.append(f"--experiment-name {job_name_group}")
+            formatted_script_args = " ".join(script_args_list)
 
-            # Build Command
-            mpi_options = job_lsf.get("mpi_options", "")
+            # --- Assemble Full Command ---
+            # The executable and script path might also contain placeholders
+            formatted_executable = executable_template.format(**all_args_for_formatting)
+            full_command = f"{formatted_executable} {script_path} {formatted_script_args}"
 
-            cmd_parts = [f"mpiexec -n {ranks}"]
-            if mpi_options:
-                cmd_parts.append(mpi_options)
-
-            cmd_parts.append(f"{interpreter} {script}")
-            cmd_parts.append(" ".join(args_list))
-
-            main_cmd = " ".join(cmd_parts)
-
-            # Log Uploader
-            uploader_cmd = (
-                f"{interpreter} src/utils/upload_logs.py "
-                f"--job-name {current_job_name} --log-dir logs "
-                f"--experiment-name {job_name_group}"
-            )
-            cmd = f"({main_cmd}; {uploader_cmd})"
-
-            # Build LSF Line
-            lsf_opts = []
-            lsf_opts.append(f"-J {current_job_name}")
-
-            # Cores logic
-            cores = ranks
-            if "cores" in job_lsf:
-                cores = job_lsf["cores"]
-            lsf_opts.append(f"-n {cores}")
-
-            # Standard Keys
-            val_map = {
-                "queue": "-q",
-                "walltime": "-W",
-                "memory": "-M",
-                "email": "-u",
-                "project": "-P",
-            }
-            for key, flag in val_map.items():
-                if key in job_lsf:
-                    lsf_opts.append(f"{flag} {job_lsf[key]}")
-
-            # Boolean mappings
-            bool_map = {
-                "exclusive": "-x",
-                "notify_start": "-B",
-                "notify_end": "-N",
-            }
-            for key, flag in bool_map.items():
-                if job_lsf.get(key, False):
-                    lsf_opts.append(flag)
-
-            # Resources
-            resources = job_lsf.get("resources", [])
-            if isinstance(resources, str):
-                resources = [resources]
-            for r in resources:
-                lsf_opts.append(f'-R "{r}"')
-
-            # Output files (absolute paths outside repo)
-            lsf_opts.append(f"-o {job_output_dir}/{current_job_name}.out")
-            lsf_opts.append(f"-e {job_output_dir}/{current_job_name}.err")
-
-            line = " ".join(lsf_opts) + " " + cmd
-            lines.append(line)
-            global_job_counter += 1
-
+            # --- Assemble Final LSF Line ---
+            final_lsf_line = " ".join(formatted_lsf_options) + " " + full_command
+            lines.append(final_lsf_line)
+            
     return lines
 
 
@@ -294,6 +179,7 @@ def write_pack_file(output_path: Path, lines: List[str]) -> None:
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# LSF Job Pack generated by src.utils.hpc\n")
+        f.write(f"# LSF Job Pack generated by {Path(__file__).name}\n")
+        f.write("# Each line is a bsub command (without 'bsub')\n")
         for line in lines:
             f.write(line + "\n")

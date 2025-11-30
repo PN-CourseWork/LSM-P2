@@ -74,14 +74,12 @@ Examples:
         mlflow_conf = config.get("mlflow", {})
         repo_root = get_repo_root()
 
-        mlflow.setup_mlflow_auth(mlflow_conf.get("tracking_uri"))
+        mlflow.setup_mlflow_tracking() 
 
-        output_dir = repo_root / mlflow_conf.get("download_dir", "data/downloaded")
-        experiments = mlflow_conf.get("experiments", [])
-        if not experiments:
-            print("  (No experiments configured in project_config.yaml)")
-        else:
-            mlflow.fetch_project_artifacts(experiments, output_dir)
+        output_dir = repo_root / mlflow_conf.get("download_dir", "data/")
+        
+        print("Fetching all project artifacts from MLflow...")
+        mlflow.fetch_project_artifacts(output_dir)
 
     if args.hpc:
         config = load_project_config()

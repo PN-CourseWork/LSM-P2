@@ -30,6 +30,7 @@ class KernelParams:
     max_iter: int = 100000
     numba_threads: int | None = None  # None for NumPy
 
+
     # Derived values (computed in __post_init__)
     h: float = field(init=False)
 
@@ -88,6 +89,7 @@ class GlobalParams:
     # Kernel backend selection
     use_numba: bool = False
     numba_threads: int = 4
+
 
 
 @dataclass

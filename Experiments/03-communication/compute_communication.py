@@ -9,8 +9,10 @@ Uses per-iteration timeseries data for statistical analysis.
 """
 
 import subprocess
+import mlflow
 
 from Poisson import get_project_root
+from utils.mlflow.io import setup_mlflow_tracking
 
 
 def main():
@@ -46,6 +48,11 @@ def _run_benchmark():
         get_project_root,
     )
 
+    # --- MLflow Setup ---
+    # Initialize MLflow tracking from environment variables
+    # Must be called by all ranks to ensure proper MPI barrier synchronization if needed
+    setup_mlflow_tracking()
+    
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -118,9 +125,27 @@ def _run_benchmark():
 
     if rank == 0:
         df = pd.concat(dfs, ignore_index=True)
-        output = data_dir / f"communication_np{size}.parquet"
-        df.to_parquet(output, index=False)
-        print(f"\nSaved {len(df)} measurements to: {output}")
+        output_file = data_dir / f"communication_np{size}.parquet"
+        df.to_parquet(output_file, index=False)
+        print(f"\nSaved {len(df)} measurements to: {output_file}")
+
+        # --- MLflow Logging ---
+        # To disable MLflow logging, comment out the following lines.
+        try:
+            mlflow.set_experiment("Experiment-03-Communication")
+            with mlflow.start_run(run_name=f"Communication-Data-np{size}") as run:
+                print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
+                
+                mlflow.log_param("ranks", size)
+                mlflow.log_param("problem_sizes", PROBLEM_SIZES)
+                mlflow.log_param("iterations", ITERATIONS)
+
+                if output_file.exists():
+                    mlflow.log_artifact(str(output_file))
+                    print(f"  ✓ Logged artifact: {output_file.name}")
+        
+        except Exception as e:
+            print(f"  ✗ WARNING: MLflow logging failed: {e}")
 
 
 if __name__ == "__main__":
