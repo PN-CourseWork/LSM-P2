@@ -9,6 +9,7 @@ from src.utils.TUI.actions import run, data, docs, clean
 from pathlib import Path
 import sys
 import os
+import subprocess
 import questionary
 from src.utils.TUI.styles import get_custom_style
 
@@ -241,7 +242,13 @@ class TuiApp:
 
                 if key.lower() == 'q':
                     break
-                
+
+                # --- Global Commands ---
+                if key == 'G':
+                    # Launch lazygit fullscreen
+                    subprocess.run(['lazygit'])
+                    continue
+
                 # --- Global Navigation ---
                 if key.name == 'KEY_LEFT' or key == 'h':
                     # Tab Switching
@@ -336,11 +343,11 @@ class TuiApp:
 
         # Status Line (Bottom)
         if current_tab == "HPC":
-            help_msg = " [Tab] Pane | [j/k] Nav | [Enter] Select | [q] Quit"
+            help_msg = " [Tab] Pane | [j/k] Nav | [Enter] Select | [G] Git | [q] Quit"
         elif current_tab == "Actions":
-            help_msg = " [h/l] Tabs | [j/k] Select | [Enter] Run | [q] Quit"
+            help_msg = " [h/l] Tabs | [j/k] Select | [Enter] Run | [G] Git | [q] Quit"
         elif current_tab == "Monitor":
-            help_msg = " [Enter] Launch | [h/l] Tabs | [q] Quit"
+            help_msg = " [Enter] Launch | [h/l] Tabs | [G] Git | [q] Quit"
         
         status_bar = f"{help_msg:<{self.term.width}}"
         print(self.term.move_xy(0, self.term.height - 1) + self.term.black_on_white(status_bar), end="", flush=True)
