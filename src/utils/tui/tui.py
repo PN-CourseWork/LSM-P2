@@ -5,13 +5,13 @@ from pathlib import Path
 
 from blessed import Terminal
 
-from src.utils import runners, mlflow
-from src.utils.hpc import get_pack_files, get_available_groups, submit_pack
-from src.utils.hpc.submit import get_group_config_preview
-from src.utils.config import load_project_config, clean_all
-from src.utils.tui.monitor import get_jobs, get_finished_jobs_from_files
-from src.utils.tui.runner import TuiRunner
-from src.utils.tui.actions import docs
+from utils import runners, mlflow
+from utils.hpc import get_pack_files, get_available_groups, submit_pack
+from utils.hpc.submit import get_group_config_preview
+from utils.config import load_project_config, clean_all
+from utils.tui.monitor import get_jobs, get_finished_jobs_from_files
+from utils.tui.runner import TuiRunner
+from utils.tui.actions import docs
 
 
 class TuiApp:
@@ -101,6 +101,11 @@ class TuiApp:
 
         # Focus: "commands" | "jobs" - which pane has focus
         self.hpc_focus = "commands"
+
+        # Job output scroll state
+        self.job_output_scroll = 0
+        self.job_output_lines = []  # Cached lines for current job
+        self.show_err_file = False  # Toggle between .out and .err
 
         # HPC Commands with descriptions
         self.hpc_commands = [
@@ -194,7 +199,7 @@ class TuiApp:
         self.log(f"Groups: {', '.join(selected_groups)}")
 
         # Import and run generation
-        from src.utils.hpc.submit import generate_pack
+        from utils.hpc.submit import generate_pack
         files, log = generate_pack(config_path, job_packs_dir, selected_groups)
 
         # Log output
@@ -390,19 +395,26 @@ class TuiApp:
         return []
 
     def get_job_output_lines(self, job) -> list[str]:
-        """Get the tail of a job's output file."""
+        """Get the tail of a job's output or error file."""
         # If job has output_file set (from file scan), read it directly
         if job.output_file:
+            file_path = job.output_file
+            if self.show_err_file:
+                # Switch .out to .err
+                file_path = file_path.replace(".out", ".err")
+
             try:
-                with open(job.output_file, "r") as f:
+                with open(file_path, "r") as f:
                     lines = f.readlines()
                     return [l.rstrip() for l in lines[-100:]]
+            except FileNotFoundError:
+                return [f"File not found: {file_path}"]
             except Exception as e:
-                return [f"Error reading {job.output_file}: {e}"]
+                return [f"Error reading {file_path}: {e}"]
 
         # Otherwise use bjobs to get output file path
-        from src.utils.tui.monitor import get_job_output
-        return get_job_output(job.id, tail_lines=100)
+        from utils.tui.monitor import get_job_output
+        return get_job_output(job.id, tail_lines=100, show_err=self.show_err_file)
 
     # --- Drawing Methods ---
 
@@ -414,32 +426,43 @@ class TuiApp:
         if not jobs or self.hpc_job_idx >= len(jobs):
             print(term.move_xy(x, y) + term.bold(" Job Output "))
             print(term.move_xy(x, y + 2) + term.bright_black("(no job selected)"))
+            self.job_output_lines = []
             return
 
         job = jobs[self.hpc_job_idx]
-        lines = self.get_job_output_lines(job)
+        self.job_output_lines = self.get_job_output_lines(job)
 
-        # Title with job name
-        title = f" {job.name} "
+        # Title with job name and file type indicator
+        file_type = ".err" if self.show_err_file else ".out"
+        title = f" {job.name} ({file_type}) "
         if len(title) > width:
             title = title[:width-3] + "..."
         print(term.move_xy(x, y) + term.bold(title))
 
-        if not lines:
+        if not self.job_output_lines:
             print(term.move_xy(x, y + 2) + term.bright_black("(no output yet)"))
             return
 
-        # Show last lines that fit in the pane (auto-scroll to bottom)
+        # Scrollable view
         visible_height = height - 2
-        visible = lines[-visible_height:] if len(lines) > visible_height else lines
+        max_scroll = max(0, len(self.job_output_lines) - visible_height)
+
+        # Clamp scroll position
+        self.job_output_scroll = max(0, min(self.job_output_scroll, max_scroll))
+
+        visible = self.job_output_lines[self.job_output_scroll:self.job_output_scroll + visible_height]
 
         for i, line in enumerate(visible):
             line_y = y + 2 + i
             disp = line[:width] if len(line) > width else line
             print(term.move_xy(x, line_y) + disp)
 
-        # Line count indicator
-        info = f"[{len(lines)} lines]"
+        # Scroll indicator
+        if len(self.job_output_lines) > visible_height:
+            pct = int((self.job_output_scroll / max(1, max_scroll)) * 100)
+            info = f"[{pct}%] {self.job_output_scroll + 1}-{min(self.job_output_scroll + visible_height, len(self.job_output_lines))}/{len(self.job_output_lines)}"
+        else:
+            info = f"[{len(self.job_output_lines)} lines]"
         print(term.move_xy(x + width - len(info), y) + term.bright_black(info))
 
     def _draw_output_pane(self, x: int, y: int, width: int, height: int):
@@ -751,9 +774,9 @@ class TuiApp:
         # Status Line
         if current_tab == "HPC":
             if self.hpc_focus == "jobs":
-                help_msg = " [Tab] Switch pane | [j/k] Nav | [1/2/3] Tabs | [x] Kill | [J/K] Scroll | [r] Refresh | [q] Quit"
+                help_msg = " [Tab] Pane | [j/k] Nav | [1/2/3] Tabs | [e] .out/.err | [x] Kill | [J/K] Scroll | [r] Refresh | [q] Quit"
             else:
-                help_msg = " [Tab] Switch pane | [j/k] Nav | [1/2/3] Job tabs | [Enter] Run | [J/K] Scroll | [r] Refresh | [q] Quit"
+                help_msg = " [Tab] Pane | [j/k] Nav | [1/2/3] Job tabs | [Enter] Run | [J/K] Scroll | [r] Refresh | [q] Quit"
         else:
             help_msg = " [j/k] Nav | [Enter] Run | [J/K] Scroll | [r] Refresh | [c] Clear | [G] Git | [q] Quit"
 
@@ -797,13 +820,21 @@ class TuiApp:
                     self.output_scroll = 0
                     continue
 
-                # Shift+J/K to scroll output
+                # Shift+J/K to scroll output pane
                 if key == "J":
-                    max_scroll = max(0, len(self.output_lines) - 10)
-                    self.output_scroll = min(max_scroll, self.output_scroll + 1)
+                    # Scroll job output when on HPC tab with jobs focus
+                    if self.tabs[self.current_tab_idx] == "HPC" and self.hpc_focus == "jobs":
+                        max_scroll = max(0, len(self.job_output_lines) - 10)
+                        self.job_output_scroll = min(max_scroll, self.job_output_scroll + 1)
+                    else:
+                        max_scroll = max(0, len(self.output_lines) - 10)
+                        self.output_scroll = min(max_scroll, self.output_scroll + 1)
                     continue
                 if key == "K":
-                    self.output_scroll = max(0, self.output_scroll - 1)
+                    if self.tabs[self.current_tab_idx] == "HPC" and self.hpc_focus == "jobs":
+                        self.job_output_scroll = max(0, self.job_output_scroll - 1)
+                    else:
+                        self.output_scroll = max(0, self.output_scroll - 1)
                     continue
 
                 # Tab navigation with h/l
@@ -864,12 +895,15 @@ class TuiApp:
                         elif key == "1":
                             self.hpc_job_tab = 0
                             self.hpc_job_idx = 0
+                            self.job_output_scroll = 0
                         elif key == "2":
                             self.hpc_job_tab = 1
                             self.hpc_job_idx = 0
+                            self.job_output_scroll = 0
                         elif key == "3":
                             self.hpc_job_tab = 2
                             self.hpc_job_idx = 0
+                            self.job_output_scroll = 0
 
                         # Focus-specific navigation
                         elif self.hpc_focus == "commands":
@@ -884,8 +918,14 @@ class TuiApp:
                             jobs = self.get_current_job_list()
                             if key.name == "KEY_UP" or key == "k":
                                 self.hpc_job_idx = max(0, self.hpc_job_idx - 1)
+                                self.job_output_scroll = 0  # Reset scroll on job change
                             elif key.name == "KEY_DOWN" or key == "j":
                                 self.hpc_job_idx = min(len(jobs) - 1, self.hpc_job_idx + 1) if jobs else 0
+                                self.job_output_scroll = 0  # Reset scroll on job change
+                            elif key == "e" and jobs:
+                                # Toggle to show .err file
+                                self.show_err_file = not getattr(self, 'show_err_file', False)
+                                self.job_output_scroll = 0
                             elif key.name == "KEY_ENTER" and jobs:
                                 # Show job details in output pane
                                 job = jobs[self.hpc_job_idx]

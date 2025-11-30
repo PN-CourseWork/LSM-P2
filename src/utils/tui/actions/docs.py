@@ -1,7 +1,7 @@
 import subprocess
 
-from src.utils.config import get_repo_root
-from src.utils.tui.io import clear_screen
+from utils.config import get_repo_root
+from utils.tui.io import clear_screen
 
 
 def build_docs() -> bool:

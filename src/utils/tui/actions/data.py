@@ -1,8 +1,8 @@
 import sys
 
-from src.utils import mlflow
-from src.utils.config import load_project_config, get_repo_root
-from src.utils.tui.io import getch, clear_screen
+from utils import mlflow
+from utils.config import load_project_config, get_repo_root
+from utils.tui.io import getch, clear_screen
 
 def run_data_menu():
     """Data & Results Submenu"""

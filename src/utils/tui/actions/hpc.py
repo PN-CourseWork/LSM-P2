@@ -1,8 +1,8 @@
 import sys
 
-from src.utils.hpc import interactive_generate, interactive_submit
-from src.utils.config import load_project_config, get_repo_root
-from src.utils.tui.io import getch, clear_screen
+from utils.hpc import interactive_generate, interactive_submit
+from utils.config import load_project_config, get_repo_root
+from utils.tui.io import getch, clear_screen
 
 def run_hpc_menu(config_path_str: str = None):
     """HPC Submenu"""

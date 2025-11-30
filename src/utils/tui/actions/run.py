@@ -1,6 +1,6 @@
 import sys
-from src.utils import runners
-from src.utils.tui.io import getch, clear_screen
+from utils import runners
+from utils.tui.io import getch, clear_screen
 
 def run_execution_menu():
     """Execution Submenu"""

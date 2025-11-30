@@ -72,7 +72,7 @@ def get_jobs() -> list[Job]:
 
 def get_finished_jobs_from_files() -> list[Job]:
     """Get finished jobs by scanning output files in the LSF output directory."""
-    from src.utils.hpc.jobgen import get_job_output_dir
+    from utils.hpc.jobgen import get_job_output_dir
 
     output_dir = get_job_output_dir()
     if not output_dir.exists():
@@ -143,12 +143,14 @@ def get_job_info(job_id: str) -> list[str]:
     return lines if lines else ["No job info available"]
 
 
-def get_job_output(job_id: str, tail_lines: int = 50) -> list[str]:
-    """Get trailing output from job's output file."""
+def get_job_output(job_id: str, tail_lines: int = 50, show_err: bool = False) -> list[str]:
+    """Get trailing output from job's output or error file."""
     lines = []
+    file_type = "error_file" if show_err else "output_file"
+
     try:
         peek = subprocess.run(
-            ["bjobs", "-o", "output_file", "-noheader", job_id],
+            ["bjobs", "-o", file_type, "-noheader", job_id],
             capture_output=True, text=True, timeout=10
         )
         if peek.returncode == 0:
@@ -167,7 +169,7 @@ def get_job_output(job_id: str, tail_lines: int = 50) -> list[str]:
                 except Exception as e:
                     lines.append(f"(error reading file: {e})")
             else:
-                lines.append("(no output file configured)")
+                lines.append(f"(no {'.err' if show_err else '.out'} file configured)")
         else:
             lines.append(f"(bjobs error: {peek.stderr.strip()})")
     except FileNotFoundError:
