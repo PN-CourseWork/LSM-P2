@@ -15,6 +15,11 @@ from .jobgen import (
 from .submit import (
     interactive_generate,
     interactive_submit,
+    tui_generate_pack,
+    tui_submit_pack,
+    get_available_groups,
+    get_pack_files,
+    submit_pack,
 )
 
 __all__ = [
@@ -24,4 +29,9 @@ __all__ = [
     "get_job_output_dir",
     "interactive_generate",
     "interactive_submit",
+    "tui_generate_pack",
+    "tui_submit_pack",
+    "get_available_groups",
+    "get_pack_files",
+    "submit_pack",
 ]

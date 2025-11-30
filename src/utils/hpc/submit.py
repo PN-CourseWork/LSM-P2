@@ -3,36 +3,27 @@
 Provides interactive workflows for:
 - Selecting and generating job packs
 - Previewing and submitting jobs to LSF
+
+Works both standalone (questionary) and within TUI (TuiRunner).
 """
 
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List
-
-import questionary
+from typing import List, Optional, TYPE_CHECKING
 
 from .jobgen import load_config, generate_pack_lines, write_pack_file
 
-
-def _get_custom_style():
-    """Get custom questionary style."""
-    return questionary.Style(
-        [
-            ("qmark", "fg:#673ab7 bold"),
-            ("question", "bold"),
-            ("answer", "fg:#f44336 bold"),
-            ("pointer", "fg:#673ab7 bold"),
-            ("highlighted", "fg:#673ab7 bold"),
-            ("selected", "fg:#cc5454"),
-            ("separator", "fg:#cc5454"),
-            ("instruction", ""),
-        ]
-    )
+if TYPE_CHECKING:
+    from src.utils.tui.runner import TuiRunner
 
 
-def interactive_generate(config_path: Path, job_packs_dir: Path) -> None:
-    """Handle job pack generation workflow.
+def generate_pack(
+    config_path: Path,
+    job_packs_dir: Path,
+    selected_groups: List[str],
+) -> tuple[List[Path], List[str]]:
+    """Generate job pack files for selected groups.
 
     Parameters
     ----------
@@ -40,114 +31,424 @@ def interactive_generate(config_path: Path, job_packs_dir: Path) -> None:
         Path to the job configuration YAML
     job_packs_dir : Path
         Directory to save generated pack files
+    selected_groups : List[str]
+        Groups to generate packs for
+
+    Returns
+    -------
+    tuple[List[Path], List[str]]
+        Generated files and log messages
     """
-    print(f"\n--- Generate Job Pack ---")
-    print(f"Loading config: {config_path}")
+    log = []
+    log.append(f"Loading config: {config_path}")
 
     try:
         config = load_config(config_path)
     except FileNotFoundError:
-        print(f"Error: Config file not found at {config_path}")
-        return
-
-    # Extract Group Names based on Schema
-    group_names = []
-    if "jobs" in config:
-        group_names = [j.get("name", "unnamed") for j in config["jobs"]]
-    elif "groups" in config:
-        group_names = [j.get("name", "unnamed") for j in config["groups"]]
-    else:
-        group_names = [key for key in config.keys() if key != "defaults"]
-
-    if not group_names:
-        print("No job groups found in configuration.")
-        return
-
-    # Select Groups
-    selected_groups = questionary.checkbox(
-        "Select experiment groups to generate packs for "
-        "(Space to select, Enter to confirm):",
-        choices=group_names,
-        style=_get_custom_style(),
-    ).ask()
-
-    if not selected_groups:
-        print("No groups selected. returning to menu.")
-        return
+        return [], [f"Error: Config file not found at {config_path}"]
 
     generated_files = []
-    total_jobs_generated = 0
+    total_jobs = 0
 
     for group_name in selected_groups:
         job_name_base = config_path.stem
         lines = generate_pack_lines(config, job_name_base, [group_name])
 
         if not lines:
-            print(f"  No jobs generated for group '{group_name}'. Skipping.")
+            log.append(f"No jobs generated for group '{group_name}'. Skipping.")
             continue
 
-        print(f"\n  Generated {len(lines)} jobs for group '{group_name}'.")
-        total_jobs_generated += len(lines)
+        log.append(f"Generated {len(lines)} jobs for group '{group_name}'")
+        total_jobs += len(lines)
 
         output_file = job_packs_dir / f"{group_name}.pack"
         write_pack_file(output_file, lines)
         generated_files.append(output_file)
-        print(f"  Pack file saved to: {output_file}")
+        log.append(f"Saved: {output_file}")
 
-        # Preview
-        print(f"\n  --- Pack Content Preview for {group_name}.pack ---")
-        print("  " + "-" * 40)
-        for line in lines[:5]:
-            print("  " + line)
-        if len(lines) > 5:
-            print(f"  ... ({len(lines) - 5} more lines)")
-        print("  " + "-" * 40)
+        # Preview first few lines
+        log.append("")
+        log.append(f"--- Preview: {group_name}.pack ---")
+        for line in lines[:3]:
+            # Truncate long lines
+            if len(line) > 80:
+                log.append(f"  {line[:77]}...")
+            else:
+                log.append(f"  {line}")
+        if len(lines) > 3:
+            log.append(f"  ... ({len(lines) - 3} more jobs)")
+        log.append("")
 
     if generated_files:
-        print(f"\n--- Generation Summary ---")
-        print(
-            f"Successfully generated {total_jobs_generated} total jobs "
-            f"across {len(generated_files)} pack files:"
-        )
+        log.append("=" * 40)
+        log.append(f"Generated {total_jobs} jobs in {len(generated_files)} pack files")
         for f in generated_files:
-            print(f"  ✓ {f.name}")
+            log.append(f"  ✓ {f.name}")
     else:
-        print("\nNo job packs were generated.")
+        log.append("No job packs were generated.")
 
-    print("\n")
-    input("Press Enter to continue...")
+    return generated_files, log
 
 
-def interactive_submit(job_packs_dir: Path) -> None:
-    """Handle job pack submission workflow.
+def submit_pack(pack_file: Path) -> tuple[bool, List[str]]:
+    """Submit a pack file to LSF.
+
+    Parameters
+    ----------
+    pack_file : Path
+        Path to the pack file
+
+    Returns
+    -------
+    tuple[bool, List[str]]
+        Success status and log messages
+    """
+    log = []
+
+    if not shutil.which("bsub"):
+        return False, ["Error: 'bsub' command not found. Cannot submit."]
+
+    log.append(f"Submitting {pack_file.name}...")
+
+    try:
+        result = subprocess.run(
+            ["bsub", "-pack", str(pack_file)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            log.append("Successfully submitted!")
+            if result.stdout:
+                log.extend(result.stdout.splitlines())
+            return True, log
+        else:
+            log.append(f"Submission failed (exit code {result.returncode})")
+            if result.stderr:
+                log.extend(result.stderr.splitlines())
+            return False, log
+    except Exception as e:
+        return False, [f"Submission failed: {e}"]
+
+
+def get_available_groups(config_path: Path) -> List[str]:
+    """Get list of available job groups from config.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to config file
+
+    Returns
+    -------
+    List[str]
+        Group names
+    """
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        return []
+
+    if "jobs" in config:
+        return [j.get("name", "unnamed") for j in config["jobs"]]
+    elif "groups" in config:
+        return [j.get("name", "unnamed") for j in config["groups"]]
+    else:
+        return [key for key in config.keys() if key != "defaults"]
+
+
+def get_pack_files(job_packs_dir: Path) -> List[Path]:
+    """Get list of pack files sorted by modification time.
 
     Parameters
     ----------
     job_packs_dir : Path
         Directory containing pack files
+
+    Returns
+    -------
+    List[Path]
+        Pack files, newest first
     """
-    print(f"\n--- Submit Job Pack ---")
-
     if not job_packs_dir.exists():
-        print(f"Directory not found: {job_packs_dir}")
-        return
+        return []
 
-    # List pack files, sorted by modification time (newest first)
-    pack_files = sorted(
-        job_packs_dir.glob("*.pack"), key=lambda f: f.stat().st_mtime, reverse=True
+    return sorted(
+        job_packs_dir.glob("*.pack"),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
     )
 
-    if not pack_files:
-        print("No .pack files found.")
+
+# --- TUI-integrated versions ---
+
+
+def tui_generate_pack(
+    runner: "TuiRunner",
+    config_path: Path,
+    job_packs_dir: Path,
+) -> None:
+    """Generate job pack with TUI interface.
+
+    Parameters
+    ----------
+    runner : TuiRunner
+        TUI runner instance
+    config_path : Path
+        Path to config file
+    job_packs_dir : Path
+        Output directory for pack files
+    """
+    from src.utils.tui.runner import SelectOption
+
+    # Get available groups
+    groups = get_available_groups(config_path)
+
+    if not groups:
+        runner.show_output(
+            "Generate Job Pack",
+            [f"No job groups found in {config_path}"],
+        )
         return
 
-    choices = [f.name for f in pack_files]
-    choices.append("Cancel")
+    # Select groups
+    options = [SelectOption(label=g, value=g) for g in groups]
+    selected = runner.select(
+        "Select Groups to Generate",
+        options,
+        allow_multiple=True,
+    )
 
+    if not selected:
+        return
+
+    # Generate packs
+    files, log = generate_pack(config_path, job_packs_dir, selected)
+
+    # Show results
+    runner.show_output("Generation Results", log)
+
+
+def get_group_config_preview(config_path: Path, group_name: str) -> list[str]:
+    """Get formatted preview of a group's YAML configuration.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to packs.yaml
+    group_name : str
+        Name of the group to preview
+
+    Returns
+    -------
+    list[str]
+        Formatted lines for display
+    """
+    import yaml
+
+    lines = []
+
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        return [f"Config not found: {config_path}"]
+
+    # Find the group in various schema formats
+    group_config = None
+
+    if "jobs" in config:
+        for job in config["jobs"]:
+            if job.get("name") == group_name:
+                group_config = job
+                break
+    elif "groups" in config:
+        for group in config["groups"]:
+            if group.get("name") == group_name:
+                group_config = group
+                break
+    elif group_name in config:
+        group_config = config[group_name]
+
+    if not group_config:
+        return [f"Group '{group_name}' not found in config"]
+
+    # Format the config nicely
+    lines.append(f"Group: {group_name}")
+    lines.append("=" * 50)
+    lines.append("")
+
+    # LSF settings
+    if "lsf" in group_config:
+        lines.append("LSF Settings:")
+        for key, value in group_config["lsf"].items():
+            if isinstance(value, list):
+                lines.append(f"  {key}:")
+                for item in value:
+                    lines.append(f"    - {item}")
+            else:
+                lines.append(f"  {key}: {value}")
+        lines.append("")
+
+    # Static args / execution
+    static = group_config.get("static_args", group_config.get("execution", {}))
+    if static:
+        lines.append("Execution:")
+        for key, value in static.items():
+            lines.append(f"  {key}: {value}")
+        lines.append("")
+
+    # Sweep parameters
+    if "sweep" in group_config:
+        lines.append("Sweep Parameters:")
+        total_combos = 1
+        for key, values in group_config["sweep"].items():
+            if isinstance(values, list):
+                lines.append(f"  {key}: {values}")
+                total_combos *= len(values)
+            else:
+                lines.append(f"  {key}: {values}")
+        lines.append("")
+        lines.append(f"Total combinations: {total_combos}")
+
+    return lines
+
+
+def tui_submit_pack(
+    runner: "TuiRunner",
+    job_packs_dir: Path,
+) -> None:
+    """Submit job pack with TUI interface.
+
+    Parameters
+    ----------
+    runner : TuiRunner
+        TUI runner instance
+    job_packs_dir : Path
+        Directory containing pack files
+    """
+    from src.utils.tui.runner import SelectOption
+
+    # Get pack files
+    pack_files = get_pack_files(job_packs_dir)
+
+    if not pack_files:
+        runner.show_output(
+            "Submit Job Pack",
+            [f"No .pack files found in {job_packs_dir}"],
+        )
+        return
+
+    # Select pack file
+    options = [SelectOption(label=f.name, value=f) for f in pack_files]
+    selected = runner.select("Select Pack to Submit", options)
+
+    if not selected:
+        return
+
+    # Get group name from pack file name (e.g., "SN_strong.pack" -> "SN_strong")
+    group_name = selected.stem
+
+    # Build preview with YAML config + pack file content
+    preview = []
+
+    # First show YAML group config
+    config_path = job_packs_dir / "packs.yaml"
+    if config_path.exists():
+        preview.extend(get_group_config_preview(config_path, group_name))
+        preview.append("")
+        preview.append("─" * 50)
+        preview.append("")
+
+    # Then show pack file preview
+    with open(selected, "r") as f:
+        pack_lines = f.readlines()
+
+    job_count = len([l for l in pack_lines if l.strip() and not l.startswith('#')])
+
+    preview.append(f"Pack File: {selected.name}")
+    preview.append(f"Total Jobs: {job_count}")
+    preview.append("")
+    preview.append("Generated Commands (first 5):")
+    preview.append("-" * 30)
+
+    shown = 0
+    for line in pack_lines:
+        line = line.rstrip()
+        if line and not line.startswith('#'):
+            # Truncate long lines for display
+            if len(line) > 100:
+                preview.append(f"  {line[:97]}...")
+            else:
+                preview.append(f"  {line}")
+            shown += 1
+            if shown >= 5:
+                break
+
+    if job_count > 5:
+        preview.append(f"  ... ({job_count - 5} more jobs)")
+
+    runner.show_output("Pack Preview", preview, wait_for_key=True)
+
+    # Confirm submission
+    if not runner.confirm(f"Submit {selected.name} ({job_count} jobs) to LSF?"):
+        return
+
+    # Submit
+    success, log = submit_pack(selected)
+    runner.show_output(
+        "Submission " + ("Successful" if success else "Failed"),
+        log,
+    )
+
+
+# --- Legacy questionary versions (for standalone use) ---
+
+
+def interactive_generate(config_path: Path, job_packs_dir: Path) -> None:
+    """Handle job pack generation workflow (legacy questionary version)."""
+    import questionary
+    from src.utils.tui.styles import get_custom_style
+
+    print(f"\n--- Generate Job Pack ---")
+
+    groups = get_available_groups(config_path)
+    if not groups:
+        print(f"No job groups found in {config_path}")
+        return
+
+    selected = questionary.checkbox(
+        "Select groups (Space to select, Enter to confirm):",
+        choices=groups,
+        style=get_custom_style(),
+    ).ask()
+
+    if not selected:
+        print("No groups selected.")
+        return
+
+    files, log = generate_pack(config_path, job_packs_dir, selected)
+    for line in log:
+        print(line)
+
+    input("\nPress Enter to continue...")
+
+
+def interactive_submit(job_packs_dir: Path) -> None:
+    """Handle job pack submission workflow (legacy questionary version)."""
+    import questionary
+    from src.utils.tui.styles import get_custom_style
+
+    print(f"\n--- Submit Job Pack ---")
+
+    pack_files = get_pack_files(job_packs_dir)
+    if not pack_files:
+        print(f"No .pack files found in {job_packs_dir}")
+        return
+
+    choices = [f.name for f in pack_files] + ["Cancel"]
     selection = questionary.select(
-        "Select a job pack to submit:",
+        "Select pack to submit:",
         choices=choices,
-        style=_get_custom_style(),
+        style=get_custom_style(),
     ).ask()
 
     if selection == "Cancel" or not selection:
@@ -157,34 +458,18 @@ def interactive_submit(job_packs_dir: Path) -> None:
 
     # Preview
     print(f"\nSelected: {selected_file}")
-    print("-" * 40)
     with open(selected_file, "r") as f:
-        head = [next(f) for _ in range(10)]
-    for line in head:
-        print(line.strip())
-    print("...")
-    print("-" * 40)
+        for i, line in enumerate(f):
+            if i >= 10:
+                print("...")
+                break
+            print(line.rstrip())
 
-    # Confirm
-    if not shutil.which("bsub"):
-        print("Error: 'bsub' command not found. Cannot submit.")
-        input("Press Enter to continue...")
+    if not questionary.confirm("Submit to LSF?", style=get_custom_style()).ask():
         return
 
-    should_submit = questionary.confirm(
-        f"Submit {selection} to LSF?",
-        default=False,
-        style=_get_custom_style(),
-    ).ask()
+    success, log = submit_pack(selected_file)
+    for line in log:
+        print(line)
 
-    if should_submit:
-        print(f"Submitting {selection}...")
-        try:
-            subprocess.run(["bsub", "-pack", str(selected_file)], check=True)
-            print("Successfully submitted.")
-        except subprocess.CalledProcessError as e:
-            print(f"Submission failed: {e}")
-    else:
-        print("Submission cancelled.")
-
-    input("Press Enter to continue...")
+    input("\nPress Enter to continue...")

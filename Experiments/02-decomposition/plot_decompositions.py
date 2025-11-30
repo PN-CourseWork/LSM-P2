@@ -73,3 +73,25 @@ for rank in range(8):
 plotter.add_axes()
 plotter.screenshot(fig_dir / "01b_cubic_decomposition.png", transparent_background=True)
 plotter.show()
+
+# %%
+# Cubic Decomposition (18 ranks)
+# ------------------------------
+# 3D Cartesian decomposition with 18 ranks.
+
+decomp = DomainDecomposition(N=N, size=18, strategy="cubic")
+plotter = pv.Plotter(window_size=[1500, 1500], off_screen=True)
+
+for rank in range(18):
+    info = decomp.get_rank_info(rank)
+    z0, y0, x0 = info.global_start
+    z1, y1, x1 = info.global_end
+    box = pv.Box(bounds=[x0, x1, y0, y1, z0, z1])
+    color = cmap(rank / 18)[:3]
+    plotter.add_mesh(
+        box, opacity=0.4, color=color, show_edges=True, edge_color="black", line_width=8
+    )
+
+plotter.add_axes()
+plotter.screenshot(fig_dir / "01c_cubic_decomposition_18.png", transparent_background=True)
+plotter.show()
