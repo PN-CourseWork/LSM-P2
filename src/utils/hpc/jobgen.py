@@ -16,10 +16,16 @@ def get_project_root() -> Path:
     """Returns the project root folder (LSM-P2)."""
     return Path(__file__).parents[3] # src/utils/hpc is 3 levels deep from root
 
-def get_job_output_dir() -> Path:
+def get_job_output_dir(absolute: bool = True) -> Path:
     """Get the directory for job output files (e.g., .out, .err).
 
-    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to project_root/logs/lsf.
+    Uses $HPC_OUTPUT_DIR if set, otherwise defaults to logs/lsf.
+
+    Parameters
+    ----------
+    absolute : bool
+        If True, return absolute path. If False, return relative path
+        (useful for HPC job scripts where cwd is project root).
 
     Returns
     -------
@@ -28,7 +34,10 @@ def get_job_output_dir() -> Path:
     """
     if "HPC_OUTPUT_DIR" in os.environ:
         return Path(os.environ["HPC_OUTPUT_DIR"])
-    return get_project_root() / "logs" / "lsf"
+
+    if absolute:
+        return get_project_root() / "logs" / "lsf"
+    return Path("logs/lsf")
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
@@ -77,7 +86,8 @@ def generate_pack_lines(
         Lines for the job pack file, each representing a single LSF job submission.
     """
     lines = []
-    output_dir = get_job_output_dir()
+    # Use relative path for HPC jobs (assumes cwd is project root)
+    output_dir = get_job_output_dir(absolute=False)
 
     for group_name, group_config in config.items():
         # Filter based on selection

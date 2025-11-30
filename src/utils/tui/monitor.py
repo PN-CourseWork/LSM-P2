@@ -156,18 +156,24 @@ def get_job_output(job_id: str, tail_lines: int = 50) -> list[str]:
             if output_file and output_file not in ("-", ""):
                 lines.append(f"File: {output_file}")
                 lines.append("")
-                tail = subprocess.run(
-                    ["tail", "-n", str(tail_lines), output_file],
-                    capture_output=True, text=True, timeout=10
-                )
-                if tail.returncode == 0:
-                    lines.extend(tail.stdout.split("\n"))
-                else:
-                    lines.append("(file not yet available)")
+                try:
+                    with open(output_file, "r") as f:
+                        all_lines = f.readlines()
+                        lines.extend([l.rstrip() for l in all_lines[-tail_lines:]])
+                except FileNotFoundError:
+                    lines.append("(file not yet created)")
+                except PermissionError:
+                    lines.append("(permission denied)")
+                except Exception as e:
+                    lines.append(f"(error reading file: {e})")
             else:
-                lines.append("(no output file)")
-    except Exception:
-        lines.append("(unable to fetch output)")
+                lines.append("(no output file configured)")
+        else:
+            lines.append(f"(bjobs error: {peek.stderr.strip()})")
+    except FileNotFoundError:
+        lines.append("(bjobs command not found)")
+    except Exception as e:
+        lines.append(f"(unable to fetch output: {e})")
 
     return lines if lines else ["No output available"]
 
