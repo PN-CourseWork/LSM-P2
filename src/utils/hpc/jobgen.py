@@ -100,17 +100,40 @@ def generate_pack_lines(
         command_template: str = group_config.get("command", "")
         static_args: Dict[str, Any] = group_config.get("static_args", {})
         sweep: Dict[str, List[Any]] = group_config.get("sweep", {})
+        sweep_paired: Dict[str, List[Any]] = group_config.get("sweep_paired", {})
 
         if not command_template:
             raise ValueError(f"Group '{group_name}' is missing required 'command' field")
 
         # Prepare sweep combinations
-        if not sweep:
-            combinations = [{}]
-        else:
+        # 1. Paired sweep: all lists zipped together (must be same length)
+        # 2. Regular sweep: cartesian product
+        # Final combinations = cartesian product of (paired_combos × regular_combos)
+
+        paired_combinations = [{}]
+        if sweep_paired:
+            paired_keys = list(sweep_paired.keys())
+            paired_values = list(sweep_paired.values())
+            # Validate all lists have same length
+            lengths = [len(v) for v in paired_values]
+            if len(set(lengths)) > 1:
+                raise ValueError(
+                    f"Group '{group_name}': sweep_paired lists must have same length, "
+                    f"got {dict(zip(paired_keys, lengths))}"
+                )
+            paired_combinations = [dict(zip(paired_keys, combo)) for combo in zip(*paired_values)]
+
+        regular_combinations = [{}]
+        if sweep:
             sweep_keys = list(sweep.keys())
             sweep_values = list(sweep.values())
-            combinations = [dict(zip(sweep_keys, combo)) for combo in itertools.product(*sweep_values)]
+            regular_combinations = [dict(zip(sweep_keys, combo)) for combo in itertools.product(*sweep_values)]
+
+        # Combine: cartesian product of paired × regular
+        combinations = []
+        for paired in paired_combinations:
+            for regular in regular_combinations:
+                combinations.append({**paired, **regular})
 
         for i, combo_dict in enumerate(combinations):
             # Combine all arguments (static + sweep) into one dictionary for formatting
