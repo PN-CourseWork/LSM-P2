@@ -111,7 +111,7 @@ if rank == 0:
 
     # Find or create parent run, then start nested child run
     parent_run_name = f"N{args.N}"
-    run_name = f"N{args.N}_p{n_ranks}_{args.strategy}"
+    run_name = f"N{args.N}_p{n_ranks}_{args.strategy}_{args.communicator}"
 
     with start_mlflow_run_context(experiment_name, parent_run_name, run_name, args=args):
         # Log all data
