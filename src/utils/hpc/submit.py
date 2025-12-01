@@ -153,7 +153,36 @@ def get_available_groups(config_path: Path) -> List[str]:
     elif "groups" in config:
         return [j.get("name", "unnamed") for j in config["groups"]]
     else:
-        return [key for key in config.keys() if key != "defaults"]
+        return [key for key in config.keys() if not key.startswith("_")]
+
+
+def get_available_packs(config_path: Path) -> dict:
+    """Get pack definitions from config.
+
+    Packs are top-level keys whose value is a list of group names.
+    Groups are top-level keys whose value is a dict with lsf_options/command.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to config file
+
+    Returns
+    -------
+    dict
+        Pack name -> list of groups
+    """
+    try:
+        config = load_config(config_path)
+    except FileNotFoundError:
+        return {}
+
+    packs = {}
+    for key, value in config.items():
+        # Packs are lists of strings (group names)
+        if isinstance(value, list) and all(isinstance(v, str) for v in value):
+            packs[key] = value
+    return packs
 
 
 def get_pack_files(job_packs_dir: Path) -> List[Path]:
@@ -433,29 +462,72 @@ def interactive_generate(config_path: str | Path, job_packs_dir: Path | None = N
     if job_packs_dir is None:
         job_packs_dir = config_path.parent
 
-    print(f"\n--- Generate Job Pack ---")
+    print(f"\n--- Generate Job Packs ---")
     print(f"Config: {config_path}")
 
-    groups = get_available_groups(config_path)
-    if not groups:
-        print(f"No job groups found in {config_path}")
-        return
+    # Check for pack definitions first
+    packs = get_available_packs(config_path)
 
-    print(f"Available groups: {groups}")
+    if packs:
+        # Show pack options with their groups
+        choices = []
+        for pack_name, groups in packs.items():
+            label = f"{pack_name} ({', '.join(groups)})"
+            choices.append(questionary.Choice(title=label, value=pack_name))
 
-    selected = questionary.checkbox(
-        "Select groups (Space to select, Enter to confirm):",
-        choices=groups,
-        style=_get_questionary_style(),
-    ).ask()
+        print(f"Available packs: {list(packs.keys())}")
 
-    if not selected:
-        print("No groups selected.")
-        return
+        selected = questionary.checkbox(
+            "Select packs to generate (Space to select, Enter to confirm):",
+            choices=choices,
+            style=_get_questionary_style(),
+        ).ask()
 
-    files, log = generate_pack(config_path, job_packs_dir, selected)
-    for line in log:
-        print(line)
+        if not selected:
+            print("No packs selected.")
+            return
+
+        # Generate each selected pack
+        config = load_config(config_path)
+        total_jobs = 0
+        generated_files = []
+
+        for pack_name in selected:
+            groups = packs[pack_name]
+            lines = generate_pack_lines(config, pack_name, groups)
+            output_file = job_packs_dir / f"{pack_name}.pack"
+            write_pack_file(output_file, lines)
+
+            job_count = len([l for l in lines if l.strip() and not l.startswith('#')])
+            total_jobs += job_count
+            generated_files.append((output_file.name, job_count, groups))
+            print(f"  ✓ {output_file.name}: {job_count} jobs")
+
+        print(f"\nGenerated {len(generated_files)} pack files with {total_jobs} total jobs")
+        for name, count, groups in generated_files:
+            print(f"  {name}: {count} jobs ({', '.join(groups)})")
+    else:
+        # Fallback to individual group selection
+        groups = get_available_groups(config_path)
+        if not groups:
+            print(f"No job groups found in {config_path}")
+            return
+
+        print(f"Available groups: {groups}")
+
+        selected = questionary.checkbox(
+            "Select groups (Space to select, Enter to confirm):",
+            choices=groups,
+            style=_get_questionary_style(),
+        ).ask()
+
+        if not selected:
+            print("No groups selected.")
+            return
+
+        files, log = generate_pack(config_path, job_packs_dir, selected)
+        for line in log:
+            print(line)
 
     input("\nPress Enter to continue...")
 

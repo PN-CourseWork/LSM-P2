@@ -2,6 +2,27 @@
 #                         LSF EXPERIMENT CONFIGURATION
 # ============================================================================
 #
+# Pack Definitions (generate with: python main.py --hpc)
+# Each pack combines one or more groups into a single .pack file
+test:
+  - sanity
+
+jacobi_strong_scaling:
+  - strong_scaling
+  - single_socket_strong
+
+jacobi_weak_scaling:
+  - weak_scaling
+  - single_socket_weak
+
+FMG_strong_scaling:
+  - FMG_strong
+
+FMG_weak_scaling:
+  - FMG_weak
+
+#
+# Group Definitions
 # Format:
 #   GroupName:
 #     lsf_options: [...]    # LSF bsub flags (can use {placeholders})
@@ -9,7 +30,6 @@
 #     static_args: { ... }  # Fixed arguments (always applied)
 #     sweep: { ... }        # Cartesian product sweep
 #     sweep_paired: { ... } # Zipped sweep (values vary together)
-#     env_vars: { ... }     # Environment variables (optional)
 #
 # Available placeholders:
 #   {job_name}        - Auto-generated unique job name
@@ -18,11 +38,84 @@
 #   {any_static_arg}  - Any key from static_args
 #   {any_sweep_arg}   - Any key from sweep or sweep_paired
 #
-# Rank constraints (for cubic decomposition):
-#   Perfect cubes: 1 (1³), 8 (2³), 27 (3³), 64 (4³)
-#   Double cubes:  2 (2×1³), 16 (2×2³), 54 (2×3³)
+# Rank constraints:
+#   Rectangular 3D decompositions optimized for 24-core nodes:
+#   1 (1×1×1), 8 (2×2×2), 12 (2×2×3), 24 (2×3×4), 48 (4×4×3), 96 (4×4×6)
+#
+# Node configuration (2 sockets × 12 cores = 24 cores/node):
+#   - Always request full nodes (-n = 24, 48, 72, 96) to avoid interference
+#   - ptile = 24 ensures proper node allocation
+#   - Actual ranks may be less than requested cores (exclusive node access)
+#   - 12 ranks = 1 socket boundary (important for NUMA effects)
+#
+# Process mapping strategy:
+#   Jacobi is memory-bandwidth bound, so distributing processes across
+#   sockets maximizes available memory bandwidth (76.8 GB/s per socket).
+#   - ranks ≤ 8: --map-by core (fits on single socket, ~8 cores)
+#   - ranks ≥ 12: --map-by ppr:12:package (spread across sockets, 12 per socket max)
+#   Reference: Week 02 slides, "distribute ranks over as many CPU sockets as possible"
 #
 # ============================================================================
+#
+# SCALING ANALYSIS METHODOLOGY (per HPC-Wiki recommendations):
+#
+#   Strong Scaling (fixed problem size):
+#     - Speedup S = t(1) / t(N)
+#     - Efficiency E = S / N = t(1) / (N × t(N))
+#     - Ideal: S = N (linear speedup), E = 1.0
+#     - Plot: Speedup vs ranks (log-log), overlay ideal linear
+#
+#   Weak Scaling (constant work per rank):
+#     - Efficiency E = t(1) / t(N)
+#     - Ideal: E = 1.0 (constant)
+#     - Plot: Efficiency vs ranks, expect ~horizontal line
+#
+#   Key metrics logged by runners:
+#     - wall_time: Total solve time (use for scaling calculations)
+#     - total_compute_time: Time in Jacobi kernel
+#     - total_halo_time: Time in halo exchange
+#     - total_mpi_comm_time: Time in MPI allreduce
+#
+# ============================================================================
+
+
+# ############################################################################
+#                            SANITY CHECK (DEBUG)
+# ############################################################################
+
+# ============================================================================
+# Quick sanity test - minimal config to verify setup works
+# ============================================================================
+# Tests: single core, single socket (12), full node (24)
+# All request 1 full node (24 cores) for exclusive access
+sanity:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:10"
+    - "-n {n_cores}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=2GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    export NUMBA_NUM_THREADS=1 &&
+    mpiexec {map_by} --bind-to core -n {ranks}
+    uv run python Experiments/06-scaling/jacobi_runner.py
+    --N {N} --strategy cubic --communicator custom
+    --tol 0.0 --max-iter 10 --numba
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
+
+  static_args:
+    N: 64
+
+  sweep_paired:
+    ranks: [1, 12, 24]
+    n_cores: [24, 24, 24]
+    map_by: ["--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package"]
 
 
 # ############################################################################
@@ -32,13 +125,17 @@
 # ============================================================================
 # Strong Scaling (Jacobi)
 # ============================================================================
-# Fixed global problem size: 256³
+# Fixed global problem size: 288³ (divisible by all decomposition factors)
 # Sweeps: ranks × strategy × communicator
+#
+# Mapping rationale:
+#   - 1, 8 ranks: fit on single socket, use simple core mapping
+#   - 12+ ranks: spread across sockets for memory bandwidth (ppr:12:package)
 strong_scaling:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n {n_cores}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
@@ -49,34 +146,39 @@ strong_scaling:
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     export NUMBA_NUM_THREADS=1 &&
-    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
-    uv run python Experiments/05-scaling/jacobi_runner.py
+    mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
     tol: 0.0
     max_iter: 100
-    N: 256
+    N: 288
+
+  sweep_paired:
+    ranks: [1, 8, 12, 24, 48, 96]
+    n_cores: [24, 24, 24, 24, 48, 96]
+    map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
 
   sweep:
-    ranks: [1, 2, 8, 16, 27, 54, 64]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
 # ============================================================================
 # Weak Scaling (Jacobi)
 # ============================================================================
-# Local size per rank: ~64³ cells
-# N scales with ranks to maintain constant work per rank
-# Perfect cubes: P=n³ -> N=64n
-# Double cubes:  P=2n³ -> N≈80n
+# Local size per rank: ~64³ cells (262144 points per rank)
+# N scales with ranks: N = 64 × cbrt(P)
+# P=1→N=64, P=8→N=128, P=12→N=147, P=24→N=184, P=48→N=232, P=96→N=292
+#
+# Mapping rationale: same as strong_scaling (memory-bandwidth bound)
 weak_scaling:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n {n_cores}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
@@ -87,19 +189,21 @@ weak_scaling:
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     export NUMBA_NUM_THREADS=1 &&
-    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
-    uv run python Experiments/05-scaling/jacobi_runner.py
+    mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
     tol: 0.0
     max_iter: 100
 
   sweep_paired:
-    N: [64, 80, 128, 160, 192, 240, 256]
-    ranks: [1, 2, 8, 16, 27, 54, 64]
+    ranks: [1, 8, 12, 24, 48, 96]
+    n_cores: [24, 24, 24, 24, 48, 96]
+    N: [64, 128, 147, 184, 232, 292]
+    map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
 
   sweep:
     strategy: ["sliced", "cubic"]
@@ -113,13 +217,15 @@ weak_scaling:
 # ============================================================================
 # FMG Strong Scaling
 # ============================================================================
-# Fixed global problem size: 256³
+# Fixed global problem size: 289³
 # Cubic decomposition with custom communicator only
+#
+# Mapping rationale: FMG is also memory-bandwidth bound (relaxation sweeps)
 FMG_strong:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n {n_cores}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
@@ -129,30 +235,36 @@ FMG_strong:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
-    uv run python Experiments/05-scaling/fmg_runner.py
+    mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/fmg_runner.py
     --N {N} --strategy cubic --communicator custom
     --cycles {cycles} --n-smooth {n_smooth}
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
-    N: 257
+    N: 289
     cycles: 1
     n_smooth: 3
 
-  sweep:
-    ranks: [1, 8, 27, 64]
+  sweep_paired:
+    ranks: [1, 8, 12, 24, 48, 96]
+    n_cores: [24, 24, 24, 24, 48, 96]
+    map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
 
 # ============================================================================
 # FMG Weak Scaling
 # ============================================================================
 # Local size per rank: ~64³ cells
+# N = 64 × cbrt(P) + 1 for multigrid compatibility
+# P=1→N=65, P=8→N=129, P=12→N=148, P=24→N=185, P=48→N=233, P=96→N=293
 # Cubic decomposition with custom communicator only
+#
+# Mapping rationale: same as FMG_strong
 FMG_weak:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n {n_cores}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
@@ -162,92 +274,109 @@ FMG_weak:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
-    uv run python Experiments/05-scaling/fmg_runner.py
+    mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/fmg_runner.py
     --N {N} --strategy cubic --communicator custom
     --cycles {cycles} --n-smooth {n_smooth}
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
     cycles: 1
     n_smooth: 3
 
   sweep_paired:
-    N: [65, 81, 129, 161, 193, 241, 257]
-    ranks: [1, 2, 8, 16, 27, 54, 64]
+    ranks: [1, 8, 12, 24, 48, 96]
+    n_cores: [24, 24, 24, 24, 48, 96]
+    N: [65, 129, 148, 185, 233, 293]
+    map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
 
 
 # ############################################################################
-#                      NO BINDING BASELINE (COMPARISON)
+#                      SINGLE SOCKET BASELINE (COMPARISON)
 # ############################################################################
-# Same experiments but WITHOUT --bind-to and --map-by options
-# Used to demonstrate performance impact of proper process binding
+# All processes constrained to a single socket (max 12 cores)
+# Used to demonstrate memory bandwidth scaling across sockets
+# Compare with strong_scaling/weak_scaling which spread across sockets
+#
+# Purpose: Show performance impact of socket-level memory bandwidth:
+#   - Single socket: 76.8 GB/s memory bandwidth shared by all ranks
+#   - Two sockets: 153.6 GB/s total bandwidth when spreading ranks
+#   - Expected: ~2x bandwidth improvement when using both sockets for
+#     memory-bound applications like Jacobi
 
 # ============================================================================
-# No Binding - Strong Scaling
+# Single Socket - Strong Scaling
 # ============================================================================
-no_binding_strong:
+# All ranks constrained to single socket using LSF affinity specification
+# Reference: Week02/Jacobi/jacobi.sub - affinity[core(1,same=socket)]
+# Request 12 cores on same socket for exclusive socket access
+# Constrains all processes to first socket, sharing its 76.8 GB/s bandwidth
+single_socket_strong:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n 12"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=4GB]'"
-    - "-R 'span[ptile=24]'"
+    - "-R 'span[hosts=1] affinity[core(1,same=socket)]'"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     export NUMBA_NUM_THREADS=1 &&
-    mpiexec -n {ranks}
-    uv run python Experiments/05-scaling/jacobi_runner.py
+    mpiexec --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
     tol: 0.0
     max_iter: 100
-    N: 256
+    N: 288
 
   sweep:
-    ranks: [27, 64]
+    ranks: [1, 4, 8, 12]
     strategy: ["cubic"]
     communicator: ["custom"]
 
 # ============================================================================
-# No Binding - Weak Scaling
+# Single Socket - Weak Scaling
 # ============================================================================
-no_binding_weak:
+# All ranks constrained to single socket using LSF affinity specification
+# Reference: Week02/Jacobi/jacobi.sub - affinity[core(1,same=socket)]
+# Request 12 cores on same socket for exclusive socket access
+# N = 64 × cbrt(P) for constant work per rank
+single_socket_weak:
   lsf_options:
     - "-q hpc"
     - "-W 00:30"
-    - "-n {ranks}"
+    - "-n 12"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=4GB]'"
-    - "-R 'span[ptile=24]'"
+    - "-R 'span[hosts=1] affinity[core(1,same=socket)]'"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     export NUMBA_NUM_THREADS=1 &&
-    mpiexec -n {ranks}
-    uv run python Experiments/05-scaling/jacobi_runner.py
+    mpiexec --bind-to core --report-bindings -n {ranks}
+    uv run python Experiments/06-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+    --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
   static_args:
     tol: 0.0
     max_iter: 100
 
   sweep_paired:
-    N: [192, 256]
-    ranks: [27, 64]
+    ranks: [1, 4, 8, 12]
+    N: [64, 102, 128, 147]
 
   sweep:
     strategy: ["cubic"]

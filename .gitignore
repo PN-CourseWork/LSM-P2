@@ -2,6 +2,7 @@
 figures/
 # Report 
 .playwright-mcp
+.mcp.json
 
 docs/reports/TexReport/
 

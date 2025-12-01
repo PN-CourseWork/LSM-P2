@@ -139,34 +139,43 @@ def log_artifact_file(filepath: Path):
         print(f"  ✗ WARNING: Artifact file not found at {filepath}")
 
 
-def fetch_project_artifacts(output_dir: Path):
+def fetch_project_artifacts(output_dir: Path, force: bool = False):
     """
     Dynamically discovers and fetches artifacts from all experiments under the
     project's configured Databricks directory.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Local directory to download artifacts to
+    force : bool
+        Re-download even if files exist locally (default False)
     """
     from utils.config import load_project_config # Lazy import to avoid circular dependency
-    
+
     mlflow_conf = load_project_config().get("mlflow", {})
     databricks_dir = mlflow_conf.get("databricks_dir")
-    
+
     if not databricks_dir:
         print("ERROR: 'mlflow.databricks_dir' not set in project_config.yaml")
         return
 
     print(f"INFO: Searching for all experiments under project path: '{databricks_dir}'...")
     all_experiments = mlflow.search_experiments()
-    
+
     # Filter experiments that are part of the project directory on Databricks
     # Handles both /Shared/ and user-specific paths
     project_experiments = [
         exp for exp in all_experiments if databricks_dir in exp.name
     ]
-    
+
     if not project_experiments:
         print("INFO: No project-related experiments found.")
         return
 
     print(f"INFO: Found {len(project_experiments)} project experiments.")
+    if not force:
+        print("INFO: Skipping existing files (use --force to re-download)")
     output_dir = Path(output_dir)
 
     for exp in project_experiments:
@@ -175,15 +184,15 @@ def fetch_project_artifacts(output_dir: Path):
         # We need a mapping from experiment name to local dir name
         local_dir_name = exp.name.split("/")[-1].replace("Experiment-", "").lower()
         exp_dir = output_dir / local_dir_name
-        
+
         print(f"\nProcessing Experiment: {exp.name}")
-        
+
         try:
-            paths = download_artifacts(exp.name, exp_dir)
+            paths = download_artifacts(exp.name, exp_dir, force=force)
             if paths:
                 print(f"  ✓ Downloaded {len(paths)} files to {exp_dir}")
             else:
-                print("  - No artifacts found to download.")
+                print("  - No new artifacts to download.")
         except Exception as e:
             print(f"  ✗ Failed to fetch artifacts for experiment '{exp.name}': {e}")
 
@@ -217,13 +226,30 @@ def download_artifacts(
     experiment_name: str,
     output_dir: Path,
     exclude_parent_runs: bool = True,
+    force: bool = False,
+    max_workers: int = 8,
 ) -> List[Path]:
     """
     Download artifacts from the newest run per run name in an experiment.
 
     When multiple runs have the same name, only artifacts from the most recent
     run are downloaded to avoid duplicates and ensure latest data.
+
+    Parameters
+    ----------
+    experiment_name : str
+        MLflow experiment name
+    output_dir : Path
+        Local directory to download to
+    exclude_parent_runs : bool
+        Skip parent runs (default True)
+    force : bool
+        Re-download even if file exists locally (default False)
+    max_workers : int
+        Number of parallel download threads (default 8)
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -254,13 +280,36 @@ def download_artifacts(
             seen_names.add(run_name)
             unique_runs.append(run)
 
-    downloaded = []
+    # Collect all artifacts to download
+    download_tasks = []
     for run in unique_runs:
         run_id = run.info.run_id
         artifacts = client.list_artifacts(run_id)
-
         for artifact in artifacts:
-            local_path = client.download_artifacts(run_id, artifact.path, str(output_dir))
-            downloaded.append(Path(local_path))
+            # Check if already exists locally (skip if not forcing)
+            local_file = output_dir / artifact.path
+            if not force and local_file.exists():
+                continue
+            download_tasks.append((run_id, artifact.path))
+
+    if not download_tasks:
+        return []
+
+    # Download in parallel
+    downloaded = []
+
+    def download_one(task):
+        run_id, artifact_path = task
+        return client.download_artifacts(run_id, artifact_path, str(output_dir))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(download_one, task): task for task in download_tasks}
+        for future in as_completed(futures):
+            try:
+                local_path = future.result()
+                downloaded.append(Path(local_path))
+            except Exception as e:
+                task = futures[future]
+                print(f"    ✗ Failed to download {task[1]}: {e}")
 
     return downloaded
