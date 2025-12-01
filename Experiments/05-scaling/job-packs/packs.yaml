@@ -21,12 +21,12 @@
 SN_strong:
   lsf_options:
     - "-q hpcint"
-    - "-W 00:05"
+    - "-W 00:03"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-    - "-R 'rusage[mem=4GB]'"
+    - "-R 'rusage[mem=1GB]'"
     - "-R 'span[hosts=1]'"
     - "-g /poisson_project/strong_scaling"
 
@@ -40,11 +40,11 @@ SN_strong:
 
   static_args:
     tol: 0.0
-    max_iter: 5
+    max_iter: 2
 
   sweep:
     N: [8]
-    ranks: [8]
+    ranks: [2]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
