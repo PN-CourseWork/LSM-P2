@@ -21,14 +21,14 @@
 SN_strong:
   lsf_options:
     - "-q hpcint"
-    - "-W 00:03"
+    - "-W 00:05"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-    - "-R 'rusage[mem=1GB]'"
+    - "-R 'rusage[mem=2GB]'"
     - "-R 'span[hosts=1]'"
-    - "-g /poisson_project/strong_scaling"
+    - "-g /strong_scaling"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
