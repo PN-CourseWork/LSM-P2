@@ -47,9 +47,6 @@ class NumpyHaloExchange(_BaseHaloExchange):
         lo = lo_rank if lo_rank is not None else MPI.PROC_NULL
         hi = hi_rank if hi_rank is not None else MPI.PROC_NULL
 
-        # Barrier to ensure all ranks are synchronized before exchange
-        comm.Barrier()
-
         for send_i, recv_i, dest, src in [(-2, 0, hi, lo), (1, -1, lo, hi)]:
             send = np.ascontiguousarray(u[_face_slice(axis, send_i, has_halo)])
             recv = np.empty_like(send)

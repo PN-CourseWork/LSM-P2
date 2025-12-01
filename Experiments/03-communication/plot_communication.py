@@ -22,7 +22,7 @@ sns.set_style("whitegrid")
 plt.rcParams["figure.dpi"] = 100
 
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "communication"
+data_dir = repo_root / "data" / "03-communication"
 fig_dir = repo_root / "figures" / "communication"
 fig_dir.mkdir(parents=True, exist_ok=True)
 

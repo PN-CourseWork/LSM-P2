@@ -1,61 +1,250 @@
 # ============================================================================
-# LSF Experiment Configuration
+#                         LSF EXPERIMENT CONFIGURATION
 # ============================================================================
+#
 # Format:
-# GroupName:
-#   lsf: { ... }
-#   static_args: { ... }
-#   sweep: { ... }
+#   GroupName:
+#     lsf_options: [...]    # LSF bsub flags (can use {placeholders})
+#     command: str          # Command template with placeholders
+#     static_args: { ... }  # Fixed arguments (always applied)
+#     sweep: { ... }        # Cartesian product sweep
+#     sweep_paired: { ... } # Zipped sweep (values vary together)
+#     env_vars: { ... }     # Environment variables (optional)
+#
+# Available placeholders:
+#   {job_name}        - Auto-generated unique job name
+#   {experiment_name} - Group name (default)
+#   {LSF_OUTPUT_DIR}  - Session-specific output directory
+#   {any_static_arg}  - Any key from static_args
+#   {any_sweep_arg}   - Any key from sweep or sweep_paired
+#
+# Rank constraints (for cubic decomposition):
+#   Perfect cubes: 1 (1³), 8 (2³), 27 (3³), 64 (4³)
+#   Double cubes:  2 (2×1³), 16 (2×2³), 54 (2×3³)
+#
+# ============================================================================
 
-# ----------------------------------------------------------------------------
-# Group 1: Single Node Strong Scaling
-# ----------------------------------------------------------------------------
-SN_strong:
-  lsf:
-    queue: "hpc"
-    walltime: "00:10"
-    exclusive: false
-    notify_start: false
-    notify_end: false
-    resources:
-      - "rusage[mem=4GB]"
-      - "span[hosts=1]"
+
+# ############################################################################
+#                            JACOBI ITERATION
+# ############################################################################
+
+# ============================================================================
+# Strong Scaling (Jacobi)
+# ============================================================================
+# Fixed global problem size: 256³
+# Sweeps: ranks × strategy × communicator
+strong_scaling:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/jacobi_runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
 
   static_args:
-    interpreter: "uv run python"
-    script: "Experiments/05-scaling/compute_scaling.py"
     tol: 0.0
-    max-iter: 500
-    numba: true
+    max_iter: 100
+    N: 256
 
   sweep:
-    N: [64, 128]
-    ranks: [1, 2, 4, 8]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
-# ----------------------------------------------------------------------------
-# Group 2: Multi Node Strong Scaling
-# ----------------------------------------------------------------------------
-MN_strong:
-  lsf:
-    queue: "hpc"
-    walltime: "00:20"
-    exclusive: true
-    resources:
-      - "rusage[mem=8GB]"
-      - "span[ptile=24]"
-    mpi_options: "--map-by ppr:24:node --bind-to core"
+# ============================================================================
+# Weak Scaling (Jacobi)
+# ============================================================================
+# Local size per rank: ~64³ cells
+# N scales with ranks to maintain constant work per rank
+# Perfect cubes: P=n³ -> N=64n
+# Double cubes:  P=2n³ -> N≈80n
+weak_scaling:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/jacobi_runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
 
   static_args:
-    interpreter: "uv run python"
-    script: "Experiments/05-scaling/compute_scaling.py"
-    tol: 1e-6
-    max-iter: 10000
-    numba: true
+    tol: 0.0
+    max_iter: 100
+
+  sweep_paired:
+    N: [64, 80, 128, 160, 192, 240, 256]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
 
   sweep:
-    N: [256]
-    ranks: [24, 48, 96]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
+
+
+# ############################################################################
+#                          FULL MULTIGRID (FMG)
+# ############################################################################
+
+# ============================================================================
+# FMG Strong Scaling
+# ============================================================================
+# Fixed global problem size: 256³
+# Cubic decomposition with custom communicator only
+FMG_strong:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/fmg_runner.py
+    --N {N} --strategy cubic --communicator custom
+    --cycles {cycles} --n-smooth {n_smooth}
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    N: 257
+    cycles: 1
+    n_smooth: 3
+
+  sweep:
+    ranks: [1, 8, 27, 64]
+
+# ============================================================================
+# FMG Weak Scaling
+# ============================================================================
+# Local size per rank: ~64³ cells
+# Cubic decomposition with custom communicator only
+FMG_weak:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/fmg_runner.py
+    --N {N} --strategy cubic --communicator custom
+    --cycles {cycles} --n-smooth {n_smooth}
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    cycles: 1
+    n_smooth: 3
+
+  sweep_paired:
+    N: [65, 81, 129, 161, 193, 241, 257]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
+
+
+# ############################################################################
+#                      NO BINDING BASELINE (COMPARISON)
+# ############################################################################
+# Same experiments but WITHOUT --bind-to and --map-by options
+# Used to demonstrate performance impact of proper process binding
+
+# ============================================================================
+# No Binding - Strong Scaling
+# ============================================================================
+no_binding_strong:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec -n {ranks}
+    uv run python Experiments/05-scaling/jacobi_runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 100
+    N: 256
+
+  sweep:
+    ranks: [27, 64]
+    strategy: ["cubic"]
+    communicator: ["custom"]
+
+# ============================================================================
+# No Binding - Weak Scaling
+# ============================================================================
+no_binding_weak:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec -n {ranks}
+    uv run python Experiments/05-scaling/jacobi_runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 100
+
+  sweep_paired:
+    N: [192, 256]
+    ranks: [27, 64]
+
+  sweep:
+    strategy: ["cubic"]
+    communicator: ["custom"]

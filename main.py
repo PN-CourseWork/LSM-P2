@@ -1,195 +1,20 @@
 #!/usr/bin/env python3
-"""Main entry point for project management."""
+"""Main entry point for project management - CLI driven."""
 
 import argparse
 import sys
-import shutil
-import subprocess
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
-# Repository root (main.py is at repo root)
-REPO_ROOT = Path(__file__).resolve().parent
-
-
-def discover_plot_scripts():
-    """Find all plotting scripts in Experiments/ directory."""
-    experiments_dir = REPO_ROOT / "Experiments"
-
-    if not experiments_dir.exists():
-        return []
-
-    scripts = [
-        p
-        for p in experiments_dir.rglob("*.py")
-        if p.is_file() and "plot" in p.name and p.name != "__init__.py"
-    ]
-
-    return sorted(scripts)
-
-
-def discover_compute_scripts():
-    """Find all compute scripts in Experiments/ directory."""
-    experiments_dir = REPO_ROOT / "Experiments"
-
-    if not experiments_dir.exists():
-        return []
-
-    scripts = [
-        p
-        for p in experiments_dir.rglob("*.py")
-        if p.is_file() and "compute" in p.name and p.name != "__init__.py"
-    ]
-
-    return sorted(scripts)
-
-
-def _run_single_plot_script(script):
-    """Run a single plotting script and return its result.
-
-    Parameters
-    ----------
-    script : Path
-        Path to the script to run
-
-    Returns
-    -------
-    tuple
-        (display_path, success, error_message)
-    """
-    display_path = script.relative_to(REPO_ROOT)
-
-    try:
-        result = subprocess.run(
-            ["uv", "run", "python", str(script)],
-            capture_output=True,
-            text=True,
-            timeout=180,
-            cwd=str(REPO_ROOT),
-        )
-
-        if result.returncode == 0:
-            return (display_path, True, None)
-        else:
-            error_msg = result.stderr[:200] if result.stderr else ""
-            return (display_path, False, f"exit {result.returncode}: {error_msg}")
-
-    except subprocess.TimeoutExpired:
-        return (display_path, False, "timeout")
-    except Exception as e:
-        return (display_path, False, str(e))
-
-
-def run_plot_scripts():
-    """Run plotting scripts in parallel and report results."""
-    scripts = discover_plot_scripts()
-
-    if not scripts:
-        print("  No plot scripts found")
-        return
-
-    print(f"\nRunning {len(scripts)} plot scripts in parallel...\n")
-
-    success_count = 0
-    fail_count = 0
-
-    # Run scripts in parallel using thread pool
-    with ThreadPoolExecutor() as executor:
-        # Submit all scripts
-        future_to_script = {
-            executor.submit(_run_single_plot_script, script): script
-            for script in scripts
-        }
-
-        # Process results as they complete
-        for future in as_completed(future_to_script):
-            display_path, success, error_msg = future.result()
-
-            if success:
-                print(f"  ✓ {display_path}")
-                success_count += 1
-            else:
-                print(f"  ✗ {display_path} ({error_msg})")
-                fail_count += 1
-
-    print(f"\n  Summary: {success_count} succeeded, {fail_count} failed\n")
-
-
-def run_compute_scripts():
-    """Run compute scripts sequentially."""
-    scripts = discover_compute_scripts()
-
-    if not scripts:
-        print("  No compute scripts found")
-        return
-
-    print(f"\nRunning {len(scripts)} compute scripts sequentially...\n")
-
-    success_count = 0
-    fail_count = 0
-
-    for script in scripts:
-        display_path = script.relative_to(REPO_ROOT)
-        print(f"  → {display_path}...", end=" ", flush=True)
-
-        try:
-            result = subprocess.run(
-                ["uv", "run", "python", str(script)],
-                capture_output=True,
-                text=True,
-                timeout=600,  # 10 min timeout for compute scripts
-                cwd=str(REPO_ROOT),
-            )
-
-            if result.returncode == 0:
-                print("✓")
-                success_count += 1
-            else:
-                error_msg = (
-                    result.stderr[:200]
-                    if result.stderr
-                    else f"exit {result.returncode}"
-                )
-                print(f"✗ ({error_msg})")
-                fail_count += 1
-
-        except subprocess.TimeoutExpired:
-            print("✗ (timeout)")
-            fail_count += 1
-        except Exception as e:
-            print(f"✗ ({e})")
-            fail_count += 1
-
-    print(f"\n  Summary: {success_count} succeeded, {fail_count} failed\n")
-
-
-def copy_plots():
-    """Copy figures/ directory to docs/reports/TexReport/."""
-    source_dir = REPO_ROOT / "figures"
-    dest_dir = REPO_ROOT / "docs" / "reports" / "TexReport" / "figures"
-
-    print("\nCopying figures/ to docs/reports/TexReport/...")
-
-    if not source_dir.exists():
-        print("  No figures/ directory found")
-        return
-
-    try:
-        # Remove existing destination if it exists, then copy entire directory
-        if dest_dir.exists():
-            shutil.rmtree(dest_dir)
-        shutil.copytree(source_dir, dest_dir)
-        print("  ✓ Copied figures/ to docs/reports/TexReport/figures/")
-    except Exception as e:
-        print(f"  ✗ Failed to copy: {e}")
-
-    print()
+from utils import runners, mlflow
+from utils.config import get_repo_root, load_project_config, clean_all
+from utils.hpc import interactive_generate
 
 
 def build_docs():
     """Build Sphinx documentation."""
-    docs_dir = REPO_ROOT / "docs"
+    import subprocess
+
+    repo_root = get_repo_root()
+    docs_dir = repo_root / "docs"
     source_dir = docs_dir / "source"
     build_dir = docs_dir / "build"
 
@@ -201,19 +26,11 @@ def build_docs():
 
     try:
         result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "sphinx-build",
-                "-M",
-                "html",
-                str(source_dir),
-                str(build_dir),
-            ],
+            ["uv", "run", "sphinx-build", "-M", "html", str(source_dir), str(build_dir)],
             capture_output=True,
             text=True,
             timeout=300,
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_root),
         )
 
         if result.returncode == 0:
@@ -237,120 +54,8 @@ def build_docs():
         return False
 
 
-def clean_all():
-    """Clean all generated files and caches."""
-    print("\nCleaning all generated files and caches...")
-
-    def remove_item(path):
-        """Remove file or directory, return (success, error)."""
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
-            return True, None
-        except Exception as e:
-            return False, str(e)
-
-    cleaned, failed = 0, 0
-
-    # Directories to clean
-    dirs = [
-        "docs/build",
-        "docs/source/example_gallery",
-        "docs/source/generated",
-        "docs/source/gen_modules",
-        "plots",
-        "build",
-        "dist",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".mypy_cache",
-    ]
-    for d in dirs:
-        path = REPO_ROOT / d
-        if path.exists():
-            success, _ = remove_item(path)
-            cleaned += success
-            failed += not success
-
-    # Specific files to clean
-    files = ["docs/source/sg_execution_times.rst"]
-    for f in files:
-        path = REPO_ROOT / f
-        if path.exists():
-            success, _ = remove_item(path)
-            cleaned += success
-            failed += not success
-
-    # Recursive patterns to clean
-    patterns = ["__pycache__", "*.pyc", ".DS_Store"]
-    for pattern in patterns:
-        for path in REPO_ROOT.rglob(pattern):
-            success, _ = remove_item(path)
-            cleaned += success
-            failed += not success
-
-    # Clean data/ directory contents (preserve README.md and .gitkeep)
-    data_dir = REPO_ROOT / "data"
-    if data_dir.exists():
-        for item in data_dir.iterdir():
-            if item.name not in {"README.md", ".gitkeep"}:
-                success, _ = remove_item(item)
-                cleaned += success
-                failed += not success
-
-    # Clean Experiments/*/output directories
-    for output_dir in (REPO_ROOT / "Experiments").glob("*/output"):
-        success, _ = remove_item(output_dir)
-        cleaned += success
-        failed += not success
-
-    # Print results
-    if cleaned:
-        print(f"  ✓ Cleaned {cleaned} items")
-    if failed:
-        print(f"  ✗ Failed to clean {failed} items")
-    if not cleaned and not failed:
-        print("  Nothing to clean")
-    print()
-
-
-def fetch_mlflow():
-    """Fetch artifacts from MLflow for all converged runs."""
-    print("\nFetching MLflow artifacts...")
-
-    try:
-        from utils.mlflow_io import setup_mlflow_auth
-
-        setup_mlflow_auth()
-
-        print(
-            "  (No experiments configured for auto-fetch yet. Edit main.py to specify experiments.)"
-        )
-        print()
-
-    except ImportError as e:
-        print(f"  ✗ Missing dependency: {e}")
-        print("    Install with: uv sync")
-    except Exception as e:
-        print(f"  ✗ Failed to fetch: {e}\n")
-
-
-def run_monitor():
-    """Launch the HPC job monitor TUI."""
-    try:
-        from src.utils.TUI.monitor import run_monitor as _run_monitor
-        _run_monitor()
-    except ImportError as e:
-        print(f"  ✗ Failed to import monitor: {e}")
-        print("    Make sure blessed is installed: uv sync")
-    except Exception as e:
-        print(f"  ✗ Monitor failed: {e}")
-
-
 def main():
-    """Main entry point."""
+    """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Project management for MPI Poisson Solver",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -359,44 +64,24 @@ Examples:
   python main.py --docs                        Build Sphinx documentation
   python main.py --compute                     Run all compute scripts
   python main.py --plot                        Run all plotting scripts
-  python main.py --copy-plots                  Copy plots to plots/ directory
+  python main.py --copy-plots                  Copy plots to report directory
   python main.py --clean                       Clean all generated files
-  python main.py --monitor                     Launch HPC job monitor TUI
+  python main.py --fetch                       Fetch artifacts from MLflow
+  python main.py --hpc                         Interactive HPC job generator
         """,
     )
 
-    # Action Group
     actions = parser.add_argument_group("Actions")
-    actions.add_argument(
-        "--docs", action="store_true", help="Build Sphinx HTML documentation"
-    )
-    actions.add_argument(
-        "--compute", action="store_true", help="Run all compute scripts (sequentially)"
-    )
-    actions.add_argument(
-        "--plot", action="store_true", help="Run all plotting scripts (in parallel)"
-    )
-    actions.add_argument(
-        "--copy-plots", action="store_true", help="Copy plots to plots/ directory"
-    )
-    actions.add_argument(
-        "--clean", action="store_true", help="Clean all generated files and caches"
-    )
-    actions.add_argument(
-        "--fetch",
-        action="store_true",
-        help="Fetch artifacts from MLflow for all converged runs",
-    )
-    actions.add_argument(
-        "--monitor",
-        action="store_true",
-        help="Launch HPC job monitor TUI",
-    )
+    actions.add_argument("--docs", action="store_true", help="Build Sphinx HTML documentation")
+    actions.add_argument("--compute", action="store_true", help="Run all compute scripts (sequentially)")
+    actions.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
+    actions.add_argument("--copy-plots", action="store_true", help="Copy plots to report directory")
+    actions.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
+    actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow")
+    actions.add_argument("--hpc", nargs="?", const="DEFAULT", help="Interactive HPC job generator (optional: config path)")
 
-    # Show help if no arguments provided
     if len(sys.argv) == 1:
         parser.print_help()
-        print("\n Error: No arguments provided. Please specify at least one option.\n")
         sys.exit(1)
 
     args = parser.parse_args()
@@ -406,22 +91,34 @@ Examples:
         clean_all()
 
     if args.compute:
-        run_compute_scripts()
+        runners.run_compute_scripts()
 
     if args.plot:
-        run_plot_scripts()
+        runners.run_plot_scripts()
 
     if args.copy_plots:
-        copy_plots()
+        runners.copy_to_report()
 
     if args.fetch:
-        fetch_mlflow()
+        config = load_project_config()
+        mlflow_conf = config.get("mlflow", {})
+        repo_root = get_repo_root()
 
-    if args.monitor:
-        run_monitor()
+        mlflow.setup_mlflow_tracking()
+        output_dir = repo_root / mlflow_conf.get("download_dir", "data")
+        mlflow.fetch_project_artifacts(output_dir)
+
+    if args.hpc:
+        config = load_project_config()
+        default_conf = config.get("hpc", {}).get(
+            "default_config", "Experiments/05-scaling/job-packs/packs.yaml"
+        )
+        config_path = default_conf if args.hpc == "DEFAULT" else args.hpc
+        interactive_generate(config_path)
 
     if args.docs:
-        build_docs()
+        if not build_docs():
+            sys.exit(1)
 
 
 if __name__ == "__main__":

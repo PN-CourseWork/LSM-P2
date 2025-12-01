@@ -9,9 +9,6 @@ hpc:
 # MLflow Configuration
 mlflow:
   tracking_uri: "http://localhost:5000" # Default if not set in env
-  download_dir: "data/downloaded"
-  
-  # List of experiments to fetch artifacts from
-  experiments:
-    # - "LSM-Scaling"
-    # - "LSM-Kernels"
+  download_dir: "data/"
+  databricks_dir: "LSM-PoissonMPI"
+ 

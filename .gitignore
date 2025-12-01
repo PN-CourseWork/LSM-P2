@@ -7,7 +7,7 @@ docs/reports/TexReport/
 
 
 # Generated data (keep README.md)
-#data/*
+data/*
 
 # Uv stuff 
 uv.lock

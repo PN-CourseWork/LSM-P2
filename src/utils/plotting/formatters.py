@@ -1,57 +1,25 @@
-"""Plotting utilities for spectral method visualizations.
+"""Formatting utilities for scientific plot labels and annotations.
 
-This module provides utilities for:
-- Automatic style application (seaborn + custom mplstyle)
-- Formatting labels and parameters for plots
-- Common plotting helpers
-
-Automatically applies seaborn style and custom utils.mplstyle on import.
+Provides LaTeX-compatible formatting for:
+- Scientific notation (e.g., 1.00 × 10⁻³)
+- Parameter ranges (e.g., N ∈ [10, 100])
+- Parameter strings for titles/legends
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-import matplotlib.pyplot as plt
 
-
-# ==============================================================================
-# Style Application
-# ==============================================================================
-
-
-def _apply_styles():
-    """Apply seaborn style and custom utils.mplstyle."""
-    # Apply seaborn style first
-    try:
-        plt.style.use("seaborn-v0_8")
-    except OSError:
-        # Fallback if seaborn style not available
-        pass
-
-    # Then apply custom style on top
-    style_path = Path(__file__).parent / "utils.mplstyle"
-    if style_path.exists():
-        plt.style.use(str(style_path))
-
-
-# Apply styles when module is imported
-_apply_styles()
-
-
-# ==============================================================================
-# Formatting Utilities
-# ==============================================================================
-
-
-def format_dt_latex(dt: float | str) -> str:
-    """Format a timestep value as LaTeX scientific notation.
+def format_scientific_latex(value: float | str, precision: int = 2) -> str:
+    """Format a value as LaTeX scientific notation.
 
     Parameters
     ----------
-    dt : float or str
-        Timestep value to format. If str and equals '?', returns '?'
+    value : float or str
+        Value to format. If str and equals '?', returns '?'
+    precision : int, default 2
+        Number of decimal places for mantissa
 
     Returns
     -------
@@ -60,15 +28,16 @@ def format_dt_latex(dt: float | str) -> str:
 
     Examples
     --------
-    >>> format_dt_latex(0.001)
+    >>> format_scientific_latex(0.001)
     '1.00 \\times 10^{-3}'
-
+    >>> format_scientific_latex(1.5e-6, precision=1)
+    '1.5 \\times 10^{-6}'
     """
-    if dt == "?":
+    if value == "?":
         return "?"
 
-    dt_str = f"{float(dt):.2e}"
-    mantissa, exp = dt_str.split("e")
+    value_str = f"{float(value):.{precision}e}"
+    mantissa, exp = value_str.split("e")
     exp_int = int(exp)
     return rf"{mantissa} \times 10^{{{exp_int}}}"
 
@@ -98,7 +67,6 @@ def format_parameter_range(
     --------
     >>> format_parameter_range([10, 20, 30], 'N')
     '$N \\in [10, 30]$'
-
     """
     if len(values) == 0:
         return f"{name} = ?"
@@ -147,16 +115,15 @@ def build_parameter_string(
     --------
     >>> build_parameter_string({'N': 100, 'dt': 0.001})
     '$N = 100$, $dt = 1.00 \\times 10^{-3}$'
-
     """
     parts = []
     for name, value in params.items():
         if isinstance(value, (list, tuple)):
             parts.append(format_parameter_range(value, name, latex=latex))
         else:
-            # Handle special formatting for dt
-            if "dt" in name.lower() or "Delta t" in name:
-                value_str = format_dt_latex(value)
+            # Handle special formatting for timestep-like parameters
+            if "dt" in name.lower() or "delta" in name.lower():
+                value_str = format_scientific_latex(value)
                 if latex:
                     parts.append(rf"${name} = {value_str}$")
                 else:

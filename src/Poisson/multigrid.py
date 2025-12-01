@@ -96,7 +96,8 @@ class MultigridPoisson:
 
         # Record metadata for outputs
         self.config.decomposition = self.decomposition_strategy if self.size > 1 else "none"
-        self.config.communicator = self.communicator.__class__.__name__.lower()
+        comm_name = self.communicator.__class__.__name__.lower()
+        self.config.communicator = comm_name.replace("haloexchange", "")
 
         # Timing accumulators
         self._time_compute = 0.0
@@ -120,13 +121,15 @@ class MultigridPoisson:
             raise ValueError("Grid size must be at least 3.")
 
         # Compute minimum grid size based on decomposition strategy
+        # Each rank needs at least min_local interior points per dimension
+        min_local = 3  # Minimum 3x3x3 local interior for restriction/prolongation
+
         if self.size > 1:
             if self.decomposition_strategy == "cubic":
-                # For cubic decomposition, we need larger coarse grids because
-                # the restriction/prolongation accumulates errors at small grids
-                # when not all dimensions are decomposed equally (e.g., 2x2x1).
-                # Empirically, coarsest N>=33 is stable for multigrid.
-                min_N_for_ranks = max(33, self.min_coarse_size)
+                # For cubic decomposition, P ranks split into ~P^(1/3) per dimension
+                # Local size = N / P^(1/3), need local size >= min_local + 2 (for halos)
+                ranks_per_dim = int(round(self.size ** (1/3)))
+                min_N_for_ranks = max((min_local + 2) * ranks_per_dim, self.min_coarse_size)
             else:
                 # For sliced, all ranks share one axis
                 min_N_for_ranks = self.size + 2

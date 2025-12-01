@@ -29,7 +29,7 @@ pv.set_plot_theme("paraview")
 
 # Get paths using installed package utility (works in Sphinx-Gallery)
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "validation"
+data_dir = repo_root / "data" / "04-validation"
 fig_dir = repo_root / "figures" / "validation"
 fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -37,7 +37,7 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # Part 1: Convergence Analysis
 # ============================================================================
 # Load validation data from HDF5 files
-h5_files = list(data_dir.glob("*.h5"))
+h5_files = list(data_dir.glob("**/*.h5"))
 if not h5_files:
     raise FileNotFoundError(
         f"No data found in {data_dir}. Run compute_validation.py first."

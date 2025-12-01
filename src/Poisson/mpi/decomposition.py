@@ -533,6 +533,11 @@ class NoDecomposition:
         self.strategy = "none"
         self._N = None
 
+    @property
+    def N(self):
+        """Grid size N for compatibility with DomainDecomposition."""
+        return self._N
+
     def get_rank_info(self, rank):
         """Return info for single-rank execution."""
         N = self._N or 1

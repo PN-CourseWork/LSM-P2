@@ -1,14 +1,33 @@
-"""Utility modules for plotting and CLI.
+"""Utility modules for project management and visualization.
 
-Import conveniences:
-- from utils import plotting    # For plotting operations
-- from utils import args        # For command-line argument parsing
-- from utils import mlflow_io   # For MLflow I/O operations
-- from utils import hpc         # For HPC job generation
-- from utils import manage      # For project management tasks
-- from utils import TUI         # For TUI application
+Submodules:
+- plotting: Scientific plot styling, formatters, palettes
+- runners: Script discovery and execution
+- hpc: HPC job generation and submission
+- config: Project configuration and cleanup
+- mlflow: MLflow artifact handling and log uploading
+- cli: Command-line argument parsing
+
+Import examples:
+    from utils import plotting     # Auto-applies scientific styles
+    from utils import runners      # Script execution
+    from utils import hpc          # HPC job management
+    from utils import mlflow       # MLflow utilities
+    from utils.config import get_repo_root, load_project_config
 """
 
-from . import plotting, args, mlflow_io, hpc, manage, TUI
+from . import plotting, runners, hpc, config, mlflow, cli
 
-__all__ = ["plotting", "args", "mlflow_io", "hpc", "manage", "TUI"]
+# Re-export common config functions for convenience
+from .config import get_repo_root, load_project_config
+
+__all__ = [
+    "plotting",
+    "runners",
+    "hpc",
+    "config",
+    "mlflow",
+    "cli",
+    "get_repo_root",
+    "load_project_config",
+]
