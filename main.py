@@ -63,17 +63,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Project management for MPI Poisson Solver",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py --docs                        Build Sphinx documentation
-  python main.py --compute                     Run all compute scripts
-  python main.py --plot                        Run all plotting scripts
-  python main.py --copy-plots                  Copy plots to report directory
-  python main.py --clean                       Clean all generated files
-  python main.py --fetch                       Fetch artifacts from MLflow (skip existing)
-  python main.py --fetch --force               Re-download all artifacts
-  python main.py --hpc                         Interactive HPC job generator
-        """,
     )
 
     actions = parser.add_argument_group("Actions")
