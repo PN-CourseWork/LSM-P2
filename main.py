@@ -3,6 +3,10 @@
 
 import argparse
 import sys
+from pathlib import Path
+
+# Ensure src directory is in python path
+sys.path.append(str(Path(__file__).parent / "src"))
 
 from utils import runners, mlflow
 from utils.config import get_repo_root, load_project_config, clean_all
@@ -66,7 +70,8 @@ Examples:
   python main.py --plot                        Run all plotting scripts
   python main.py --copy-plots                  Copy plots to report directory
   python main.py --clean                       Clean all generated files
-  python main.py --fetch                       Fetch artifacts from MLflow
+  python main.py --fetch                       Fetch artifacts from MLflow (skip existing)
+  python main.py --fetch --force               Re-download all artifacts
   python main.py --hpc                         Interactive HPC job generator
         """,
     )
@@ -77,7 +82,9 @@ Examples:
     actions.add_argument("--plot", action="store_true", help="Run all plotting scripts (in parallel)")
     actions.add_argument("--copy-plots", action="store_true", help="Copy plots to report directory")
     actions.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
-    actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow")
+    actions.add_argument("--setup-mlflow", action="store_true", help="Interactive MLflow setup (login to Databricks)")
+    actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow (skips existing files)")
+    actions.add_argument("--force", action="store_true", help="Force re-download of existing files (use with --fetch)")
     actions.add_argument("--hpc", nargs="?", const="DEFAULT", help="Interactive HPC job generator (optional: config path)")
 
     if len(sys.argv) == 1:
@@ -89,6 +96,11 @@ Examples:
     # Execute commands in logical order
     if args.clean:
         clean_all()
+
+    if args.setup_mlflow:
+        import mlflow
+        print("\nSetting up MLflow...")
+        mlflow.login(backend="databricks", interactive=True)
 
     if args.compute:
         runners.run_compute_scripts()
@@ -106,7 +118,7 @@ Examples:
 
         mlflow.setup_mlflow_tracking()
         output_dir = repo_root / mlflow_conf.get("download_dir", "data")
-        mlflow.fetch_project_artifacts(output_dir)
+        mlflow.fetch_project_artifacts(output_dir, force=args.force)
 
     if args.hpc:
         config = load_project_config()

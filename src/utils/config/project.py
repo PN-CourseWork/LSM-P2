@@ -10,6 +10,18 @@ from typing import Any, Dict
 import yaml
 
 
+DEFAULT_CONFIG = {
+    "hpc": {
+        "job_packs": "Experiments/06-scaling/job-packs"
+    },
+    "mlflow": {
+        "tracking_uri": "http://localhost:5000",
+        "download_dir": "data/",
+        "databricks_dir": "LSM-PoissonMPI"
+    }
+}
+
+
 def get_repo_root() -> Path:
     """Find the project root directory (where pyproject.toml is).
 
@@ -37,14 +49,20 @@ def load_project_config(config_name: str = "project_config.yaml") -> Dict[str, A
     Returns
     -------
     dict
-        Parsed configuration, or empty dict if not found.
+        Parsed configuration combined with defaults.
     """
     repo_root = get_repo_root()
     config_path = repo_root / config_name
+    
+    config = DEFAULT_CONFIG.copy()
+    
     if config_path.exists():
         with open(config_path, "r") as f:
-            return yaml.safe_load(f) or {}
-    return {}
+            user_config = yaml.safe_load(f) or {}
+            # Simple shallow merge for top-level keys
+            config.update(user_config)
+            
+    return config
 
 
 def get_config_section(section: str) -> Dict[str, Any]:
