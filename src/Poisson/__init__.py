@@ -20,6 +20,7 @@ from .datastructures import (
 )
 from .kernels import NumPyKernel, NumbaKernel
 from .solver import JacobiPoisson
+from .multigrid import MultigridPoisson
 from .mpi import (
     DomainDecomposition,
     RankInfo,
@@ -51,6 +52,7 @@ __all__ = [
     "NumbaKernel",
     # Solver
     "JacobiPoisson",
+    "MultigridPoisson",
     # Decomposition (DMDA-style)
     "NoDecomposition",
     "DomainDecomposition",

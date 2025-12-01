@@ -5,6 +5,7 @@ import json
 from mpi4py import MPI
 from Poisson import (
     JacobiPoisson,
+    MultigridPoisson, # Import new solver
     DomainDecomposition,
     NumpyHaloExchange,
     CustomHaloExchange,
@@ -13,40 +14,84 @@ from Poisson import (
 config = json.loads(sys.argv[1])
 comm = MPI.COMM_WORLD
 
-decomp = DomainDecomposition(
-    N=config["N"],
-    size=comm.Get_size(),
-    strategy=config.get("strategy", "sliced"),
-    axis=config.get("axis", "z"),
-)
-halo = (
-    CustomHaloExchange()
-    if config.get("communicator") == "custom"
-    else NumpyHaloExchange()
-)
+# Determine solver type
+solver_type = config.get("solver_type", "jacobi") # Default to jacobi
 
-solver = JacobiPoisson(
-    N=config["N"],
-    decomposition=decomp,
-    communicator=halo,
-    max_iter=config.get("max_iter", 10000),
-    tolerance=config.get("tol", 1e-6),
-)
+if solver_type == "jacobi":
+    decomp_N = config["N"]
+    decomp = DomainDecomposition(
+        N=decomp_N,
+        size=comm.Get_size(),
+        strategy=config.get("strategy", "sliced"),
+        axis=config.get("axis", "z"),
+    )
+    halo = (
+        CustomHaloExchange()
+        if config.get("communicator") == "custom"
+        else NumpyHaloExchange()
+    )
+
+    solver = JacobiPoisson(
+        N=config["N"],
+        decomposition=decomp,
+        communicator=halo,
+        max_iter=config.get("max_iter", 10000),
+        tolerance=config.get("tol", 1e-6),
+        use_numba=config.get("use_numba", False),
+    )
+elif solver_type == "multigrid":
+    # MultigridPoisson handles its own decomposition internally
+    communicator_choice = config.get("communicator", "numpy")
+    solver = MultigridPoisson(
+        N=config["N"],
+        levels=config.get("levels"),  # auto-infer if None
+        n_smooth=config.get("n_smooth", 3),
+        omega=config.get("omega", 2.0 / 3.0),
+        max_iter=config.get("max_iter", 20), # Multigrid converges faster
+        tolerance=config.get("tol", 1e-6),
+        use_numba=config.get("use_numba", False),
+        decomposition_strategy=config.get("strategy", "sliced"),
+        communicator=communicator_choice,
+    )
+elif solver_type == "fmg":
+    communicator_choice = config.get("communicator", "numpy")
+    solver = MultigridPoisson(
+        N=config["N"],
+        levels=config.get("levels"),  # auto-infer if None
+        min_coarse_size=config.get("min_coarse_size", 9),
+        n_smooth=config.get("n_smooth", 3),
+        omega=config.get("omega", 2.0 / 3.0),
+        fmg_post_cycles=config.get("fmg_post_cycles", 50),
+        max_iter=config.get("max_iter", 20),
+        tolerance=config.get("tol", 1e-6),
+        use_numba=config.get("use_numba", False),
+        decomposition_strategy=config.get("strategy", "sliced"),
+        communicator=communicator_choice,
+    )
+else:
+    raise ValueError(f"Unknown solver type: {solver_type}")
+
 
 t0 = MPI.Wtime()
-solver.solve()
+if solver_type == "fmg":
+    solver.fmg_solve()
+else:
+    solver.solve()
 wall_time = MPI.Wtime() - t0
 
 # Store timing metrics in results (rank 0 only)
 if comm.Get_rank() == 0:
     solver.results.wall_time = wall_time
-    solver.results.total_compute_time = sum(solver.timeseries.compute_times)
-    solver.results.total_halo_time = sum(solver.timeseries.halo_exchange_times)
-    solver.results.total_mpi_comm_time = sum(solver.timeseries.mpi_comm_times)
 
 # Compute L2 error if requested (not timed)
 if config.get("validate"):
-    solver.compute_l2_error()
+    # MultigridPoisson doesn't have compute_l2_error directly yet
+    # We should add this method to MultigridPoisson
+    if hasattr(solver, 'compute_l2_error'):
+        solver.compute_l2_error()
+    else:
+        if comm.Get_rank() == 0:
+            print("Warning: MultigridPoisson does not have compute_l2_error method yet.")
 
 # Save results to HDF5
 output_path = config.get("output")

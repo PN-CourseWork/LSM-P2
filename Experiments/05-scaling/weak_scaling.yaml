@@ -1,0 +1,44 @@
+type: weak
+script: Experiments/05-scaling/compute_scaling.py
+
+# ============================================================================
+# Global Parameters (Apply to all groups)
+# ============================================================================
+parameters:
+  base_N: 32  # Base grid size for 1 rank (32^3)
+  tol: 1e-6
+  max-iter: 50000
+  numba: true
+
+# ============================================================================
+# Global LSF Settings
+# ============================================================================
+lsf:
+  queue: hpc
+  walltime: "02:00"
+  resources:
+    - "rusage[mem=4GB]"
+
+# ============================================================================
+# Experiment Groups
+# ============================================================================
+groups:
+  - name: single_node
+    lsf:
+      resources:
+        - "rusage[mem=4GB]"
+        - "span[hosts=1]"
+    sweep:
+      ranks: [1, 8, 27]
+      communicator: [numpy, custom]
+      strategy: [sliced, cubic]
+
+  - name: multi_node
+    lsf:
+      resources:
+        - "rusage[mem=8GB]"
+        - "span[hosts=2]"
+    sweep:
+      ranks: [64]
+      communicator: [numpy, custom]
+      strategy: [sliced, cubic]

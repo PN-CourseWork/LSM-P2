@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "course-server": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/uv",
+      "args": [
+        "--directory",
+        "/Users/philipnickel/Documents/GitHub/PrivateProjects/Course-MCP-Server",
+        "run",
+        "python",
+        "main.py"
+      ],
+      "env": {}
+    }
+  }
+}

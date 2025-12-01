@@ -83,7 +83,7 @@ plt.tight_layout()
 output_file = fig_dir / "communication_comparison.pdf"
 plt.savefig(output_file, bbox_inches="tight")
 print(f"Saved: {output_file}")
-plt.show()
+#plt.show()
 
 # %%
 # Summary Statistics

@@ -287,6 +287,80 @@ class DomainDecomposition:
 
         return best
 
+    def _recompute_rank_info_from_splits(self):
+        """Recompute rank info after modifying _split_info.
+
+        Used by multigrid to create aligned decompositions where
+        fine-level boundaries map exactly to coarse-level boundaries.
+        """
+        from mpi4py import MPI
+
+        px, py, pz = self.dims
+        N = self.N
+
+        nz_counts, nz_starts = self._split_info['nz']
+        ny_counts, ny_starts = self._split_info['ny']
+        nx_counts, nx_starts = self._split_info['nx']
+
+        self._rank_info = []
+
+        for rank in range(self.size):
+            # Compute 3D coords
+            iz = rank % pz
+            iy = (rank // pz) % py
+            ix = rank // (py * pz)
+
+            # Local sizes (of full domain portion, not interior)
+            local_nz = nz_counts[iz]
+            local_ny = ny_counts[iy]
+            local_nx = nx_counts[ix]
+
+            # Global starts (0-based in full N grid)
+            z0 = nz_starts[iz]
+            y0 = ny_starts[iy]
+            x0 = nx_starts[ix]
+
+            # local_shape is portion of full domain (Z, Y, X)
+            local_shape = (local_nz, local_ny, local_nx)
+            # halo_shape: +2 in each dimension for halo exchange
+            halo_shape = (local_nz + 2, local_ny + 2, local_nx + 2)
+
+            # Global start/end (0-based in full N grid)
+            global_start = (z0, y0, x0)
+            global_end = (z0 + local_nz, y0 + local_ny, x0 + local_nx)
+
+            # Neighbors
+            neighbors = {}
+            neighbors["x_lower"] = self._cart_neighbor(ix - 1, iy, iz, px, py, pz)
+            neighbors["x_upper"] = self._cart_neighbor(ix + 1, iy, iz, px, py, pz)
+            neighbors["y_lower"] = self._cart_neighbor(ix, iy - 1, iz, px, py, pz)
+            neighbors["y_upper"] = self._cart_neighbor(ix, iy + 1, iz, px, py, pz)
+            neighbors["z_lower"] = self._cart_neighbor(ix, iy, iz - 1, px, py, pz)
+            neighbors["z_upper"] = self._cart_neighbor(ix, iy, iz + 1, px, py, pz)
+
+            n_neighbors = sum(1 for n in neighbors.values() if n is not None)
+
+            nz, ny, nx = local_shape
+            halo_cells = 0
+            if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
+                halo_cells += 2 * nz * ny
+            if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
+                halo_cells += 2 * nz * nx
+            if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
+                halo_cells += 2 * ny * nx
+
+            info = RankInfo(
+                rank=rank,
+                local_shape=local_shape,
+                global_start=global_start,
+                global_end=global_end,
+                halo_shape=halo_shape,
+                neighbors=neighbors,
+                n_neighbors=n_neighbors,
+                halo_cells_total=halo_cells,
+            )
+            self._rank_info.append(info)
+
     # =========================================================================
     # Solver Interface Methods
     # =========================================================================
