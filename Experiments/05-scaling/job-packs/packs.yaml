@@ -45,7 +45,7 @@ SN_strong:
     max_iter: 100
 
   sweep:
-    N: [128, 256, 512]
+    N: [256]
     ranks: [8, 16, 32, 64, 96]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
@@ -80,7 +80,7 @@ MN_strong:
     max_iter: 100
 
   sweep:
-    N: [128, 192]
+    N: [256]
     ranks: [24, 48, 96]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
