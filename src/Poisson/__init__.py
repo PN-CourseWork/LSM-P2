@@ -27,6 +27,8 @@ from .mpi import (
     NoDecomposition,
     NumpyHaloExchange,
     CustomHaloExchange,
+    DistributedGrid,
+    RankGeometry,
 )
 from .problems import (
     create_grid_3d,
@@ -53,13 +55,16 @@ __all__ = [
     # Solver
     "JacobiPoisson",
     "MultigridPoisson",
-    # Decomposition (DMDA-style)
+    # Decomposition (legacy)
     "NoDecomposition",
     "DomainDecomposition",
     "RankInfo",
-    # Communicators
+    # Communicators (legacy)
     "NumpyHaloExchange",
     "CustomHaloExchange",
+    # Unified grid (multigrid)
+    "DistributedGrid",
+    "RankGeometry",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",

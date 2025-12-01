@@ -90,12 +90,14 @@ def load_timeseries_data(data_dirs: list[Path], solver_type: str = "jacobi", war
                 comm = str(df_res["communicator"].iloc[0])
                 method = f"{decomp}/{comm}"
 
-                # Compute total iteration time
+                # Compute total iteration time (mpi_comm_times may not exist with non-blocking)
                 df_ts["iter_time"] = (
                     df_ts["compute_times"].fillna(0) +
-                    df_ts["halo_exchange_times"].fillna(0) +
-                    df_ts["mpi_comm_times"].fillna(0)
+                    df_ts["halo_exchange_times"].fillna(0)
                 )
+                # Add mpi_comm_times if present (legacy data)
+                if "mpi_comm_times" in df_ts.columns:
+                    df_ts["iter_time"] += df_ts["mpi_comm_times"].fillna(0)
                 df_ts["mpi_size"] = P
                 df_ts["N"] = N
                 df_ts["method"] = method
@@ -196,6 +198,11 @@ def compute_strong_scaling(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
 
+    # Filter out rows with invalid wall_time
+    df = df[df["wall_time"].apply(lambda x: x not in (None, 'None', ''))]
+    df = df.copy()
+    df["wall_time"] = df["wall_time"].astype(float)
+
     for solver in df["solver"].unique():
         df_solver = df[df["solver"] == solver]
 
@@ -212,13 +219,13 @@ def compute_strong_scaling(df: pd.DataFrame) -> pd.DataFrame:
             if baseline_df.empty:
                 continue
 
-            T1 = baseline_df["wall_time"].values[0]
+            T1 = float(baseline_df["wall_time"].values[0])
             print(f"  {solver} N={N}: Sequential baseline T(1) = {T1:.4f}s")
 
             # Process all data points
             for _, row in df_N.iterrows():
-                P = row["mpi_size"]
-                T_P = row["wall_time"]
+                P = int(row["mpi_size"])
+                T_P = float(row["wall_time"])
                 speedup = T1 / T_P if T_P > 0 else 0
                 efficiency = speedup / P if P > 0 else 0
 
@@ -486,7 +493,8 @@ if not df_jacobi_strong.empty:
 # %%
 # Plot 5: Timing Fractions vs Ranks
 # ---------------------------------
-# Shows how compute/halo/mpi fractions change with increasing parallelism
+# Shows how compute/halo/other fractions change with increasing parallelism
+# "Other" = iter_time - compute - halo (captures MPI overhead, sync, etc.)
 
 if has_timeseries:
     # Get Jacobi timeseries data for timing fractions
@@ -498,15 +506,15 @@ if has_timeseries:
         N_strong = N_counts.idxmax()
         df_ts_N = df_ts_jacobi[df_ts_jacobi["N"] == N_strong].copy()
 
-        # Compute fractions for each iteration
-        df_ts_N["total_time"] = (
-            df_ts_N["compute_times"].fillna(0) +
-            df_ts_N["halo_exchange_times"].fillna(0) +
-            df_ts_N["mpi_comm_times"].fillna(0)
-        )
-        df_ts_N["compute_frac"] = df_ts_N["compute_times"].fillna(0) / df_ts_N["total_time"] * 100
-        df_ts_N["halo_frac"] = df_ts_N["halo_exchange_times"].fillna(0) / df_ts_N["total_time"] * 100
-        df_ts_N["mpi_frac"] = df_ts_N["mpi_comm_times"].fillna(0) / df_ts_N["total_time"] * 100
+        # Compute fractions: Compute, Halo, Other (remainder)
+        compute = df_ts_N["compute_times"].fillna(0)
+        halo = df_ts_N["halo_exchange_times"].fillna(0)
+        total = df_ts_N["iter_time"]  # Already computed in load_timeseries_data
+        other = (total - compute - halo).clip(lower=0)  # Clip to handle floating point
+
+        df_ts_N["compute_frac"] = compute / total * 100
+        df_ts_N["halo_frac"] = halo / total * 100
+        df_ts_N["other_frac"] = other / total * 100
 
         # Filter for a single method (cubic/custom is typically best)
         methods_available = df_ts_N["method"].unique()
@@ -517,9 +525,9 @@ if has_timeseries:
             fig, ax = plt.subplots(figsize=(10, 6))
 
             # Melt data for seaborn
-            df_fracs = df_ts_method[["mpi_size", "compute_frac", "halo_frac", "mpi_frac"]].melt(
+            df_fracs = df_ts_method[["mpi_size", "compute_frac", "halo_frac", "other_frac"]].melt(
                 id_vars=["mpi_size"],
-                value_vars=["compute_frac", "halo_frac", "mpi_frac"],
+                value_vars=["compute_frac", "halo_frac", "other_frac"],
                 var_name="component",
                 value_name="fraction"
             )
@@ -528,7 +536,7 @@ if has_timeseries:
             component_names = {
                 "compute_frac": "Compute",
                 "halo_frac": "Halo Exchange",
-                "mpi_frac": "MPI Allreduce"
+                "other_frac": "Other (MPI, sync)"
             }
             df_fracs["component"] = df_fracs["component"].map(component_names)
 
@@ -536,7 +544,7 @@ if has_timeseries:
             sns.lineplot(
                 data=df_fracs, x="mpi_size", y="fraction", hue="component",
                 style="component", markers=True, dashes=False,
-                palette={"Compute": "tab:blue", "Halo Exchange": "tab:orange", "MPI Allreduce": "tab:green"},
+                palette={"Compute": "tab:blue", "Halo Exchange": "tab:orange", "Other (MPI, sync)": "tab:green"},
                 errorbar=("ci", 95), ax=ax, markersize=8
             )
 
@@ -568,6 +576,11 @@ def compute_weak_scaling(df: pd.DataFrame) -> pd.DataFrame:
     """
     results = []
 
+    # Filter out rows with invalid wall_time
+    df = df[df["wall_time"].apply(lambda x: x not in (None, 'None', ''))]
+    df = df.copy()
+    df["wall_time"] = df["wall_time"].astype(float)
+
     for solver in df["solver"].unique():
         df_solver = df[df["solver"] == solver]
 
@@ -580,13 +593,13 @@ def compute_weak_scaling(df: pd.DataFrame) -> pd.DataFrame:
             if baseline.empty:
                 continue
 
-            T1 = baseline["wall_time"].values[0]
-            N1 = baseline["N"].values[0]
+            T1 = float(baseline["wall_time"].values[0])
+            N1 = int(baseline["N"].values[0])
 
             for _, row in df_method.iterrows():
-                P = row["mpi_size"]
-                T_P = row["wall_time"]
-                N = row["N"]
+                P = int(row["mpi_size"])
+                T_P = float(row["wall_time"])
+                N = int(row["N"])
 
                 # For weak scaling, efficiency is T1/T(P)
                 efficiency = (T1 / T_P) * 100 if T_P > 0 else 0
@@ -626,7 +639,9 @@ if not df_jacobi_only.empty:
             methods = df_weak["method"].unique()
             colors = plt.cm.tab10(np.linspace(0, 1, len(methods)))
             color_map = dict(zip(methods, colors))
-            markers = {"sliced/numpy": "o", "sliced/custom": "s", "cubic/numpy": "^", "cubic/custom": "D"}
+            base_markers = {"sliced/numpy": "o", "sliced/custom": "s", "cubic/numpy": "^", "cubic/custom": "D"}
+            # Ensure all methods have a marker (fallback to 'o')
+            markers = {m: base_markers.get(m, "o") for m in methods}
             palette = {m: color_map[m] for m in methods}
 
             # Check if we have timeseries data for weak scaling CI
@@ -679,6 +694,104 @@ if not df_jacobi_only.empty:
             plt.tight_layout()
             fig.savefig(fig_dir / "06_weak_scaling.pdf")
             print(f"Saved: {fig_dir / '06_weak_scaling.pdf'}")
+
+# %%
+# Plot 7: Operation Timeseries (Jacobi vs FMG comparison)
+# -------------------------------------------------------
+# Shows compute and halo times per operation - FMG reveals grid hierarchy
+
+if has_timeseries:
+    # Load FMG data with level_indices first to check if available
+    df_fmg_ts = pd.DataFrame()
+    for data_dir in fmg_dirs + [data_base / "06-scaling-test"]:
+        if not data_dir.exists():
+            continue
+        for h5_file in data_dir.glob("*.h5"):
+            try:
+                df_ts = pd.read_hdf(h5_file, key="timeseries")
+                if "level_indices" in df_ts.columns:
+                    df_res = pd.read_hdf(h5_file, key="results")
+                    df_ts["N"] = int(df_res["N"].iloc[0])
+                    df_ts["mpi_size"] = int(df_res["mpi_size"].iloc[0])
+                    df_fmg_ts = pd.concat([df_fmg_ts, df_ts], ignore_index=True)
+            except:
+                pass
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    # Top-left: Jacobi timeseries (should be flat)
+    df_ts_jac = df_ts_all[df_ts_all["solver"] == "Jacobi"].copy()
+    if not df_ts_jac.empty:
+        # Pick largest N
+        N_jac = df_ts_jac["N"].max()
+        P_jac = df_ts_jac[df_ts_jac["N"] == N_jac]["mpi_size"].max()
+        df_jac = df_ts_jac[(df_ts_jac["N"] == N_jac) & (df_ts_jac["mpi_size"] == P_jac)].head(100).copy()
+        df_jac = df_jac.reset_index(drop=True)
+        df_jac["operation"] = range(len(df_jac))
+
+        ax = axes[0, 0]
+        ax.plot(df_jac["operation"], df_jac["compute_times"] * 1000, "b-", label="Compute", alpha=0.8)
+        ax.plot(df_jac["operation"], df_jac["halo_exchange_times"] * 1000, "r-", label="Halo", alpha=0.8)
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel("Time (ms)")
+        ax.set_title(f"Jacobi Timeseries (N={N_jac}, P={P_jac})")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+    # Top-right & Bottom: FMG timeseries
+    if not df_fmg_ts.empty:
+        N_fmg = df_fmg_ts["N"].max()
+        P_fmg = df_fmg_ts[df_fmg_ts["N"] == N_fmg]["mpi_size"].min()
+        df_fmg = df_fmg_ts[(df_fmg_ts["N"] == N_fmg) & (df_fmg_ts["mpi_size"] == P_fmg)].copy()
+        df_fmg = df_fmg.reset_index(drop=True)
+        df_fmg["operation"] = range(len(df_fmg))
+
+        # Top-right: FMG compute times (full view, log scale)
+        ax = axes[0, 1]
+        ax.plot(df_fmg["operation"], df_fmg["compute_times"] * 1000, "b-", label="Compute", alpha=0.8, linewidth=0.5)
+        ax.plot(df_fmg["operation"], df_fmg["halo_exchange_times"] * 1000, "r-", label="Halo", alpha=0.8, linewidth=0.5)
+        ax.set_xlabel("Operation")
+        ax.set_ylabel("Time (ms) - log scale")
+        ax.set_yscale("log")
+        ax.set_title(f"FMG Timeseries (N={N_fmg}, P={P_fmg}) - Full")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # Bottom-left: FMG level traversal (shows ladder/V-cycle pattern)
+        ax = axes[1, 0]
+        n_levels = int(df_fmg["level_indices"].max()) + 1
+        ax.plot(df_fmg["operation"], df_fmg["level_indices"], "k-", linewidth=0.8)
+        ax.set_xlabel("Operation")
+        ax.set_ylabel("Grid Level (0=finest, 4=coarsest)")
+        ax.set_title("FMG Level Traversal - V-Cycle Pattern")
+        ax.set_yticks(range(n_levels))
+        ax.set_yticklabels([f"Level {i}" for i in range(n_levels)])
+        ax.invert_yaxis()  # Fine at top
+        ax.grid(True, alpha=0.3)
+
+        # Bottom-right: Zoomed FMG around first fine grid ops
+        ax = axes[1, 1]
+        if "level_indices" in df_fmg.columns:
+            fine_mask = df_fmg["level_indices"] == 0
+            if fine_mask.any():
+                first_fine = fine_mask.idxmax()
+                start_idx = max(0, first_fine - 50)
+                df_zoom = df_fmg.iloc[start_idx:start_idx + 200].copy()
+                df_zoom = df_zoom.reset_index(drop=True)
+                df_zoom["op"] = range(len(df_zoom))
+
+                ax.plot(df_zoom["op"], df_zoom["compute_times"] * 1000, "b-", label="Compute", alpha=0.8)
+                ax.plot(df_zoom["op"], df_zoom["halo_exchange_times"] * 1000, "r-", label="Halo", alpha=0.8)
+                ax.set_xlabel("Operation (zoomed)")
+                ax.set_ylabel("Time (ms) - log scale")
+                ax.set_yscale("log")
+                ax.set_title("FMG Zoomed - V-Cycles at Fine Grid")
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    fig.savefig(fig_dir / "07_timeseries.pdf")
+    print(f"Saved: {fig_dir / '07_timeseries.pdf'}")
 
 # %%
 # Summary Statistics

@@ -149,13 +149,21 @@ class LocalFields:
 
 @dataclass
 class LocalSeries:
-    """Per-iteration MPI timing arrays (each rank).
+    """Per-iteration/operation timing arrays (each rank).
 
-    Each rank accumulates its own timing data for each iteration.
+    Each rank accumulates its own timing data for each iteration/operation.
     Rank 0 additionally stores residual history.
+
+    For Jacobi: one entry per iteration
+    For Multigrid: one entry per smoothing operation (reveals grid hierarchy)
+
+    Note: With non-blocking Iallreduce, MPI time overlaps with halo exchange,
+    so we only track compute and halo times. "Other" overhead can be computed
+    as: wall_time - sum(compute_times) - sum(halo_exchange_times)
     """
 
     compute_times: list[float] = field(default_factory=list)
-    mpi_comm_times: list[float] = field(default_factory=list)
     halo_exchange_times: list[float] = field(default_factory=list)
     residual_history: list[float] = field(default_factory=list)
+    # For multigrid: track which level each operation is on (0=finest)
+    level_indices: list[int] = field(default_factory=list)

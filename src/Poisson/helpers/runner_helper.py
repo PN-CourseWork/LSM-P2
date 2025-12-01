@@ -40,21 +40,19 @@ if solver_type == "jacobi":
         use_numba=config.get("use_numba", False),
     )
 elif solver_type == "multigrid":
-    # MultigridPoisson handles its own decomposition internally
-    communicator_choice = config.get("communicator", "numpy")
+    # MultigridPoisson uses DistributedGrid internally (no separate communicator)
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
         n_smooth=config.get("n_smooth", 3),
         omega=config.get("omega", 2.0 / 3.0),
-        max_iter=config.get("max_iter", 20), # Multigrid converges faster
+        max_iter=config.get("max_iter", 20),
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
         decomposition_strategy=config.get("strategy", "sliced"),
-        communicator=communicator_choice,
     )
 elif solver_type == "fmg":
-    communicator_choice = config.get("communicator", "numpy")
+    # MultigridPoisson uses DistributedGrid internally (no separate communicator)
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
@@ -66,7 +64,6 @@ elif solver_type == "fmg":
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
         decomposition_strategy=config.get("strategy", "sliced"),
-        communicator=communicator_choice,
     )
 else:
     raise ValueError(f"Unknown solver type: {solver_type}")

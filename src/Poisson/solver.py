@@ -116,57 +116,74 @@ class JacobiPoisson:
         if self.rank == 0:
             self.results.total_compute_time = sum(self.timeseries.compute_times)
             self.results.total_halo_time = sum(self.timeseries.halo_exchange_times)
-            self.results.total_mpi_comm_time = sum(self.timeseries.mpi_comm_times)
 
         self._gather_solution(u_final)
 
     def _iterate(self):
-        """Execute Jacobi iteration loop."""
+        """Execute Jacobi iteration loop with non-blocking residual reduction.
+
+        Uses MPI_Iallreduce to overlap the global residual computation with
+        the next iteration's halo exchange, hiding communication latency.
+        """
         uold, u = self.u1_local, self.u2_local
+        n_interior = (self.config.N - 2) ** 3
+
+        # Buffers for non-blocking allreduce
+        local_res_buf = np.zeros(1)
+        global_res_buf = np.zeros(1)
+        pending_request = None
 
         for i in range(self.config.max_iter):
-            residual = self._step(uold, u)
+            # === Halo exchange (overlaps with previous iteration's Iallreduce) ===
+            t0 = MPI.Wtime()
+            self.communicator.exchange_halos(uold, self.decomposition, self.rank, self.comm)
+            halo_time = MPI.Wtime() - t0
 
-            if residual < self.config.tolerance:
-                self._record_convergence(i + 1, converged=True)
-                return u
+            # === Wait for previous iteration's residual reduction ===
+            if pending_request is not None:
+                pending_request.Wait()
 
+                # Check convergence from previous iteration
+                global_residual = np.sqrt(global_res_buf[0]) / n_interior
+                if self.rank == 0:
+                    self.timeseries.residual_history.append(float(global_residual))
+
+                if global_residual < self.config.tolerance:
+                    self.timeseries.halo_exchange_times.append(halo_time)
+                    self._record_convergence(i, converged=True)
+                    return uold  # Previous u is the converged solution
+
+            self.timeseries.halo_exchange_times.append(halo_time)
+
+            # === Compute Jacobi update ===
+            t0 = MPI.Wtime()
+            self.kernel.step(uold, u, self.f_local)
+            self.decomposition.apply_boundary_conditions(u, self.rank)
+
+            # Compute local residual
+            diff = u[1:-1, 1:-1, 1:-1] - uold[1:-1, 1:-1, 1:-1]
+            local_res_buf[0] = np.sum(diff**2)
+            self.timeseries.compute_times.append(MPI.Wtime() - t0)
+
+            # === Start non-blocking global reduction (overlaps with next halo exchange) ===
+            pending_request = self.comm.Iallreduce(local_res_buf, global_res_buf, op=MPI.SUM)
+
+            # Swap buffers for next iteration
             uold, u = u, uold
 
+        # Final wait for last iteration's reduction
+        if pending_request is not None:
+            pending_request.Wait()
+            global_residual = np.sqrt(global_res_buf[0]) / n_interior
+            if self.rank == 0:
+                self.timeseries.residual_history.append(float(global_residual))
+
+            if global_residual < self.config.tolerance:
+                self._record_convergence(self.config.max_iter, converged=True)
+                return uold
+
         self._record_convergence(self.config.max_iter, converged=False)
-        return u
-
-    def _step(self, uold, u):
-        """Perform one Jacobi step with timing."""
-        # Halo exchange
-        t0 = MPI.Wtime()
-        self.communicator.exchange_halos(uold, self.decomposition, self.rank, self.comm)
-        self.timeseries.halo_exchange_times.append(MPI.Wtime() - t0)
-
-        # Compute update
-        t0 = MPI.Wtime()
-        self.kernel.step(uold, u, self.f_local)
-
-        # Boundary conditions (before residual computation)
-        self.decomposition.apply_boundary_conditions(u, self.rank)
-
-        # Compute residual after BCs (so boundary cells don't contribute)
-        diff = u[1:-1, 1:-1, 1:-1] - uold[1:-1, 1:-1, 1:-1]
-        local_diff_sum = np.sum(diff**2)
-        self.timeseries.compute_times.append(MPI.Wtime() - t0)
-
-        # Global residual
-        t0 = MPI.Wtime()
-        n_interior = (self.config.N - 2) ** 3
-        global_residual = (
-            np.sqrt(self.comm.allreduce(local_diff_sum, op=MPI.SUM)) / n_interior
-        )
-        self.timeseries.mpi_comm_times.append(MPI.Wtime() - t0)
-
-        if self.rank == 0:
-            self.timeseries.residual_history.append(float(global_residual))
-
-        return global_residual
+        return uold
 
     def _gather_solution(self, u_local):
         """Gather local solutions to rank 0."""

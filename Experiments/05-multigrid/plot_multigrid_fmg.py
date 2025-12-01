@@ -17,7 +17,7 @@ from Poisson import get_project_root
 sns.set_style()
 
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "multigrid_fmg"
+data_dir = repo_root / "data" / "05-multigrid"
 fig_dir = repo_root / "figures" / "multigrid"
 fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -30,16 +30,7 @@ if not h5_files:
 df = pd.concat([pd.read_hdf(f, key="results") for f in h5_files], ignore_index=True)
 
 # Clean up column names for display
-df["Communicator"] = (
-    df["communicator"]
-    .str.replace("haloexchange", "", regex=False)
-    .str.replace("custom", "Custom", regex=False)
-    .str.replace("numpy", "NumPy", regex=False)
-)
 df["Decomposition"] = df["decomposition"].str.capitalize()
-
-# Create a combined method label for distinguishing curves
-df["Method"] = df["Decomposition"] + " + " + df["Communicator"]
 
 fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -47,17 +38,18 @@ sns.lineplot(
     data=df,
     x="N",
     y="final_error",
-    hue="Method",
-    style="Method",
+    hue="Decomposition",
+    style="Decomposition",
     markers=True,
     dashes=True,
     ax=ax,
 )
 
-# Reference O(N^-2) based on sliced decomposition (which shows proper convergence)
-sliced_df = df[df["Decomposition"] == "Sliced"]
-N_min, N_max = sliced_df["N"].min(), sliced_df["N"].max()
-err_at_N_min = sliced_df[sliced_df["N"] == N_min]["final_error"].iloc[0]
+# Reference O(N^-2) based on first decomposition
+first_decomp = df["Decomposition"].iloc[0]
+ref_df = df[df["Decomposition"] == first_decomp]
+N_min, N_max = ref_df["N"].min(), ref_df["N"].max()
+err_at_N_min = ref_df[ref_df["N"] == N_min]["final_error"].iloc[0]
 ax.plot(
     [N_min, N_max],
     [err_at_N_min, err_at_N_min * (N_min / N_max) ** 2],

@@ -8,9 +8,8 @@ from mpi4py import MPI
 from .solver import JacobiPoisson
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import GlobalParams, GlobalMetrics, LocalSeries
-from .mpi.communicators import NumpyHaloExchange, CustomHaloExchange
-from .mpi.decomposition import DomainDecomposition, NoDecomposition
-from .multigrid_operators import restrict, prolong, restrict_halo, prolong_halo
+from .mpi.grid import DistributedGrid
+from .multigrid_operators import restrict, prolong
 
 
 @dataclass
@@ -19,32 +18,37 @@ class GridLevel:
     level_index: int
     N: int
     h: float
-    
+
     # Arrays (Local to rank)
     u: np.ndarray  # Solution / Error correction
     f: np.ndarray  # RHS / Restricted residual
     r: np.ndarray  # Residual
-    
-    # Solver components
+
+    # Distributed grid (handles decomposition + halo exchange)
+    grid: DistributedGrid
+
+    # Solver kernel
     kernel: object
-    communicator: object
-    decomposition: object
-    
+
     # Buffers for smoothing
-    u_temp: np.ndarray 
+    u_temp: np.ndarray
 
 
 class MultigridPoisson(JacobiPoisson):
-    """Multigrid V-Cycle Solver extending JacobiPoisson."""
+    """Multigrid V-Cycle Solver extending JacobiPoisson.
+
+    Uses the unified DistributedGrid class for both sliced and cubic
+    decomposition, ensuring consistent interior decomposition for
+    multigrid operators.
+    """
 
     def __init__(
         self,
         levels: Optional[int] = None,
         min_coarse_size: int = 3,
-        n_smooth: int = 3,
-        fmg_post_cycles: int = 50,
+        n_smooth: int = 5,
+        fmg_post_cycles: int = 1,
         decomposition_strategy: str = 'sliced',
-        communicator: Optional[object] = None,
         **kwargs,
     ):
         """
@@ -57,11 +61,11 @@ class MultigridPoisson(JacobiPoisson):
         n_smooth : int
             Number of smoothing steps (pre and post).
         fmg_post_cycles : int
-            Maximum post-FMG V-cycles for convergence.
+            Post-FMG V-cycles (default 1). One V-cycle after FMG phase
+            polishes the solution to discretization error.
         decomposition_strategy : str
-            MPI decomposition strategy ('cubic' or 'sliced').
-        communicator : str or object
-            Halo exchange communicator ('numpy', 'custom', or object).
+            MPI decomposition strategy ('sliced' or 'cubic'). Both use
+            consistent interior decomposition via DistributedGrid.
         kwargs : dict
             Configuration passed to GlobalParams (N, omega, etc.)
         """
@@ -79,25 +83,11 @@ class MultigridPoisson(JacobiPoisson):
         if self.size > 1 and self.decomposition_strategy not in ("sliced", "cubic"):
             raise ValueError("Multigrid supports 'sliced' or 'cubic' decomposition for MPI.")
 
-        # Communicator selection (numpy or custom)
-        if isinstance(communicator, str):
-            if communicator == "custom":
-                self._communicator_obj = CustomHaloExchange()
-            elif communicator in (None, "numpy"):
-                self._communicator_obj = NumpyHaloExchange()
-            else:
-                raise ValueError(f"Unknown communicator: {communicator}")
-        elif communicator is None:
-            self._communicator_obj = NumpyHaloExchange()
-        else:
-            self._communicator_obj = communicator
-
         # Config setup (needed for _infer_levels)
         self.config = GlobalParams(**kwargs)
         self.config.mpi_size = self.size
         self.config.decomposition = self.decomposition_strategy if self.size > 1 else "none"
-        comm_name = self._communicator_obj.__class__.__name__.lower()
-        self.config.communicator = comm_name.replace("haloexchange", "")
+        self.config.communicator = "distributed_grid"
 
         # Determine number of levels automatically if not provided
         self.levels = levels if levels is not None else self._infer_levels(self.config.N)
@@ -115,10 +105,8 @@ class MultigridPoisson(JacobiPoisson):
         self.grid_levels: List[GridLevel] = []
         self._setup_hierarchy()
 
-        # Set up pointers so inherited methods (compute_l2_error, save_hdf5) work
+        # Set up pointers so inherited methods work
         fine_lvl = self.grid_levels[0]
-        self.decomposition = fine_lvl.decomposition
-        self.communicator = fine_lvl.communicator
         self.u1_local = fine_lvl.u
         self.u2_local = fine_lvl.u_temp
         self.f_local = fine_lvl.f
@@ -181,41 +169,44 @@ class MultigridPoisson(JacobiPoisson):
         return levels
 
     def _setup_hierarchy(self):
-        """Allocate arrays and setup solvers for all levels."""
-        if self.size > 1:
-            from .mpi.decomposition import DomainDecomposition
+        """Allocate arrays and setup solvers for all levels.
 
-        # First, compute all N values from finest to coarsest
+        Uses DistributedGrid which consistently decomposes interior points
+        for both sliced and cubic strategies, ensuring multigrid operators
+        work correctly.
+        """
+        # Compute all N values from finest to coarsest
         N_values = []
         N_current = self.config.N
         for _ in range(self.levels):
             N_values.append(N_current)
             if (N_current - 1) % 2 != 0:
-                raise ValueError(f"Grid size N={N_current} is not compatible with Multigrid (N-1 must be divisible by 2).")
+                raise ValueError(
+                    f"Grid size N={N_current} is not compatible with "
+                    "Multigrid (N-1 must be divisible by 2)."
+                )
             N_current = (N_current - 1) // 2 + 1
-
-        # For cubic decomposition, compute aligned decompositions to ensure
-        # restriction/prolongation work correctly across all levels
-        if self.size > 1 and self.decomposition_strategy == "cubic":
-            decompositions = self._compute_aligned_cubic_decompositions(N_values)
-        else:
-            decompositions = None
 
         for l, N in enumerate(N_values):
             h = 2.0 / (N - 1)
 
-            if self.size > 1:
-                if decompositions is not None:
-                    decomp = decompositions[l]
-                else:
-                    decomp = DomainDecomposition(N=N, size=self.size, strategy=self.decomposition_strategy)
-            else:
-                decomp = NoDecomposition()
+            # Create distributed grid (unified for sliced/cubic)
+            grid = DistributedGrid(N, self.comm, strategy=self.decomposition_strategy)
 
-            u1, u2, f = decomp.initialize_local_arrays_distributed(N, self.rank, self.comm)
+            # Allocate arrays using grid's allocator
+            u1 = grid.allocate()
+            u2 = grid.allocate()
+            f = grid.allocate()
+            r = grid.allocate()
 
-            r = np.zeros_like(u1)
+            # Fill source term for this level
+            grid.fill_source_term(f)
 
+            # Apply boundary conditions
+            grid.apply_boundary_conditions(u1)
+            grid.apply_boundary_conditions(u2)
+
+            # Create kernel for smoothing
             KernelClass = NumbaKernel if self.config.use_numba else NumPyKernel
             kernel = KernelClass(
                 N=N,
@@ -231,110 +222,21 @@ class MultigridPoisson(JacobiPoisson):
                 u_temp=u2,
                 f=f,
                 r=r,
+                grid=grid,
                 kernel=kernel,
-                communicator=self._communicator_obj,
-                decomposition=decomp
             )
             self.grid_levels.append(level_obj)
 
-    def _compute_aligned_cubic_decompositions(self, N_values):
-        """Compute cubic decompositions with aligned boundaries for multigrid.
-
-        For multigrid to work correctly, decomposition boundaries at fine levels
-        must map exactly to coarse level boundaries via 2:1 coarsening.
-        This means fine boundaries must be at EVEN global indices.
-
-        We compute boundaries at the coarsest level first, then derive finer
-        level boundaries by multiplying by 2.
-        """
-        from .mpi.decomposition import DomainDecomposition
-        from mpi4py import MPI
-
-        # Get process grid dimensions
-        dims = MPI.Compute_dims(self.size, 3)
-        px, py, pz = dims
-
-        # Compute boundaries at coarsest level
-        N_coarsest = N_values[-1]
-
-        def compute_aligned_splits(N, parts, coarsen_factor):
-            """Compute split boundaries that are divisible by coarsen_factor."""
-            base = N // parts
-            rem = N % parts
-
-            # Standard split
-            counts = [base + (1 if i < rem else 0) for i in range(parts)]
-
-            # Adjust to make boundaries align with coarsening
-            # Boundaries are cumsum of counts
-            boundaries = [0]
-            for c in counts:
-                boundaries.append(boundaries[-1] + c)
-
-            # For multigrid alignment, boundaries should be divisible by coarsen_factor
-            # This is automatically satisfied at coarsest level
-            # For finer levels, we multiply by 2
-
-            return counts, boundaries[:-1]  # starts
-
-        # Compute coarsest level splits
-        coarsest_splits = {}
-        for axis, (count, name) in enumerate([(pz, 'z'), (py, 'y'), (px, 'x')]):
-            if count > 1:
-                base = N_coarsest // count
-                rem = N_coarsest % count
-                counts = [base + (1 if i < rem else 0) for i in range(count)]
-                starts = [sum(counts[:i]) for i in range(count)]
-                coarsest_splits[axis] = (counts, starts)
-            else:
-                coarsest_splits[axis] = ([N_coarsest], [0])
-
-        # Build decompositions for all levels (from finest to coarsest)
-        decompositions = []
-
-        for level_idx, N in enumerate(N_values):
-            # Compute the coarsening factor from this level to coarsest
-            coarsen_factor = 2 ** (len(N_values) - 1 - level_idx)
-
-            # Scale coarsest boundaries to this level
-            level_splits = {}
-            for axis in range(3):
-                coarse_counts, coarse_starts = coarsest_splits[axis]
-                # Scale starts by coarsening factor
-                fine_starts = [s * coarsen_factor for s in coarse_starts]
-                # Compute counts based on starts and N
-                fine_counts = []
-                for i, start in enumerate(fine_starts):
-                    if i + 1 < len(fine_starts):
-                        end = fine_starts[i + 1]
-                    else:
-                        end = N
-                    fine_counts.append(end - start)
-                level_splits[axis] = (fine_counts, fine_starts)
-
-            # Create a DomainDecomposition with explicit splits
-            decomp = DomainDecomposition(N=N, size=self.size, strategy='cubic')
-
-            # Override the computed splits with our aligned splits
-            decomp._split_info = {
-                'nz': level_splits[0],
-                'ny': level_splits[1],
-                'nx': level_splits[2],
-            }
-
-            # Recompute rank info with aligned splits
-            decomp._recompute_rank_info_from_splits()
-
-            decompositions.append(decomp)
-
-        return decompositions
-
     def solve(self):
         """Execute V-Cycles until convergence."""
-        # Reset timers
+        # Reset timers and timeseries
         self._time_compute = 0.0
         self._time_halo = 0.0
         self._time_mpi = 0.0
+        self.timeseries.compute_times.clear()
+        self.timeseries.halo_exchange_times.clear()
+        self.timeseries.level_indices.clear()
+        self.timeseries.residual_history.clear()
 
         t_start_solve = MPI.Wtime()
         
@@ -375,45 +277,17 @@ class MultigridPoisson(JacobiPoisson):
         self.results.total_mpi_comm_time = self._time_mpi
         
     def _get_global_residual_norm(self, r_array: np.ndarray, lvl: "GridLevel" = None) -> float:
-        """Helper to compute global RMS norm of residual (matching JacobiPoisson).
+        """Compute global RMS norm of residual.
 
-        Uses allreduce to gather both the sum of squared residuals AND the total
-        interior point count across all ranks, ensuring all ranks compute the
-        same norm value.
-
-        For cubic decomposition, properly excludes global boundary cells.
+        Uses allreduce to gather sum of squared residuals across all ranks.
+        With DistributedGrid, interior slice [1:-1, 1:-1, 1:-1] always contains
+        only interior points (boundaries are in halos).
         """
-        if lvl is not None and self.size > 1 and self.decomposition_strategy == "cubic":
-            # For cubic, we need to exclude global boundary cells from residual
-            decomp = lvl.decomposition
-            info = decomp.get_rank_info(self.rank)
-            gs = info.global_start
-            ge = info.global_end
-            N = decomp.N
-
-            # Compute slice that excludes halos AND global boundaries
-            # Local index 1 corresponds to global_start, local index -2 corresponds to global_end - 1
-            slices = []
-            for dim in range(3):
-                # Start: skip halo (always), plus skip if at global boundary
-                start = 2 if gs[dim] == 0 else 1
-                # End: skip halo (always), plus skip if at global boundary
-                end = -2 if ge[dim] == N else -1
-                # Handle edge case where end would be 0 or positive
-                if end == 0:
-                    end = None
-                slices.append(slice(start, end))
-
-            interior = r_array[tuple(slices)]
-            local_res_sq = np.sum(interior ** 2)
-            local_interior_pts = float(interior.size)
-        else:
-            # For sliced or single-rank, the simple slice works
-            local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1] ** 2)
-            local_interior_pts = float(np.prod(np.array(r_array.shape) - 2))
+        # Interior slice is consistent for all decomposition strategies
+        local_res_sq = np.sum(r_array[1:-1, 1:-1, 1:-1] ** 2)
+        local_interior_pts = float(np.prod(np.array(r_array.shape) - 2))
 
         t0 = MPI.Wtime()
-        # Reduce both values in a single allreduce for efficiency
         local_data = np.array([local_res_sq, local_interior_pts])
         global_data = np.empty(2)
         self.comm.Allreduce(local_data, global_data, op=MPI.SUM)
@@ -427,106 +301,96 @@ class MultigridPoisson(JacobiPoisson):
     def v_cycle(self, level_idx: int) -> float:
         """Recursive V-Cycle Step."""
         lvl = self.grid_levels[level_idx]
-        
+
         # 1. Pre-smoothing
         for _ in range(self.n_smooth):
             self._smooth(lvl)
-            
+
         # 2. Compute Residual r = f - Au
         self._compute_residual(lvl)
-        
+
         # Return residual norm on finest level for convergence check
         if level_idx == 0:
             current_residual_norm = self._get_global_residual_norm(lvl.r, lvl)
         else:
-            current_residual_norm = 0.0 # Not needed for coarse levels
-        
-        # Base Case: Coarsest Level - solve with Jacobi until tolerance
-        # Use limited iterations on coarse grid (10-20 sweeps is typical for V-cycle)
+            current_residual_norm = 0.0
+
+        # Base Case: Coarsest Level
         if level_idx == self.levels - 1:
             return self._coarse_solve(lvl, max_iters=20)
 
         # 3. Restriction: f_coarse = R(r_fine)
         next_lvl = self.grid_levels[level_idx + 1]
 
-        # Ensure residual halos are up to date before restriction
+        # Sync residual halos before restriction
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm, level=level_idx)
+        lvl.grid.sync_halos(lvl.r)
         self._time_halo += MPI.Wtime() - t0
 
         t0 = MPI.Wtime()
-        # Use halo-aware operators for cubic decomposition (all dims have halos)
-        # Only use halo operators when actually using cubic decomposition (size > 1)
-        if self.size > 1 and self.decomposition_strategy == "cubic":
-            restrict_halo(lvl.r, next_lvl.f)
-        else:
-            restrict(lvl.r, next_lvl.f)
+        restrict(lvl.r, next_lvl.f)
         self._time_compute += MPI.Wtime() - t0
 
-        # Exchange halos on coarse RHS after restriction (needed for cubic decomposition)
+        # Sync coarse RHS halos after restriction
         t0 = MPI.Wtime()
-        next_lvl.communicator.exchange_halos(next_lvl.f, next_lvl.decomposition, self.rank, self.comm, level=level_idx + 1)
+        next_lvl.grid.sync_halos(next_lvl.f)
         self._time_halo += MPI.Wtime() - t0
 
         next_lvl.u[:] = 0.0
-        
+
         # 4. Recursion
         self.v_cycle(level_idx + 1)
-        
-        # 5. Prolongation: u_fine += P(u_coarse_correction)
 
-        # Refresh coarse halos before prolongation
+        # 5. Prolongation: u_fine += P(u_coarse_correction)
         t0 = MPI.Wtime()
-        next_lvl.communicator.exchange_halos(next_lvl.u, next_lvl.decomposition, self.rank, self.comm, level=level_idx + 1)
+        next_lvl.grid.sync_halos(next_lvl.u)
         self._time_halo += MPI.Wtime() - t0
-        
+
         lvl.r[:] = 0.0
         t0 = MPI.Wtime()
-        # Use halo-aware operators for cubic decomposition (all dims have halos)
-        # Only use halo operators when actually using cubic decomposition (size > 1)
-        if self.size > 1 and self.decomposition_strategy == "cubic":
-            prolong_halo(next_lvl.u, lvl.r)
-        else:
-            prolong(next_lvl.u, lvl.r)
+        prolong(next_lvl.u, lvl.r)
         self._time_compute += MPI.Wtime() - t0
 
-        # Exchange halos on prolongated correction (needed for cubic decomposition)
+        # Sync prolongated correction halos
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(lvl.r, lvl.decomposition, self.rank, self.comm, level=level_idx)
+        lvl.grid.sync_halos(lvl.r)
         self._time_halo += MPI.Wtime() - t0
 
         lvl.u[1:-1, 1:-1, 1:-1] += lvl.r[1:-1, 1:-1, 1:-1]
 
-        # For cubic decomposition, enforce Dirichlet BC at global boundaries
-        # Only needed when actually using cubic decomposition (size > 1)
-        if self.size > 1 and self.decomposition_strategy == "cubic":
-            lvl.decomposition.apply_boundary_conditions(lvl.u, self.rank)
+        # Enforce Dirichlet BC at physical boundaries
+        lvl.grid.apply_boundary_conditions(lvl.u)
 
         # 6. Post-smoothing
         for _ in range(self.n_smooth):
             self._smooth(lvl)
-            
+
         return current_residual_norm
 
-    def _coarse_solve(self, lvl: GridLevel, max_iters: int = 2000) -> float:
-        """Solve on the coarsest grid with Jacobi until tolerance or max iterations."""
-        current_residual_norm = float("inf")
-        iterations = 0
-        while iterations < max_iters:
+    def _coarse_solve(self, lvl: GridLevel, max_iters: int = 500) -> float:
+        """Solve on the coarsest grid accurately.
+
+        For FMG to work properly, the coarsest grid must be solved
+        to high accuracy since it provides the initial guess for all
+        finer levels. With MPI decomposition, the "coarse" grid may
+        still be fairly large (e.g., N=17 with 4 ranks), so we need
+        more iterations than the theoretical minimum.
+        """
+        for _ in range(max_iters):
             self._smooth(lvl)
-            self._compute_residual(lvl)
-            current_residual_norm = self._get_global_residual_norm(lvl.r, lvl)
-            iterations += 1
-            if current_residual_norm < self.config.tolerance:
-                break
-        return current_residual_norm
+        self._compute_residual(lvl)
+        return self._get_global_residual_norm(lvl.r, lvl)
 
-    def fmg_solve(self, cycles: int = 1):
+    def fmg_solve(self, cycles: int = 1, debug: bool = False):
         """Full Multigrid (FMG) cycle starting from the coarsest grid."""
-        # Reset timers
+        # Reset timers and timeseries
         self._time_compute = 0.0
         self._time_halo = 0.0
         self._time_mpi = 0.0
+        self.timeseries.compute_times.clear()
+        self.timeseries.halo_exchange_times.clear()
+        self.timeseries.level_indices.clear()
+        self.timeseries.residual_history.clear()
 
         # Clear solution arrays (keep f - each level has source at its resolution)
         for lvl in self.grid_levels:
@@ -534,49 +398,49 @@ class MultigridPoisson(JacobiPoisson):
             lvl.u_temp.fill(0.0)
             lvl.r.fill(0.0)
 
+        if debug and self.rank == 0:
+            print(f"[FMG] levels={self.levels}, fmg_post_cycles={self.fmg_post_cycles}")
+
         t_start = MPI.Wtime()
         residual = None
-        coarse_ok = True
 
-        for _ in range(cycles):
+        for c in range(cycles):
+            if debug and self.rank == 0:
+                print(f"[FMG] Cycle {c+1}/{cycles}: Coarse solve at level {self.levels-1}")
+
             # Solve on coarsest level
             coarse_res = self._coarse_solve(self.grid_levels[-1])
             residual = coarse_res
-            coarse_ok = coarse_ok and coarse_res < self.config.tolerance
 
             # Ascend hierarchy: prolongate and refine with a V-cycle at each level
             for l in reversed(range(self.levels - 1)):
+                if debug and self.rank == 0:
+                    print(f"[FMG] Ascending: prolong {l+1}->{l}, smooth, V-cycle({l})")
+
                 coarse = self.grid_levels[l + 1]
                 fine = self.grid_levels[l]
 
-                # Halo sync before prolongation
+                # Sync coarse halos before prolongation
                 t0 = MPI.Wtime()
-                coarse.communicator.exchange_halos(coarse.u, coarse.decomposition, self.rank, self.comm, level=l + 1)
+                coarse.grid.sync_halos(coarse.u)
                 self._time_halo += MPI.Wtime() - t0
 
                 # Prolong coarse solution as initial guess on fine
                 fine.r.fill(0.0)
                 t0 = MPI.Wtime()
-                # Use halo-aware operators for cubic decomposition (all dims have halos)
-                # Only use halo operators when actually using cubic decomposition (size > 1)
-                if self.size > 1 and self.decomposition_strategy == "cubic":
-                    prolong_halo(coarse.u, fine.r)
-                else:
-                    prolong(coarse.u, fine.r)
+                prolong(coarse.u, fine.r)
                 self._time_compute += MPI.Wtime() - t0
 
-                # Exchange halos on prolongated solution (needed for cubic decomposition)
+                # Sync prolongated solution halos
                 t0 = MPI.Wtime()
-                fine.communicator.exchange_halos(fine.r, fine.decomposition, self.rank, self.comm, level=l)
+                fine.grid.sync_halos(fine.r)
                 self._time_halo += MPI.Wtime() - t0
 
                 fine.u.fill(0.0)
                 fine.u[1:-1, 1:-1, 1:-1] = fine.r[1:-1, 1:-1, 1:-1]
 
-                # For cubic decomposition, enforce Dirichlet BC at global boundaries
-                # Only needed when actually using cubic decomposition (size > 1)
-                if self.size > 1 and self.decomposition_strategy == "cubic":
-                    fine.decomposition.apply_boundary_conditions(fine.u, self.rank)
+                # Enforce Dirichlet BC at physical boundaries
+                fine.grid.apply_boundary_conditions(fine.u)
 
                 # Smooth the interpolated guess
                 for _ in range(self.n_smooth):
@@ -590,11 +454,19 @@ class MultigridPoisson(JacobiPoisson):
         self._compute_residual(fine_lvl)
         residual = self._get_global_residual_norm(fine_lvl.r, fine_lvl)
 
-        # Optional finishing V-cycles on finest level to enforce tolerance
+        if debug and self.rank == 0:
+            print(f"[FMG] After FMG phase: residual={residual:.2e}")
+
+        # Optional finishing V-cycles on finest level
         post_iters = 0
         while residual >= self.config.tolerance and post_iters < min(self.fmg_post_cycles, self.config.max_iter):
+            if debug and self.rank == 0:
+                print(f"[FMG] Post V-cycle {post_iters+1}/{self.fmg_post_cycles}: residual={residual:.2e}")
             residual = self.v_cycle(0)
             post_iters += 1
+
+        if debug and self.rank == 0:
+            print(f"[FMG] Done: {post_iters} post V-cycles, final residual={residual:.2e}")
 
         # Finalize metrics
         self.results.wall_time = MPI.Wtime() - t_start
@@ -609,14 +481,21 @@ class MultigridPoisson(JacobiPoisson):
     def _smooth(self, lvl: GridLevel):
         """Perform one Jacobi smoothing step."""
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(lvl.u, lvl.decomposition, self.rank, self.comm, level=lvl.level_index)
-        self._time_halo += MPI.Wtime() - t0
-        
+        lvl.grid.sync_halos(lvl.u)
+        halo_time = MPI.Wtime() - t0
+        self._time_halo += halo_time
+
         t0 = MPI.Wtime()
         lvl.kernel.step(lvl.u, lvl.u_temp, lvl.f)
-        lvl.decomposition.apply_boundary_conditions(lvl.u_temp, self.rank)
-        self._time_compute += MPI.Wtime() - t0
+        lvl.grid.apply_boundary_conditions(lvl.u_temp)
+        compute_time = MPI.Wtime() - t0
+        self._time_compute += compute_time
         lvl.u, lvl.u_temp = lvl.u_temp, lvl.u
+
+        # Track per-operation timing
+        self.timeseries.compute_times.append(compute_time)
+        self.timeseries.halo_exchange_times.append(halo_time)
+        self.timeseries.level_indices.append(lvl.level_index)
 
     def _compute_residual(self, lvl: GridLevel):
         """Compute residual r = f - Au."""
@@ -626,7 +505,7 @@ class MultigridPoisson(JacobiPoisson):
         h2 = lvl.h * lvl.h
 
         t0 = MPI.Wtime()
-        lvl.communicator.exchange_halos(u, lvl.decomposition, self.rank, self.comm, level=lvl.level_index)
+        lvl.grid.sync_halos(u)
         self._time_halo += MPI.Wtime() - t0
 
         u_center = u[1:-1, 1:-1, 1:-1]
@@ -640,83 +519,23 @@ class MultigridPoisson(JacobiPoisson):
         laplacian_u = (u_neighbors - 6.0 * u_center) / h2
         r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian_u
 
-        # For cubic decomposition, zero out residual at global boundaries
-        # (those points have u=0 by Dirichlet BC, so residual should be 0)
-        # Only needed when actually using cubic decomposition (size > 1)
-        if self.size > 1 and self.decomposition_strategy == "cubic":
-            lvl.decomposition.apply_boundary_conditions(r, self.rank)
+        # Zero out residual at physical boundaries
+        lvl.grid.apply_boundary_conditions(r)
 
         self._time_compute += MPI.Wtime() - t0
         
     # ========================================================================
-    # Validation - Override parent to read from grid_levels[0].u directly
-    # (The swapping in _smooth makes pointer aliasing unreliable)
+    # Validation
     # ========================================================================
 
     def compute_l2_error(self):
         """Compute L2 error against analytical solution (parallel).
 
-        Overrides parent to read solution from grid hierarchy.
-        Each rank computes its local contribution, then MPI reduces.
-        Result stored in self.results.final_error on rank 0.
+        Uses DistributedGrid's compute_l2_error method which handles
+        both sliced and cubic decomposition consistently.
         """
-        N = self.config.N
-        h = 2.0 / (N - 1)
-
-        # Get final solution from finest level (always in .u after smoothing)
         fine_lvl = self.grid_levels[0]
-        u_local = fine_lvl.u
+        l2_error = fine_lvl.grid.compute_l2_error(fine_lvl.u)
 
-        # Compute exact solution for local domain
-        info = fine_lvl.decomposition.get_rank_info(self.rank)
-        gs = info.global_start
-        local_shape = info.local_shape
-
-        if (
-            hasattr(fine_lvl.decomposition, "strategy")
-            and fine_lvl.decomposition.strategy == "cubic"
-        ):
-            # Cubic: all dims decomposed
-            nz, ny, nx = local_shape
-            z_idx = np.arange(gs[0], gs[0] + nz)
-            y_idx = np.arange(gs[1], gs[1] + ny)
-            x_idx = np.arange(gs[2], gs[2] + nx)
-
-            zs = -1.0 + z_idx * h
-            ys = -1.0 + y_idx * h
-            xs = -1.0 + x_idx * h
-
-            Z = zs.reshape((nz, 1, 1))
-            Y = ys.reshape((1, ny, 1))
-            X = xs.reshape((1, 1, nx))
-
-            u_exact = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
-            u_numerical = u_local[1:-1, 1:-1, 1:-1]
-        else:
-            # Sliced: only z decomposed
-            nz = local_shape[0]
-            z_idx = np.arange(gs[0], gs[0] + nz)
-
-            zs = -1.0 + z_idx * h
-            ys = np.linspace(-1, 1, N)[1:-1]
-            xs = np.linspace(-1, 1, N)[1:-1]
-
-            Z, Y, X = np.meshgrid(zs, ys, xs, indexing="ij")
-            u_exact = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
-            u_numerical = u_local[1:-1, 1:-1, 1:-1]
-
-        # Compute local squared error
-        local_sq_error = np.sum((u_numerical - u_exact) ** 2)
-
-        # Global reduction
-        t0 = MPI.Wtime()
-        global_sq_error = self.comm.allreduce(local_sq_error, op=MPI.SUM)
-        self._time_mpi += MPI.Wtime() - t0
-        l2_error = float(np.sqrt(h**3 * global_sq_error))
-
-        if self.rank == 0:
-            self.results.final_error = l2_error
-            return l2_error
-        return None
-
-    # save_hdf5 inherited from JacobiPoisson
+        self.results.final_error = l2_error
+        return l2_error
