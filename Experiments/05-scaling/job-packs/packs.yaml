@@ -16,50 +16,17 @@
 #   - experiment_name (set to group name by default)
 
 # ----------------------------------------------------------------------------
-# Group 1: Single Node Strong Scaling
+# Strong Scaling
 # ----------------------------------------------------------------------------
-# Tests scaling on a single node (1-24 cores)
-# Grid sizes chosen to give meaningful work per core
-# ~5 min wall time with 100 iterations
-SN_strong:
+# Fixed global problem size: 256³
+# Ranks must form perfect cubes (n³) or double cubes (2n³):
+#   Perfect cubes: 1 (1³), 8 (2³), 27 (3³), 64 (4³)
+#   Double cubes:  2 (2×1³), 16 (2×2³), 54 (2×3³)
+# Tests: sliced vs cubic decomposition, NumPy vs custom communication
+strong_scaling:
   lsf_options:
     - "-q hpc"
-    - "-W 00:10"
-    - "-n {ranks}"
-    - "-J {job_name}"
-    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
-    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-    - "-R 'rusage[mem=4GB]'"
-    - "-R 'span[hosts=1]'"
-
-  command: >-
-    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
-    module purge && module load mpi && uv sync &&
-    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
-    --N {N} --strategy {strategy} --communicator {communicator}
-    --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name Experiment-05-Scaling
-
-  static_args:
-    tol: 0.0
-    max_iter: 100
-
-  sweep:
-    N: [256]
-    ranks: [8, 16, 32, 64, 96]
-    strategy: ["sliced", "cubic"]
-    communicator: ["numpy", "custom"]
-
-# ----------------------------------------------------------------------------
-# Group 2: Multi Node Strong Scaling
-# ----------------------------------------------------------------------------
-# Tests scaling across multiple nodes (24+ cores)
-# Larger grid to ensure enough work for many cores
-# ~5-10 min wall time
-MN_strong:
-  lsf_options:
-    - "-q hpc"
-    - "-W 00:15"
+    - "-W 00:30"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
@@ -73,88 +40,122 @@ MN_strong:
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name Experiment-05-Scaling
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 100
+    N: 256
+
+  sweep:
+    ranks: [1, 2, 8, 16, 27, 54, 64]
+    strategy: ["sliced", "cubic"]
+    communicator: ["numpy", "custom"]
+
+# ----------------------------------------------------------------------------
+# Weak Scaling - Cubic Decomposition
+# ----------------------------------------------------------------------------
+# Local size per rank: ~64³ cells
+# Ranks must form perfect cubes (n³) or double cubes (2n³)
+# For cubic grids N³ with P ranks: local size = N/p^(1/3) per dimension
+# Perfect cubes (n×n×n decomp): P=1,8,27,64 -> N=64,128,192,256
+# Double cubes (2n×n×n decomp): P=2,16,54 -> N=80,160,240 (approx 64³ per rank)
+weak_scaling:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
 
   static_args:
     tol: 0.0
     max_iter: 100
 
+  # Paired: N and ranks vary together (zipped, not cartesian)
+  # Perfect cubes: P=n³, N=64n
+  # Double cubes: P=2n³, N=64*cbrt(2)*n ≈ 80n (rounded to nice values)
+  sweep_paired:
+    N: [64, 80, 128, 160, 192, 240, 256]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
+
   sweep:
-    N: [256]
-    ranks: [24, 48, 96]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
 # ----------------------------------------------------------------------------
-# Group 3: Weak Scaling (Sliced)
+# FMG Strong Scaling
 # ----------------------------------------------------------------------------
-# Problem size per processor stays constant
-# For sliced (1D decomposition): N scales linearly with p
-# p=1->N=32, p=2->N=64, p=4->N=128, p=8->N=256
-SN_weak_sliced:
+# Full Multigrid with cubic decomposition and custom communicator
+# Fixed global problem size: 256³
+# Ranks must form perfect cubes (n³) or double cubes (2n³)
+FMG_strong:
   lsf_options:
     - "-q hpc"
-    - "-W 00:10"
+    - "-W 00:30"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=4GB]'"
-    - "-R 'span[hosts=1]'"
+    - "-R 'span[ptile=24]'"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
-    --N {N} --strategy sliced --communicator {communicator}
-    --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name Experiment-05-Scaling
+    --N {N} --strategy cubic --communicator custom
+    --fmg --fmg-cycles {fmg_cycles} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
 
   static_args:
-    tol: 0.0
-    max_iter: 50
+    N: 256
+    fmg_cycles: 1
 
-  # Paired: N and ranks vary together (zipped, not cartesian)
-  sweep_paired:
-    N: [32, 64, 128, 256]
-    ranks: [1, 2, 4, 8]
-
-  # Regular sweep: cartesian product with communicator
   sweep:
-    communicator: ["numpy", "custom"]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
 
 # ----------------------------------------------------------------------------
-# Group 4: Weak Scaling (Cubic)
+# FMG Weak Scaling - Cubic Decomposition
 # ----------------------------------------------------------------------------
-# For cubic (3D decomposition): N scales with p^(1/3)
-# p=1->N=32, p=8->N=64, p=27->N=96
-SN_weak_cubic:
+# Full Multigrid with cubic decomposition and custom communicator
+# Local size per rank: ~64³ cells
+# Ranks must form perfect cubes (n³) or double cubes (2n³)
+# Perfect cubes: P=1,8,27,64 -> N=64,128,192,256
+# Double cubes: P=2,16,54 -> N=80,160,240
+FMG_weak:
   lsf_options:
     - "-q hpc"
-    - "-W 00:10"
+    - "-W 00:30"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=4GB]'"
-    - "-R 'span[hosts=1]'"
+    - "-R 'span[ptile=24]'"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
-    --N {N} --strategy cubic --communicator {communicator}
-    --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name Experiment-05-Scaling
+    --N {N} --strategy cubic --communicator custom
+    --fmg --fmg-cycles {fmg_cycles} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
 
   static_args:
-    tol: 0.0
-    max_iter: 50
+    fmg_cycles: 1
 
-  # Paired: N and ranks vary together
   sweep_paired:
-    N: [32, 64, 96]
-    ranks: [1, 8, 27]
-
-  sweep:
-    communicator: ["numpy", "custom"]
+    N: [64, 80, 128, 160, 192, 240, 256]
+    ranks: [1, 2, 8, 16, 27, 54, 64]
