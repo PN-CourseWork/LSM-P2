@@ -20,7 +20,7 @@
 # ----------------------------------------------------------------------------
 SN_strong:
   lsf_options:
-    - "-q hpcint"
+    - "-q hpcintro"
     - "-W 00:05"
     - "-n {ranks}"
     - "-J {job_name}"
@@ -28,7 +28,6 @@ SN_strong:
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=2GB]'"
     - "-R 'span[hosts=1]'"
-    - "-g /strong_scaling"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
@@ -62,7 +61,6 @@ MN_strong:
     - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
     - "-R 'rusage[mem=8GB]'"
     - "-R 'span[ptile=24]'"
-    - "-g /poisson_project/strong_scaling"
 
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
