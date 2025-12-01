@@ -86,12 +86,14 @@ t0 = MPI.Wtime()
 solver.solve()
 wall_time = MPI.Wtime() - t0
 
-# --- Post-processing, Logging, and Summary on Rank 0 ---
+# --- Post-processing ---
+# compute_l2_error uses MPI allreduce, so ALL ranks must call it
 if rank == 0:
-    # Populate final metrics
     solver.results.wall_time = wall_time
-    solver.compute_l2_error()
+solver.compute_l2_error()
 
+# --- Logging and Summary on Rank 0 only ---
+if rank == 0:
     # Save solution to HDF5
     project_root = get_project_root()
     data_dir = project_root / "data" / "05-scaling"
@@ -105,7 +107,7 @@ if rank == 0:
     # Find or create parent run, then start nested child run
     parent_run_name = f"N{args.N}"
     run_name = f"N{args.N}_p{n_ranks}_{args.strategy}"
-    
+
     with start_mlflow_run_context(experiment_name, parent_run_name, run_name, args=args):
         # Log all data
         log_parameters(asdict(solver.config))

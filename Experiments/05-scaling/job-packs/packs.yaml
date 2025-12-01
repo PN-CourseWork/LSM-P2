@@ -21,7 +21,7 @@
 SN_strong:
   lsf_options:
     - "-q hpcintro"
-    - "-W 00:05"
+    - "-W 00:10"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
@@ -35,7 +35,7 @@ SN_strong:
     mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name {experiment_name}
+    --job-name {job_name} --experiment-name Experiment-05-Scaling
 
   static_args:
     tol: 0.0
@@ -43,7 +43,7 @@ SN_strong:
 
   sweep:
     N: [8]
-    ranks: [1]
+    ranks: [8]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
@@ -69,7 +69,7 @@ MN_strong:
     uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
-    --job-name {job_name} --experiment-name {experiment_name}
+    --job-name {job_name} --experiment-name Experiment-05-Scaling
 
   static_args:
     tol: 1e-6
