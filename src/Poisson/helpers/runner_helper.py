@@ -74,7 +74,8 @@ else:
 
 t0 = MPI.Wtime()
 if solver_type == "fmg":
-    solver.fmg_solve()
+    cycles = config.get("fmg_cycles", 1)  # Default to 1 FMG cycle
+    solver.fmg_solve(cycles=cycles)
 else:
     solver.solve()
 wall_time = MPI.Wtime() - t0

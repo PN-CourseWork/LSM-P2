@@ -370,7 +370,7 @@ class MultigridPoisson:
 
         For cubic decomposition, properly excludes global boundary cells.
         """
-        if lvl is not None and self.decomposition_strategy == "cubic":
+        if lvl is not None and self.size > 1 and self.decomposition_strategy == "cubic":
             # For cubic, we need to exclude global boundary cells from residual
             decomp = lvl.decomposition
             info = decomp.get_rank_info(self.rank)
@@ -443,7 +443,8 @@ class MultigridPoisson:
 
         t0 = MPI.Wtime()
         # Use halo-aware operators for cubic decomposition (all dims have halos)
-        if self.decomposition_strategy == "cubic":
+        # Only use halo operators when actually using cubic decomposition (size > 1)
+        if self.size > 1 and self.decomposition_strategy == "cubic":
             restrict_halo(lvl.r, next_lvl.f)
         else:
             restrict(lvl.r, next_lvl.f)
@@ -469,7 +470,8 @@ class MultigridPoisson:
         lvl.r[:] = 0.0
         t0 = MPI.Wtime()
         # Use halo-aware operators for cubic decomposition (all dims have halos)
-        if self.decomposition_strategy == "cubic":
+        # Only use halo operators when actually using cubic decomposition (size > 1)
+        if self.size > 1 and self.decomposition_strategy == "cubic":
             prolong_halo(next_lvl.u, lvl.r)
         else:
             prolong(next_lvl.u, lvl.r)
@@ -483,7 +485,8 @@ class MultigridPoisson:
         lvl.u[1:-1, 1:-1, 1:-1] += lvl.r[1:-1, 1:-1, 1:-1]
 
         # For cubic decomposition, enforce Dirichlet BC at global boundaries
-        if self.decomposition_strategy == "cubic":
+        # Only needed when actually using cubic decomposition (size > 1)
+        if self.size > 1 and self.decomposition_strategy == "cubic":
             lvl.decomposition.apply_boundary_conditions(lvl.u, self.rank)
 
         # 6. Post-smoothing
@@ -542,7 +545,8 @@ class MultigridPoisson:
                 fine.r.fill(0.0)
                 t0 = MPI.Wtime()
                 # Use halo-aware operators for cubic decomposition (all dims have halos)
-                if self.decomposition_strategy == "cubic":
+                # Only use halo operators when actually using cubic decomposition (size > 1)
+                if self.size > 1 and self.decomposition_strategy == "cubic":
                     prolong_halo(coarse.u, fine.r)
                 else:
                     prolong(coarse.u, fine.r)
@@ -557,7 +561,8 @@ class MultigridPoisson:
                 fine.u[1:-1, 1:-1, 1:-1] = fine.r[1:-1, 1:-1, 1:-1]
 
                 # For cubic decomposition, enforce Dirichlet BC at global boundaries
-                if self.decomposition_strategy == "cubic":
+                # Only needed when actually using cubic decomposition (size > 1)
+                if self.size > 1 and self.decomposition_strategy == "cubic":
                     fine.decomposition.apply_boundary_conditions(fine.u, self.rank)
 
                 # Smooth the interpolated guess
@@ -624,7 +629,8 @@ class MultigridPoisson:
 
         # For cubic decomposition, zero out residual at global boundaries
         # (those points have u=0 by Dirichlet BC, so residual should be 0)
-        if self.decomposition_strategy == "cubic":
+        # Only needed when actually using cubic decomposition (size > 1)
+        if self.size > 1 and self.decomposition_strategy == "cubic":
             lvl.decomposition.apply_boundary_conditions(r, self.rank)
 
         self._time_compute += MPI.Wtime() - t0
