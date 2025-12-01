@@ -27,6 +27,7 @@ from utils.mlflow.io import (
     log_parameters,
     log_metrics_dict,
     log_artifact_file,
+    log_lsf_logs,
 )
 
 # --- Argument Parsing ---
@@ -38,7 +39,7 @@ parser.add_argument("--omega", type=float, default=2/3, help="Relaxation paramet
 parser.add_argument("--strategy", choices=["sliced", "cubic"], default="cubic", help="Decomposition strategy")
 parser.add_argument("--communicator", choices=["numpy", "custom"], default="custom", help="Halo exchange communicator")
 parser.add_argument("--job-name", type=str, default=None, help="LSF Job Name for log retrieval")
-parser.add_argument("--log-dir", type=str, default="logs", help="Directory for LSF logs")
+parser.add_argument("--log-dir", type=str, default="logs/lsf", help="Directory for LSF logs")
 parser.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name")
 args = parser.parse_args()
 
@@ -116,6 +117,7 @@ if rank == 0:
         # Log results
         log_metrics_dict(asdict(solver.results))
         log_artifact_file(output_file)
+        log_lsf_logs(args.job_name, args.log_dir)
 
     # --- Final Summary ---
     print("\n--- FMG Run Complete ---")

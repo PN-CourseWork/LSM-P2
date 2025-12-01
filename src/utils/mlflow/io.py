@@ -139,6 +139,36 @@ def log_artifact_file(filepath: Path):
         print(f"  ✗ WARNING: Artifact file not found at {filepath}")
 
 
+def log_lsf_logs(job_name: Optional[str], log_dir: str = "logs/lsf"):
+    """
+    Upload LSF .out and .err log files as MLflow artifacts.
+
+    Parameters
+    ----------
+    job_name : str or None
+        The LSF job name (used to find log files)
+    log_dir : str
+        Directory containing LSF logs (default: logs/lsf)
+    """
+    if not job_name:
+        return
+
+    try:
+        from Poisson import get_project_root
+        project_root = get_project_root()
+    except ImportError:
+        project_root = Path.cwd()
+
+    log_path = project_root / log_dir
+
+    for ext in [".out", ".err"]:
+        log_file = log_path / f"{job_name}{ext}"
+        if log_file.exists():
+            mlflow.log_artifact(str(log_file), artifact_path="lsf_logs")
+            print(f"  ✓ Logged LSF log: {log_file.name}")
+        # Don't warn if not found - logs may not exist yet during local testing
+
+
 def fetch_project_artifacts(output_dir: Path, force: bool = False):
     """
     Dynamically discovers and fetches artifacts from all experiments under the

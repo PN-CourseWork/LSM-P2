@@ -2,15 +2,15 @@
 #                         LSF EXPERIMENT CONFIGURATION
 # ============================================================================
 #
-# Updated for N=1025 (2^10+1) targeting ~5 minute runtime
+# Node architecture: 24 cores/node (2 sockets × 12 cores/socket)
 #
-# Memory estimates for N=1025:
-#   - Jacobi: ~24 GB total, ~3.5 GB/rank with 8 ranks
-#   - FMG: ~34 GB total
+# Sliced decomposition: divides along z-axis only
+#   - Valid ranks: divisors of 1024 (for N=1025)
+#   - More flexibility: 1, 2, 4, 8, 16, 32, 64
 #
-# Timing estimates (8 ranks):
-#   - Jacobi: ~1.2 s/iter → 300 iters ≈ 6 min
-#   - FMG: ~73 s/cycle → 4 cycles ≈ 5 min
+# Cubic decomposition: divides along all 3 axes
+#   - Valid ranks: perfect cubes where cbrt divides 1024
+#   - Restricted to: 1, 8, 64
 #
 # Generate all packs: python main.py --hpc
 #
@@ -20,7 +20,6 @@
 # ############################################################################
 #                                   TEST
 # ############################################################################
-# Quick sanity check before running full experiments
 
 test:
   sanity:
@@ -40,7 +39,7 @@ test:
       export NUMBA_NUM_THREADS=1 &&
       mpiexec {map_by} --bind-to core -n {ranks}
       uv run python Experiments/06-scaling/jacobi_runner.py
-      --N {N} --strategy cubic --communicator custom
+      --N {N} --strategy sliced --communicator custom
       --tol 0.0 --max-iter 20 --numba
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
@@ -48,28 +47,27 @@ test:
       N: 513
 
     sweep_paired:
-      ranks: [1, 8, 24]
-      n_cores: [24, 24, 24]
-      map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package"]
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
 
 # ############################################################################
-#                          JACOBI STRONG SCALING
+#                    JACOBI STRONG SCALING - SLICED
 # ############################################################################
-# Fixed problem size N=1025, vary number of ranks
-# Target runtime: ~5 minutes with 300 iterations
+# More data points since sliced only needs ranks to divide 1024
 
-jacobi_strong_scaling:
+jacobi_strong_sliced:
 
-  strong_scaling:
+  strong_sliced:
     lsf_options:
       - "-q hpcintro"
-      - "-W 00:15"
+      - "-W 00:20"
       - "-n {n_cores}"
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=6GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -78,7 +76,7 @@ jacobi_strong_scaling:
       export NUMBA_NUM_THREADS=1 &&
       mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
       uv run python Experiments/06-scaling/jacobi_runner.py
-      --N {N} --strategy {strategy} --communicator {communicator}
+      --N {N} --strategy sliced --communicator {communicator}
       --tol {tol} --max-iter {max_iter} --numba
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
@@ -88,32 +86,30 @@ jacobi_strong_scaling:
       N: 1025
 
     sweep_paired:
-      ranks: [1, 8, 27, 64, 125]
-      n_cores: [24, 24, 48, 72, 144]
-      map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
+      ranks: [1, 2, 4, 8, 16, 32, 64]
+      n_cores: [24, 24, 24, 24, 24, 48, 96]
+      map_by: ["--map-by core", "--map-by ppr:1:package", "--map-by ppr:2:package", "--map-by ppr:4:package", "--map-by ppr:8:package", "--map-by ppr:8:package", "--map-by ppr:8:package"]
 
     sweep:
-      strategy: ["sliced", "cubic"]
       communicator: ["numpy", "custom"]
 
 
 # ############################################################################
-#                          JACOBI WEAK SCALING
+#                    JACOBI STRONG SCALING - CUBIC
 # ############################################################################
-# N scales with cbrt(ranks) to keep work per rank constant
-# Base: N=256 for 1 rank → N=512 for 8 ranks → N=1024 for 64 ranks
+# Restricted to perfect cubes: 1, 8, 64
 
-jacobi_weak_scaling:
+jacobi_strong_cubic:
 
-  weak_scaling:
+  strong_cubic:
     lsf_options:
       - "-q hpcintro"
-      - "-W 00:15"
+      - "-W 00:20"
       - "-n {n_cores}"
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=6GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -122,7 +118,49 @@ jacobi_weak_scaling:
       export NUMBA_NUM_THREADS=1 &&
       mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
       uv run python Experiments/06-scaling/jacobi_runner.py
-      --N {N} --strategy {strategy} --communicator {communicator}
+      --N {N} --strategy cubic --communicator {communicator}
+      --tol {tol} --max-iter {max_iter} --numba
+      --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
+
+    static_args:
+      tol: 0.0
+      max_iter: 300
+      N: 1025
+
+    sweep_paired:
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
+
+    sweep:
+      communicator: ["numpy", "custom"]
+
+
+# ############################################################################
+#                    JACOBI WEAK SCALING - SLICED
+# ############################################################################
+# N = 256 * cbrt(ranks), using N values where ranks divide N-1
+
+jacobi_weak_sliced:
+
+  weak_sliced:
+    lsf_options:
+      - "-q hpcintro"
+      - "-W 00:20"
+      - "-n {n_cores}"
+      - "-J {job_name}"
+      - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+      - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+      - "-R 'rusage[mem=4GB]'"
+      - "-R 'span[ptile=24]'"
+
+    command: >-
+      cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+      module purge && module load mpi && uv sync &&
+      export NUMBA_NUM_THREADS=1 &&
+      mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+      uv run python Experiments/06-scaling/jacobi_runner.py
+      --N {N} --strategy sliced --communicator {communicator}
       --tol {tol} --max-iter {max_iter} --numba
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
@@ -131,34 +169,71 @@ jacobi_weak_scaling:
       max_iter: 300
 
     sweep_paired:
-      ranks: [1, 8, 27, 64, 125]
-      n_cores: [24, 24, 48, 72, 144]
-      N: [256, 512, 768, 1024, 1280]
-      map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      N: [257, 513, 1025]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
-      strategy: ["sliced", "cubic"]
       communicator: ["numpy", "custom"]
 
 
 # ############################################################################
-#                          FMG STRONG SCALING
+#                    JACOBI WEAK SCALING - CUBIC
 # ############################################################################
-# Fixed problem size N=1025 (valid multigrid: 2^10+1)
-# FMG is O(N³) per cycle, ~73s/cycle for N=1025 with 8 ranks
-# Run 4 cycles for ~5 min runtime
 
-FMG_strong_scaling:
+jacobi_weak_cubic:
 
-  FMG_strong:
+  weak_cubic:
     lsf_options:
       - "-q hpcintro"
-      - "-W 00:15"
+      - "-W 00:20"
       - "-n {n_cores}"
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=8GB]'"
+      - "-R 'rusage[mem=4GB]'"
+      - "-R 'span[ptile=24]'"
+
+    command: >-
+      cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+      module purge && module load mpi && uv sync &&
+      export NUMBA_NUM_THREADS=1 &&
+      mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+      uv run python Experiments/06-scaling/jacobi_runner.py
+      --N {N} --strategy cubic --communicator {communicator}
+      --tol {tol} --max-iter {max_iter} --numba
+      --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
+
+    static_args:
+      tol: 0.0
+      max_iter: 300
+
+    sweep_paired:
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      N: [257, 513, 1025]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
+
+    sweep:
+      communicator: ["numpy", "custom"]
+
+
+# ############################################################################
+#                      FMG STRONG SCALING - SLICED
+# ############################################################################
+
+FMG_strong_sliced:
+
+  FMG_strong_sliced:
+    lsf_options:
+      - "-q hpcintro"
+      - "-W 00:20"
+      - "-n {n_cores}"
+      - "-J {job_name}"
+      - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+      - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+      - "-R 'rusage[mem=5GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -167,42 +242,39 @@ FMG_strong_scaling:
       export NUMBA_NUM_THREADS=1 &&
       mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
       uv run python Experiments/06-scaling/fmg_runner.py
-      --N {N} --strategy {strategy} --communicator {communicator}
+      --N {N} --strategy sliced --communicator {communicator}
       --cycles {cycles} --n-smooth {n_smooth}
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
     static_args:
       N: 1025
-      cycles: 4
+      cycles: 1
       n_smooth: 3
 
     sweep_paired:
-      ranks: [1, 8, 27, 64, 125]
-      n_cores: [24, 24, 48, 72, 144]
-      map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package", "--map-by ppr:12:package", "--map-by ppr:12:package"]
+      ranks: [1, 2, 4, 8, 16, 32, 64]
+      n_cores: [24, 24, 24, 24, 24, 48, 96]
+      map_by: ["--map-by core", "--map-by ppr:1:package", "--map-by ppr:2:package", "--map-by ppr:4:package", "--map-by ppr:8:package", "--map-by ppr:8:package", "--map-by ppr:8:package"]
 
     sweep:
-      strategy: ["sliced", "cubic"]
       communicator: ["numpy", "custom"]
 
 
 # ############################################################################
-#                          FMG WEAK SCALING
+#                      FMG STRONG SCALING - CUBIC
 # ############################################################################
-# N must be 2^k+1 for valid multigrid
-# Scaling: 257 → 513 → 1025 (doubling N requires 8x ranks for weak scaling)
 
-FMG_weak_scaling:
+FMG_strong_cubic:
 
-  FMG_weak:
+  FMG_strong_cubic:
     lsf_options:
       - "-q hpcintro"
-      - "-W 00:15"
+      - "-W 00:20"
       - "-n {n_cores}"
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=8GB]'"
+      - "-R 'rusage[mem=5GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -211,20 +283,101 @@ FMG_weak_scaling:
       export NUMBA_NUM_THREADS=1 &&
       mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
       uv run python Experiments/06-scaling/fmg_runner.py
-      --N {N} --strategy {strategy} --communicator {communicator}
+      --N {N} --strategy cubic --communicator {communicator}
       --cycles {cycles} --n-smooth {n_smooth}
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
     static_args:
-      cycles: 4
+      N: 1025
+      cycles: 1
       n_smooth: 3
 
     sweep_paired:
       ranks: [1, 8, 64]
-      n_cores: [24, 24, 72]
-      N: [257, 513, 1025]
-      map_by: ["--map-by core", "--map-by core", "--map-by ppr:12:package"]
+      n_cores: [24, 24, 96]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
-      strategy: ["sliced", "cubic"]
+      communicator: ["numpy", "custom"]
+
+
+# ############################################################################
+#                      FMG WEAK SCALING - SLICED
+# ############################################################################
+
+FMG_weak_sliced:
+
+  FMG_weak_sliced:
+    lsf_options:
+      - "-q hpcintro"
+      - "-W 00:20"
+      - "-n {n_cores}"
+      - "-J {job_name}"
+      - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+      - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+      - "-R 'rusage[mem=5GB]'"
+      - "-R 'span[ptile=24]'"
+
+    command: >-
+      cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+      module purge && module load mpi && uv sync &&
+      export NUMBA_NUM_THREADS=1 &&
+      mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+      uv run python Experiments/06-scaling/fmg_runner.py
+      --N {N} --strategy sliced --communicator {communicator}
+      --cycles {cycles} --n-smooth {n_smooth}
+      --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
+
+    static_args:
+      cycles: 1
+      n_smooth: 3
+
+    sweep_paired:
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      N: [257, 513, 1025]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
+
+    sweep:
+      communicator: ["numpy", "custom"]
+
+
+# ############################################################################
+#                      FMG WEAK SCALING - CUBIC
+# ############################################################################
+
+FMG_weak_cubic:
+
+  FMG_weak_cubic:
+    lsf_options:
+      - "-q hpcintro"
+      - "-W 00:20"
+      - "-n {n_cores}"
+      - "-J {job_name}"
+      - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+      - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+      - "-R 'rusage[mem=5GB]'"
+      - "-R 'span[ptile=24]'"
+
+    command: >-
+      cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+      module purge && module load mpi && uv sync &&
+      export NUMBA_NUM_THREADS=1 &&
+      mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
+      uv run python Experiments/06-scaling/fmg_runner.py
+      --N {N} --strategy cubic --communicator {communicator}
+      --cycles {cycles} --n-smooth {n_smooth}
+      --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
+
+    static_args:
+      cycles: 1
+      n_smooth: 3
+
+    sweep_paired:
+      ranks: [1, 8, 64]
+      n_cores: [24, 24, 96]
+      N: [257, 513, 1025]
+      map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
+
+    sweep:
       communicator: ["numpy", "custom"]

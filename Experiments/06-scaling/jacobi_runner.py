@@ -27,6 +27,7 @@ from utils.mlflow.io import (
     log_metrics_dict,
     log_timeseries_metrics,
     log_artifact_file,
+    log_lsf_logs,
 )
 
 # --- Argument Parsing ---
@@ -39,7 +40,7 @@ parser.add_argument("--strategy", choices=["sliced", "cubic"], default="sliced",
 parser.add_argument("--communicator", choices=["numpy", "custom"], default="numpy", help="Halo exchange communicator")
 parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
 parser.add_argument("--job-name", type=str, default=None, help="LSF Job Name for log retrieval")
-parser.add_argument("--log-dir", type=str, default="logs", help="Directory for LSF logs")
+parser.add_argument("--log-dir", type=str, default="logs/lsf", help="Directory for LSF logs")
 parser.add_argument("--experiment-name", type=str, default=None, help="MLflow experiment name")
 args = parser.parse_args()
 
@@ -112,6 +113,7 @@ if rank == 0:
         log_metrics_dict(asdict(solver.results))
         log_timeseries_metrics(solver.timeseries)
         log_artifact_file(output_file)
+        log_lsf_logs(args.job_name, args.log_dir)
 
     # --- Final Summary ---
     print("\n--- Run Complete ---")
