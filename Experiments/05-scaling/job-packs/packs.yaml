@@ -42,7 +42,7 @@ SN_strong:
     max_iter: 100
 
   sweep:
-    N: [32]
+    N: [32, 64]
     ranks: [8, 18, 24]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
