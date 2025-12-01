@@ -43,7 +43,7 @@ SN_strong:
 
   sweep:
     N: [8]
-    ranks: [2]
+    ranks: [1]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
