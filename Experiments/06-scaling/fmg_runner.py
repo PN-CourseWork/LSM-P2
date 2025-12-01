@@ -88,13 +88,13 @@ solver.compute_l2_error()
 if rank == 0:
     # Save solution to HDF5
     project_root = get_project_root()
-    data_dir = project_root / "data" / "05-scaling" / "fmg"
+    data_dir = project_root / "data" / "06-scaling" / "fmg"
     data_dir.mkdir(parents=True, exist_ok=True)
     output_file = data_dir / f"fmg_N{args.N}_p{n_ranks}_{args.strategy}_{args.communicator}.h5"
     solver.save_hdf5(output_file)
 
     # --- MLflow Logging ---
-    experiment_name = args.experiment_name or "Experiment-05-Scaling-FMG"
+    experiment_name = args.experiment_name or "Experiment-06-Scaling-FMG"
 
     # Find or create parent run, then start nested child run
     parent_run_name = f"FMG_N{args.N}"

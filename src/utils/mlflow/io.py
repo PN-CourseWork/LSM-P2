@@ -219,7 +219,10 @@ def download_artifacts(
     exclude_parent_runs: bool = True,
 ) -> List[Path]:
     """
-    Download all artifacts from all non-parent runs in a given experiment.
+    Download artifacts from the newest run per run name in an experiment.
+
+    When multiple runs have the same name, only artifacts from the most recent
+    run are downloaded to avoid duplicates and ensure latest data.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,16 +233,29 @@ def download_artifacts(
         print(f"  - Experiment '{experiment_name}' not found.")
         return []
 
-    runs = client.search_runs(experiment_ids=[exp.experiment_id])
+    # Order by start_time DESC to get newest first
+    runs = client.search_runs(
+        experiment_ids=[exp.experiment_id],
+        order_by=["start_time DESC"],
+    )
     if not runs:
         return []
 
-    # Filter out parent runs in Python (Databricks doesn't support OR in filters)
+    # Filter out parent runs
     if exclude_parent_runs:
         runs = [r for r in runs if r.data.tags.get("is_parent") != "true"]
 
-    downloaded = []
+    # Keep only the newest run per run name (first occurrence since sorted DESC)
+    seen_names = set()
+    unique_runs = []
     for run in runs:
+        run_name = run.info.run_name or run.info.run_id
+        if run_name not in seen_names:
+            seen_names.add(run_name)
+            unique_runs.append(run)
+
+    downloaded = []
+    for run in unique_runs:
         run_id = run.info.run_id
         artifacts = client.list_artifacts(run_id)
 

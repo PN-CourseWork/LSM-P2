@@ -15,7 +15,7 @@ setup_mlflow_tracking()
 
 # Paths
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "06-multigrid"
+data_dir = repo_root / "data" / "05-multigrid"
 data_dir.mkdir(parents=True, exist_ok=True)
 
 # Parameters
@@ -35,7 +35,7 @@ print("=" * 60)
 
 # --- MLflow Logging ---
 try:
-    mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-06-Multigrid")
+    mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-05-Multigrid")
     with mlflow.start_run(run_name="FMG-Spatial-Convergence") as run:
         print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
 

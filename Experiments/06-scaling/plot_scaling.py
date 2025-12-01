@@ -23,7 +23,7 @@ sns.set_theme()
 
 # Get paths
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "05-scaling"
+data_dir = repo_root / "data" / "06-scaling"
 fmg_dir = data_dir / "fmg"
 fig_dir = repo_root / "figures" / "scaling"
 fig_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +66,7 @@ df_all = pd.concat([df_jacobi, df_fmg], ignore_index=True) if not df_fmg.empty e
 if df_all.empty:
     print(f"No data found in {data_dir}")
     print("Run scaling experiments first:")
-    print("  mpiexec -n P uv run python Experiments/05-scaling/jacobi_runner.py --N 64")
+    print("  mpiexec -n P uv run python Experiments/06-scaling/jacobi_runner.py --N 64")
     import sys
     sys.exit(0)
 

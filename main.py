@@ -111,7 +111,7 @@ Examples:
     if args.hpc:
         config = load_project_config()
         default_conf = config.get("hpc", {}).get(
-            "default_config", "Experiments/05-scaling/job-packs/packs.yaml"
+            "default_config", "Experiments/06-scaling/job-packs/packs.yaml"
         )
         config_path = default_conf if args.hpc == "DEFAULT" else args.hpc
         interactive_generate(config_path)
