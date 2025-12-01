@@ -446,7 +446,7 @@ def _get_questionary_style():
 
 
 def interactive_generate(config_path: str | Path, job_packs_dir: Path | None = None) -> None:
-    """Handle job pack generation workflow.
+    """Generate all job packs from config.
 
     Parameters
     ----------
@@ -455,7 +455,6 @@ def interactive_generate(config_path: str | Path, job_packs_dir: Path | None = N
     job_packs_dir : Path, optional
         Output directory for pack files. Defaults to same directory as config.
     """
-    import questionary
     from pathlib import Path
 
     config_path = Path(config_path)
@@ -465,71 +464,29 @@ def interactive_generate(config_path: str | Path, job_packs_dir: Path | None = N
     print(f"\n--- Generate Job Packs ---")
     print(f"Config: {config_path}")
 
-    # Check for pack definitions first
-    packs = get_available_packs(config_path)
+    config = load_config(config_path)
 
-    if packs:
-        # Show pack options with their groups
-        choices = []
-        for pack_name, groups in packs.items():
-            label = f"{pack_name} ({', '.join(groups)})"
-            choices.append(questionary.Choice(title=label, value=pack_name))
+    total_jobs = 0
+    generated_files = []
 
-        print(f"Available packs: {list(packs.keys())}")
+    # Each top-level key is a pack, containing groups
+    for pack_name, pack_config in config.items():
+        if not isinstance(pack_config, dict):
+            continue
 
-        selected = questionary.checkbox(
-            "Select packs to generate (Space to select, Enter to confirm):",
-            choices=choices,
-            style=_get_questionary_style(),
-        ).ask()
+        lines = generate_pack_lines(pack_config, pack_name)
+        output_file = job_packs_dir / f"{pack_name}.pack"
+        write_pack_file(output_file, lines)
 
-        if not selected:
-            print("No packs selected.")
-            return
+        job_count = len([l for l in lines if l.strip() and not l.startswith('#')])
+        total_jobs += job_count
+        group_names = [k for k in pack_config.keys() if isinstance(pack_config[k], dict)]
+        generated_files.append((output_file.name, job_count, group_names))
+        print(f"  ✓ {output_file.name}: {job_count} jobs")
 
-        # Generate each selected pack
-        config = load_config(config_path)
-        total_jobs = 0
-        generated_files = []
-
-        for pack_name in selected:
-            groups = packs[pack_name]
-            lines = generate_pack_lines(config, pack_name, groups)
-            output_file = job_packs_dir / f"{pack_name}.pack"
-            write_pack_file(output_file, lines)
-
-            job_count = len([l for l in lines if l.strip() and not l.startswith('#')])
-            total_jobs += job_count
-            generated_files.append((output_file.name, job_count, groups))
-            print(f"  ✓ {output_file.name}: {job_count} jobs")
-
-        print(f"\nGenerated {len(generated_files)} pack files with {total_jobs} total jobs")
-        for name, count, groups in generated_files:
-            print(f"  {name}: {count} jobs ({', '.join(groups)})")
-    else:
-        # Fallback to individual group selection
-        groups = get_available_groups(config_path)
-        if not groups:
-            print(f"No job groups found in {config_path}")
-            return
-
-        print(f"Available groups: {groups}")
-
-        selected = questionary.checkbox(
-            "Select groups (Space to select, Enter to confirm):",
-            choices=groups,
-            style=_get_questionary_style(),
-        ).ask()
-
-        if not selected:
-            print("No groups selected.")
-            return
-
-        files, log = generate_pack(config_path, job_packs_dir, selected)
-        for line in log:
-            print(line)
-
-    input("\nPress Enter to continue...")
+    print(f"\nGenerated {len(generated_files)} pack files with {total_jobs} total jobs")
+    for name, count, groups in generated_files:
+        print(f"  {name}: {count} jobs ({', '.join(groups)})")
 
 
 def interactive_submit(job_packs_dir: Path) -> None:

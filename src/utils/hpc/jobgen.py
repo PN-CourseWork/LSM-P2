@@ -65,20 +65,17 @@ def load_config(config_path: Path) -> Dict[str, Any]:
 
 
 def generate_pack_lines(
-    config: Dict[str, Any],
-    job_name_prefix: str,
-    selected_groups: Optional[List[str]] = None,
+    pack_config: Dict[str, Any],
+    pack_name: str,
 ) -> List[str]:
-    """Generate list of LSF job pack lines.
+    """Generate list of LSF job pack lines for a single pack.
 
     Parameters
     ----------
-    config : dict
-        Parsed configuration dictionary for job groups.
-    job_name_prefix : str
-        Prefix for generated job names (e.g., from the pack filename).
-    selected_groups : list of str, optional
-        If provided, only generate jobs for these specified groups.
+    pack_config : dict
+        Configuration dictionary containing groups for this pack.
+    pack_name : str
+        Name of the pack (used for output file naming).
 
     Returns
     -------
@@ -89,9 +86,9 @@ def generate_pack_lines(
     # Use relative path for HPC jobs (assumes cwd is project root)
     output_dir = get_job_output_dir(absolute=False)
 
-    for group_name, group_config in config.items():
-        # Filter based on selection
-        if selected_groups and group_name not in selected_groups:
+    for group_name, group_config in pack_config.items():
+        # Skip non-dict entries (comments, etc.)
+        if not isinstance(group_config, dict):
             continue
 
         lines.append(f"\n# --- Group: {group_name} ---")
