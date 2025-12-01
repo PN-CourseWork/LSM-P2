@@ -39,11 +39,11 @@ SN_strong:
 
   static_args:
     tol: 0.0
-    max_iter: 2
+    max_iter: 100
 
   sweep:
-    N: [8]
-    ranks: [8]
+    N: [32]
+    ranks: [8, 18, 24]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
