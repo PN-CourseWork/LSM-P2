@@ -1,7 +1,7 @@
 """Domain decomposition for distributed parallel computation.
 
 Provides a clean abstraction for partitioning 3D grids across multiple ranks.
-Pure geometric/mathematical decomposition with no MPI dependencies.
+Uses MPI Cartesian topology (Create_cart) for optimal neighbor discovery.
 """
 
 import numpy as np
@@ -58,6 +58,9 @@ class DomainDecomposition:
         self.N = N
         self.size = size
         self.strategy = strategy
+
+        # Cartesian communicator (created lazily for cubic decomposition)
+        self.cart_comm = None
 
         # Normalize axis to integer (0=z, 1=y, 2=x in ZYX ordering)
         axis_map = {"z": 0, "y": 1, "x": 2, 0: 0, 1: 1, 2: 2}
@@ -170,12 +173,16 @@ class DomainDecomposition:
     def _decompose_cubic(self):
         """Decompose domain with 3D Cartesian grid.
 
+        Uses MPI Cartesian topology (Create_cart) for optimal communication.
         Matches legacy cubic.py: splits FULL N (including boundaries) across ranks.
         Array layout is (Z, Y, X) to match C-ordering.
+
+        Note: The Cartesian communicator is created lazily when
+        create_cartesian_comm() is called with the MPI communicator.
         """
         from mpi4py import MPI
 
-        # Use MPI's optimal factorization
+        # Use MPI's optimal factorization for 3D grid
         self.dims = MPI.Compute_dims(self.size, 3)
         px, py, pz = self.dims
 
@@ -263,6 +270,67 @@ class DomainDecomposition:
         if ix < 0 or ix >= px or iy < 0 or iy >= py or iz < 0 or iz >= pz:
             return None
         return ix * (py * pz) + iy * pz + iz
+
+    def create_cartesian_comm(self, comm):
+        """Create MPI Cartesian communicator for cubic decomposition.
+
+        This method creates a Cartesian topology using MPI.Create_cart and
+        uses Cart_shift to determine neighbors. Must be called collectively
+        by all ranks after decomposition is initialized.
+
+        Parameters
+        ----------
+        comm : MPI.Comm
+            MPI communicator (typically MPI.COMM_WORLD)
+
+        Returns
+        -------
+        MPI.Cartcomm
+            Cartesian communicator for this topology
+        """
+        if self.strategy != "cubic":
+            return comm  # No Cartesian topology for sliced
+
+        if self.cart_comm is not None:
+            return self.cart_comm  # Already created
+
+        # Create 3D Cartesian topology
+        # dims = (px, py, pz) as computed in _decompose_cubic
+        # periods = [False, False, False] for non-periodic boundaries
+        # reorder = True allows MPI to optimize rank placement
+        self.cart_comm = comm.Create_cart(
+            dims=self.dims,
+            periods=[False, False, False],
+            reorder=False  # Keep rank ordering consistent
+        )
+
+        # Update neighbor info for current rank using Cart_shift
+        rank = self.cart_comm.Get_rank()
+        info = self._rank_info[rank]
+
+        # Cart_shift returns (source, dest) for shift in given direction
+        # direction: 0=x, 1=y, 2=z (matching dims order px, py, pz)
+        # Negative displacement = lower neighbor, positive = upper neighbor
+
+        # X direction (direction=0)
+        x_src, x_dest = self.cart_comm.Shift(0, 1)
+        info.neighbors["x_lower"] = x_src if x_src >= 0 else None
+        info.neighbors["x_upper"] = x_dest if x_dest >= 0 else None
+
+        # Y direction (direction=1)
+        y_src, y_dest = self.cart_comm.Shift(1, 1)
+        info.neighbors["y_lower"] = y_src if y_src >= 0 else None
+        info.neighbors["y_upper"] = y_dest if y_dest >= 0 else None
+
+        # Z direction (direction=2)
+        z_src, z_dest = self.cart_comm.Shift(2, 1)
+        info.neighbors["z_lower"] = z_src if z_src >= 0 else None
+        info.neighbors["z_upper"] = z_dest if z_dest >= 0 else None
+
+        # Update neighbor count
+        info.n_neighbors = sum(1 for n in info.neighbors.values() if n is not None)
+
+        return self.cart_comm
 
     def _factorize_3d(self, n):
         """Simple 3D factorization (as cubic as possible)."""
@@ -382,6 +450,11 @@ class DomainDecomposition:
         tuple
             (u1, u2, f) local arrays with halo zones
         """
+        # Create Cartesian communicator for cubic decomposition
+        # This uses MPI.Create_cart and Cart_shift for neighbor discovery
+        if self.strategy == "cubic":
+            self.create_cartesian_comm(comm)
+
         info = self.get_rank_info(rank)
         shape = info.halo_shape
 

@@ -37,7 +37,7 @@ Different Types of Domain Decompositions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Cubic** (3D Cartesian decomposition)
-   3D domain decomposition that distributes the grid across all three spatial dimensions.
+   3D domain decomposition using MPI Cartesian topology (``Create_cart`` + ``Cart_shift``) for optimal neighbor discovery.
 
 **Sliced** (1D decomposition along Z-axis)
    1D domain decomposition that splits only along the Z-axis, with each rank owning horizontal slices.
@@ -74,6 +74,32 @@ Scaling Analysis
 
 * Can we relate decomposition/communication results to scaling behavior?
 * Where are the bottlenecks?
+
+Methodology
+-----------
+
+Hardware Specifications
+^^^^^^^^^^^^^^^^^^^^^^^
+
+All experiments were conducted on the DTU HPC cluster with the following specifications:
+
+**Compute Nodes:**
+
+* **Processors:** Intel Xeon E5-2650 v4 (Broadwell), 2.2 GHz, 24 cores/node (2 sockets × 12 cores)
+* **Memory:** 128 GB DDR4 RAM per node
+* **Interconnect:** InfiniBand FDR (56 Gb/s)
+
+**Software Stack:**
+
+* **MPI:** OpenMPI 4.x with core binding (``--bind-to core --map-by core``)
+* **Python:** 3.12 with mpi4py, NumPy, Numba
+* **Numba Threading:** Disabled for MPI runs (``NUMBA_NUM_THREADS=1``) to prevent thread oversubscription
+
+**Performance Metrics:**
+
+* **Mlup/s:** Million Lattice Updates per Second = (N³ × iterations) / (wall_time × 10⁶)
+* **Strong Scaling:** Speedup S(P) = T(1)/T(P), Efficiency E(P) = S(P)/P
+* **Weak Scaling:** Efficiency measured as T(1)/T(P) with constant work per rank
 
 Installation
 ------------

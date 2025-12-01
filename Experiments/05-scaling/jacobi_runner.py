@@ -90,6 +90,11 @@ wall_time = MPI.Wtime() - t0
 # compute_l2_error uses MPI allreduce, so ALL ranks must call it
 if rank == 0:
     solver.results.wall_time = wall_time
+    # Compute Mlup/s (Million Lattice Updates per Second)
+    # Interior points: (N-2)³ updated per iteration
+    n_interior = (args.N - 2) ** 3
+    total_updates = n_interior * solver.results.iterations
+    solver.results.mlups = total_updates / (wall_time * 1e6)
 solver.compute_l2_error()
 
 # --- Logging and Summary on Rank 0 only ---
@@ -123,6 +128,7 @@ if rank == 0:
     print(f"  Iterations: {solver.results.iterations}")
     print(f"  L2 error: {solver.results.final_error:.6e}")
     print(f"  Wall time: {solver.results.wall_time:.2f} seconds")
+    print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
 
     # Timing breakdown
     total_time = (solver.results.total_compute_time or 0) + (solver.results.total_halo_time or 0) + (solver.results.total_mpi_comm_time or 0)

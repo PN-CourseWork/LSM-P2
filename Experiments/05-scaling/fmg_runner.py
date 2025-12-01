@@ -77,6 +77,11 @@ wall_time = MPI.Wtime() - t0
 # compute_l2_error uses MPI allreduce, so ALL ranks must call it
 if rank == 0:
     solver.results.wall_time = wall_time
+    # Compute Mlup/s based on finest grid size
+    # Note: FMG does work at multiple levels, but we report based on finest grid
+    n_interior = (args.N - 2) ** 3
+    total_updates = n_interior * solver.results.iterations
+    solver.results.mlups = total_updates / (wall_time * 1e6)
 solver.compute_l2_error()
 
 # --- Logging and Summary on Rank 0 only ---

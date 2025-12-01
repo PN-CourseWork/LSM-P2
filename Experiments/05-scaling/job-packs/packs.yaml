@@ -48,6 +48,7 @@ strong_scaling:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
+    export NUMBA_NUM_THREADS=1 &&
     mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
     uv run python Experiments/05-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
@@ -85,6 +86,7 @@ weak_scaling:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
+    export NUMBA_NUM_THREADS=1 &&
     mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
     uv run python Experiments/05-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
@@ -198,6 +200,7 @@ no_binding_strong:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
+    export NUMBA_NUM_THREADS=1 &&
     mpiexec -n {ranks}
     uv run python Experiments/05-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
@@ -231,6 +234,7 @@ no_binding_weak:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
+    export NUMBA_NUM_THREADS=1 &&
     mpiexec -n {ranks}
     uv run python Experiments/05-scaling/jacobi_runner.py
     --N {N} --strategy {strategy} --communicator {communicator}

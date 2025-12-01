@@ -23,7 +23,7 @@ n_smooth = 5
 omega = 2.0 / 3.0  # Standard 3D Jacobi relaxation
 max_iterations = 3000
 tolerance = 1e-16
-fmg_post_cycles = 20  # More cycles needed for cubic decomposition
+fmg_post_cycles = 2  # More cycles needed for cubic decomposition
 
 print("FMG Spatial Convergence")
 print("=" * 60)

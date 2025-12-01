@@ -104,6 +104,8 @@ class GlobalMetrics:
     total_compute_time: float | None = None
     total_halo_time: float | None = None
     total_mpi_comm_time: float | None = None
+    # Performance metric: Million Lattice Updates per Second
+    mlups: float | None = None
 
 
 # ============================================================================
