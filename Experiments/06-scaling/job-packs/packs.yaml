@@ -23,7 +23,7 @@
 test:
   sanity:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:10"
       - "-n {n_cores}"
       - "-J {job_name}"
@@ -63,7 +63,7 @@ jacobi_strong_scaling:
   # --------------------------------------------------------------------------
   strong_scaling:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n {n_cores}"
       - "-J {job_name}"
@@ -101,7 +101,7 @@ jacobi_strong_scaling:
   # --------------------------------------------------------------------------
   single_socket_strong:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n 12"
       - "-J {job_name}"
@@ -143,7 +143,7 @@ jacobi_weak_scaling:
   # --------------------------------------------------------------------------
   weak_scaling:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n {n_cores}"
       - "-J {job_name}"
@@ -181,7 +181,7 @@ jacobi_weak_scaling:
   # --------------------------------------------------------------------------
   single_socket_weak:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n 12"
       - "-J {job_name}"
@@ -221,7 +221,7 @@ FMG_strong_scaling:
 
   FMG_strong:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n {n_cores}"
       - "-J {job_name}"
@@ -258,7 +258,7 @@ FMG_weak_scaling:
 
   FMG_weak:
     lsf_options:
-      - "-q hpc"
+      - "-q hpcintro"
       - "-W 00:30"
       - "-n {n_cores}"
       - "-J {job_name}"
