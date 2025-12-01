@@ -1,11 +1,11 @@
 """Multigrid Solver for 3D Poisson Equation."""
 
-import time
 import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional
 from mpi4py import MPI
 
+from .solver import JacobiPoisson
 from .kernels import NumPyKernel, NumbaKernel
 from .datastructures import GlobalParams, GlobalMetrics, LocalSeries
 from .mpi.communicators import NumpyHaloExchange, CustomHaloExchange
@@ -34,8 +34,8 @@ class GridLevel:
     u_temp: np.ndarray 
 
 
-class MultigridPoisson:
-    """Multigrid V-Cycle Solver."""
+class MultigridPoisson(JacobiPoisson):
+    """Multigrid V-Cycle Solver extending JacobiPoisson."""
 
     def __init__(
         self,
@@ -49,32 +49,30 @@ class MultigridPoisson:
     ):
         """
         Initialize Multigrid Solver.
-        
+
         Parameters
         ----------
         levels : int
             Number of grid levels (depth of V-cycle).
-        pre_smooth : int
-            Number of pre-smoothing steps.
-        post_smooth : int
-            Number of post-smoothing steps.
+        n_smooth : int
+            Number of smoothing steps (pre and post).
+        fmg_post_cycles : int
+            Maximum post-FMG V-cycles for convergence.
         decomposition_strategy : str
             MPI decomposition strategy ('cubic' or 'sliced').
+        communicator : str or object
+            Halo exchange communicator ('numpy', 'custom', or object).
         kwargs : dict
             Configuration passed to GlobalParams (N, omega, etc.)
         """
-        self.config = GlobalParams(**kwargs)
-        # MPI setup
+        # MPI setup (needed before _infer_levels)
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
+
+        # Store multigrid-specific parameters before hierarchy setup
         self.decomposition_strategy = decomposition_strategy
-        self.config.mpi_size = self.size
-
         self.min_coarse_size = max(min_coarse_size, 3)
-
-        # Determine number of levels automatically if not provided
-        self.levels = levels if levels is not None else self._infer_levels(self.config.N)
         self.n_smooth = n_smooth
         self.fmg_post_cycles = max(0, fmg_post_cycles)
 
@@ -84,32 +82,47 @@ class MultigridPoisson:
         # Communicator selection (numpy or custom)
         if isinstance(communicator, str):
             if communicator == "custom":
-                self.communicator = CustomHaloExchange()
+                self._communicator_obj = CustomHaloExchange()
             elif communicator in (None, "numpy"):
-                self.communicator = NumpyHaloExchange()
+                self._communicator_obj = NumpyHaloExchange()
             else:
                 raise ValueError(f"Unknown communicator: {communicator}")
         elif communicator is None:
-            self.communicator = NumpyHaloExchange()
+            self._communicator_obj = NumpyHaloExchange()
         else:
-            self.communicator = communicator
+            self._communicator_obj = communicator
 
-        # Record metadata for outputs
+        # Config setup (needed for _infer_levels)
+        self.config = GlobalParams(**kwargs)
+        self.config.mpi_size = self.size
         self.config.decomposition = self.decomposition_strategy if self.size > 1 else "none"
-        comm_name = self.communicator.__class__.__name__.lower()
+        comm_name = self._communicator_obj.__class__.__name__.lower()
         self.config.communicator = comm_name.replace("haloexchange", "")
 
-        # Timing accumulators
+        # Determine number of levels automatically if not provided
+        self.levels = levels if levels is not None else self._infer_levels(self.config.N)
+
+        # Timing accumulators for multigrid operations
         self._time_compute = 0.0
         self._time_halo = 0.0
         self._time_mpi = 0.0
 
-        self.results = GlobalMetrics() # Add this line
-        self.timeseries = LocalSeries() # Add this line for top-level timing if needed for compatibility
-        
+        # Results and timeseries (on all ranks for simplicity)
+        self.results = GlobalMetrics()
+        self.timeseries = LocalSeries()
+
         # Initialize Grid Hierarchy
         self.grid_levels: List[GridLevel] = []
         self._setup_hierarchy()
+
+        # Set up pointers so inherited methods (compute_l2_error, save_hdf5) work
+        fine_lvl = self.grid_levels[0]
+        self.decomposition = fine_lvl.decomposition
+        self.communicator = fine_lvl.communicator
+        self.u1_local = fine_lvl.u
+        self.u2_local = fine_lvl.u_temp
+        self.f_local = fine_lvl.f
+        self.kernel = fine_lvl.kernel
 
     def _infer_levels(self, N: int) -> int:
         """
@@ -219,7 +232,7 @@ class MultigridPoisson:
                 f=f,
                 r=r,
                 kernel=kernel,
-                communicator=self.communicator,
+                communicator=self._communicator_obj,
                 decomposition=decomp
             )
             self.grid_levels.append(level_obj)
@@ -636,22 +649,21 @@ class MultigridPoisson:
         self._time_compute += MPI.Wtime() - t0
         
     # ========================================================================
-    # Validation
+    # Validation - Override parent to read from grid_levels[0].u directly
+    # (The swapping in _smooth makes pointer aliasing unreliable)
     # ========================================================================
 
     def compute_l2_error(self):
         """Compute L2 error against analytical solution (parallel).
 
+        Overrides parent to read solution from grid hierarchy.
         Each rank computes its local contribution, then MPI reduces.
         Result stored in self.results.final_error on rank 0.
         """
-        # This will be similar to JacobiPoisson's compute_l2_error.
-        # It needs the final solution `lvl.u` from the finest level.
-        
         N = self.config.N
         h = 2.0 / (N - 1)
 
-        # Get final solution from finest level
+        # Get final solution from finest level (always in .u after smoothing)
         fine_lvl = self.grid_levels[0]
         u_local = fine_lvl.u
 
@@ -660,7 +672,6 @@ class MultigridPoisson:
         gs = info.global_start
         local_shape = info.local_shape
 
-        # Logic copied from JacobiPoisson
         if (
             hasattr(fine_lvl.decomposition, "strategy")
             and fine_lvl.decomposition.strategy == "cubic"
@@ -681,12 +692,13 @@ class MultigridPoisson:
 
             u_exact = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
             u_numerical = u_local[1:-1, 1:-1, 1:-1]
-        else: # Sliced
+        else:
+            # Sliced: only z decomposed
             nz = local_shape[0]
             z_idx = np.arange(gs[0], gs[0] + nz)
 
             zs = -1.0 + z_idx * h
-            ys = np.linspace(-1, 1, N)[1:-1]  # Interior only
+            ys = np.linspace(-1, 1, N)[1:-1]
             xs = np.linspace(-1, 1, N)[1:-1]
 
             Z, Y, X = np.meshgrid(zs, ys, xs, indexing="ij")
@@ -706,22 +718,5 @@ class MultigridPoisson:
             self.results.final_error = l2_error
             return l2_error
         return None
-        
-    # ========================================================================
-    # Save results to HDF5 (copied from JacobiPoisson)
-    # ========================================================================
 
-    def save_hdf5(self, path):
-        """Save config and results to HDF5 (rank 0 only)."""
-        if self.rank != 0:
-            return
-
-        import pandas as pd
-        from dataclasses import asdict
-
-        # Ensure all metrics are present, even if not explicitly set
-        row = {
-            **asdict(self.config),
-            **asdict(self.results)
-        }
-        pd.DataFrame([row]).to_hdf(path, key="results", mode="w")
+    # save_hdf5 inherited from JacobiPoisson
