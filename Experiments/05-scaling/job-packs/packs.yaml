@@ -21,7 +21,7 @@
 SN_strong:
   lsf_options:
     - "-q hpc"
-    - "-W 00:10"
+    - "-W 00:05"
     - "-n {ranks}"
     - "-J {job_name}"
     - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
@@ -40,10 +40,10 @@ SN_strong:
 
   static_args:
     tol: 0.0
-    max_iter: 50
+    max_iter: 5
 
   sweep:
-    N: [16]
+    N: [8]
     ranks: [8]
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
