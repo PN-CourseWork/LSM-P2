@@ -1,28 +1,39 @@
 # ============================================================================
-# LSF Experiment Configuration
+#                         LSF EXPERIMENT CONFIGURATION
 # ============================================================================
+#
 # Format:
-# GroupName:
-#   lsf_options: [...]    # List of LSF bsub flags, can use placeholders {var}
-#   command: str          # Full command template with placeholders for sweep/static args
-#   static_args: { ... }  # Static arguments (always applied, can be used in command template)
-#   sweep: { ... }        # Arguments to sweep over (cartesian product)
-#   env_vars: { ... }     # Environment variables to set for the job (optional)
-
-# Placeholders available for formatting:
-#   - Any key from static_args or sweep
-#   - job_name (generated uniquely per job)
-#   - LSF_OUTPUT_DIR (absolute path to session-specific output directory for job logs)
-#   - experiment_name (set to group name by default)
-
-# ----------------------------------------------------------------------------
-# Strong Scaling
-# ----------------------------------------------------------------------------
-# Fixed global problem size: 256³
-# Ranks must form perfect cubes (n³) or double cubes (2n³):
+#   GroupName:
+#     lsf_options: [...]    # LSF bsub flags (can use {placeholders})
+#     command: str          # Command template with placeholders
+#     static_args: { ... }  # Fixed arguments (always applied)
+#     sweep: { ... }        # Cartesian product sweep
+#     sweep_paired: { ... } # Zipped sweep (values vary together)
+#     env_vars: { ... }     # Environment variables (optional)
+#
+# Available placeholders:
+#   {job_name}        - Auto-generated unique job name
+#   {experiment_name} - Group name (default)
+#   {LSF_OUTPUT_DIR}  - Session-specific output directory
+#   {any_static_arg}  - Any key from static_args
+#   {any_sweep_arg}   - Any key from sweep or sweep_paired
+#
+# Rank constraints (for cubic decomposition):
 #   Perfect cubes: 1 (1³), 8 (2³), 27 (3³), 64 (4³)
 #   Double cubes:  2 (2×1³), 16 (2×2³), 54 (2×3³)
-# Tests: sliced vs cubic decomposition, NumPy vs custom communication
+#
+# ============================================================================
+
+
+# ############################################################################
+#                            JACOBI ITERATION
+# ############################################################################
+
+# ============================================================================
+# Strong Scaling (Jacobi)
+# ============================================================================
+# Fixed global problem size: 256³
+# Sweeps: ranks × strategy × communicator
 strong_scaling:
   lsf_options:
     - "-q hpc"
@@ -37,7 +48,8 @@ strong_scaling:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
     --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
@@ -52,14 +64,13 @@ strong_scaling:
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
-# ----------------------------------------------------------------------------
-# Weak Scaling - Cubic Decomposition
-# ----------------------------------------------------------------------------
+# ============================================================================
+# Weak Scaling (Jacobi)
+# ============================================================================
 # Local size per rank: ~64³ cells
-# Ranks must form perfect cubes (n³) or double cubes (2n³)
-# For cubic grids N³ with P ranks: local size = N/p^(1/3) per dimension
-# Perfect cubes (n×n×n decomp): P=1,8,27,64 -> N=64,128,192,256
-# Double cubes (2n×n×n decomp): P=2,16,54 -> N=80,160,240 (approx 64³ per rank)
+# N scales with ranks to maintain constant work per rank
+# Perfect cubes: P=n³ -> N=64n
+# Double cubes:  P=2n³ -> N≈80n
 weak_scaling:
   lsf_options:
     - "-q hpc"
@@ -74,7 +85,8 @@ weak_scaling:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy {strategy} --communicator {communicator}
     --tol {tol} --max-iter {max_iter} --numba
     --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
@@ -83,9 +95,6 @@ weak_scaling:
     tol: 0.0
     max_iter: 100
 
-  # Paired: N and ranks vary together (zipped, not cartesian)
-  # Perfect cubes: P=n³, N=64n
-  # Double cubes: P=2n³, N=64*cbrt(2)*n ≈ 80n (rounded to nice values)
   sweep_paired:
     N: [64, 80, 128, 160, 192, 240, 256]
     ranks: [1, 2, 8, 16, 27, 54, 64]
@@ -94,12 +103,16 @@ weak_scaling:
     strategy: ["sliced", "cubic"]
     communicator: ["numpy", "custom"]
 
-# ----------------------------------------------------------------------------
+
+# ############################################################################
+#                          FULL MULTIGRID (FMG)
+# ############################################################################
+
+# ============================================================================
 # FMG Strong Scaling
-# ----------------------------------------------------------------------------
-# Full Multigrid with cubic decomposition and custom communicator
+# ============================================================================
 # Fixed global problem size: 256³
-# Ranks must form perfect cubes (n³) or double cubes (2n³)
+# Cubic decomposition with custom communicator only
 FMG_strong:
   lsf_options:
     - "-q hpc"
@@ -114,7 +127,8 @@ FMG_strong:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy cubic --communicator custom
     --fmg --fmg-cycles {fmg_cycles} --numba
     --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
@@ -126,14 +140,11 @@ FMG_strong:
   sweep:
     ranks: [1, 2, 8, 16, 27, 54, 64]
 
-# ----------------------------------------------------------------------------
-# FMG Weak Scaling - Cubic Decomposition
-# ----------------------------------------------------------------------------
-# Full Multigrid with cubic decomposition and custom communicator
+# ============================================================================
+# FMG Weak Scaling
+# ============================================================================
 # Local size per rank: ~64³ cells
-# Ranks must form perfect cubes (n³) or double cubes (2n³)
-# Perfect cubes: P=1,8,27,64 -> N=64,128,192,256
-# Double cubes: P=2,16,54 -> N=80,160,240
+# Cubic decomposition with custom communicator only
 FMG_weak:
   lsf_options:
     - "-q hpc"
@@ -148,7 +159,8 @@ FMG_weak:
   command: >-
     cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
     module purge && module load mpi && uv sync &&
-    mpiexec -n {ranks} uv run python Experiments/05-scaling/runner.py
+    mpiexec --bind-to core --map-by core --report-bindings -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
     --N {N} --strategy cubic --communicator custom
     --fmg --fmg-cycles {fmg_cycles} --numba
     --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
@@ -159,3 +171,78 @@ FMG_weak:
   sweep_paired:
     N: [64, 80, 128, 160, 192, 240, 256]
     ranks: [1, 2, 8, 16, 27, 54, 64]
+
+
+# ############################################################################
+#                      NO BINDING BASELINE (COMPARISON)
+# ############################################################################
+# Same experiments but WITHOUT --bind-to and --map-by options
+# Used to demonstrate performance impact of proper process binding
+
+# ============================================================================
+# No Binding - Strong Scaling
+# ============================================================================
+no_binding_strong:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 100
+    N: 256
+
+  sweep:
+    ranks: [27, 64]
+    strategy: ["cubic"]
+    communicator: ["custom"]
+
+# ============================================================================
+# No Binding - Weak Scaling
+# ============================================================================
+no_binding_weak:
+  lsf_options:
+    - "-q hpc"
+    - "-W 00:30"
+    - "-n {ranks}"
+    - "-J {job_name}"
+    - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
+    - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
+    - "-R 'rusage[mem=4GB]'"
+    - "-R 'span[ptile=24]'"
+
+  command: >-
+    cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
+    module purge && module load mpi && uv sync &&
+    mpiexec -n {ranks}
+    uv run python Experiments/05-scaling/runner.py
+    --N {N} --strategy {strategy} --communicator {communicator}
+    --tol {tol} --max-iter {max_iter} --numba
+    --job-name {job_name} --experiment-name 05-scaling-{experiment_name}
+
+  static_args:
+    tol: 0.0
+    max_iter: 100
+
+  sweep_paired:
+    N: [192, 256]
+    ranks: [27, 64]
+
+  sweep:
+    strategy: ["cubic"]
+    communicator: ["custom"]
