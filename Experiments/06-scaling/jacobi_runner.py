@@ -19,13 +19,7 @@ from mpi4py import MPI
 import mlflow
 
 # Project-specific imports
-from Poisson import (
-    JacobiPoisson,
-    DomainDecomposition,
-    NumpyHaloExchange,
-    CustomHaloExchange,
-    get_project_root,
-)
+from Poisson import JacobiPoisson, get_project_root
 from utils.mlflow.io import (
     setup_mlflow_tracking,
     start_mlflow_run_context,
@@ -55,16 +49,15 @@ rank = comm.Get_rank()
 n_ranks = comm.Get_size()
 
 # --- Solver Configuration ---
-decomp = DomainDecomposition(N=args.N, size=n_ranks, strategy=args.strategy)
-halo = CustomHaloExchange() if args.communicator == "custom" else NumpyHaloExchange()
+# Using unified DistributedGrid API
 solver = JacobiPoisson(
     N=args.N,
+    strategy=args.strategy,
+    communicator=args.communicator,
     omega=args.omega,
     tolerance=args.tol,
     max_iter=args.max_iter,
     use_numba=args.numba,
-    decomposition=decomp,
-    communicator=halo,
 )
 
 if rank == 0:

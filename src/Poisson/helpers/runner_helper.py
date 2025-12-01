@@ -3,44 +3,27 @@
 import sys
 import json
 from mpi4py import MPI
-from Poisson import (
-    JacobiPoisson,
-    MultigridPoisson, # Import new solver
-    DomainDecomposition,
-    NumpyHaloExchange,
-    CustomHaloExchange,
-)
+from Poisson import JacobiPoisson, MultigridPoisson
 
 config = json.loads(sys.argv[1])
 comm = MPI.COMM_WORLD
 
 # Determine solver type
-solver_type = config.get("solver_type", "jacobi") # Default to jacobi
+solver_type = config.get("solver_type", "jacobi")
 
 if solver_type == "jacobi":
-    decomp_N = config["N"]
-    decomp = DomainDecomposition(
-        N=decomp_N,
-        size=comm.Get_size(),
-        strategy=config.get("strategy", "sliced"),
-        axis=config.get("axis", "z"),
-    )
-    halo = (
-        CustomHaloExchange()
-        if config.get("communicator") == "custom"
-        else NumpyHaloExchange()
-    )
-
+    # JacobiPoisson now uses DistributedGrid internally
     solver = JacobiPoisson(
         N=config["N"],
-        decomposition=decomp,
-        communicator=halo,
+        strategy=config.get("strategy", "sliced"),
+        communicator=config.get("communicator", "numpy"),
+        omega=config.get("omega", 0.8),
         max_iter=config.get("max_iter", 10000),
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
     )
 elif solver_type == "multigrid":
-    # MultigridPoisson uses DistributedGrid internally (no separate communicator)
+    # MultigridPoisson uses DistributedGrid internally
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
@@ -50,9 +33,10 @@ elif solver_type == "multigrid":
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
         decomposition_strategy=config.get("strategy", "sliced"),
+        communicator=config.get("communicator", "numpy"),
     )
 elif solver_type == "fmg":
-    # MultigridPoisson uses DistributedGrid internally (no separate communicator)
+    # MultigridPoisson uses DistributedGrid internally
     solver = MultigridPoisson(
         N=config["N"],
         levels=config.get("levels"),  # auto-infer if None
@@ -64,6 +48,7 @@ elif solver_type == "fmg":
         tolerance=config.get("tol", 1e-6),
         use_numba=config.get("use_numba", False),
         decomposition_strategy=config.get("strategy", "sliced"),
+        communicator=config.get("communicator", "numpy"),
     )
 else:
     raise ValueError(f"Unknown solver type: {solver_type}")

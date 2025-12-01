@@ -49,6 +49,7 @@ class MultigridPoisson(JacobiPoisson):
         n_smooth: int = 5,
         fmg_post_cycles: int = 1,
         decomposition_strategy: str = 'sliced',
+        communicator: str = 'numpy',
         **kwargs,
     ):
         """
@@ -66,6 +67,8 @@ class MultigridPoisson(JacobiPoisson):
         decomposition_strategy : str
             MPI decomposition strategy ('sliced' or 'cubic'). Both use
             consistent interior decomposition via DistributedGrid.
+        communicator : str
+            Halo exchange method: 'numpy' (buffer-based) or 'custom' (MPI datatypes)
         kwargs : dict
             Configuration passed to GlobalParams (N, omega, etc.)
         """
@@ -76,6 +79,7 @@ class MultigridPoisson(JacobiPoisson):
 
         # Store multigrid-specific parameters before hierarchy setup
         self.decomposition_strategy = decomposition_strategy
+        self.communicator = communicator
         self.min_coarse_size = max(min_coarse_size, 3)
         self.n_smooth = n_smooth
         self.fmg_post_cycles = max(0, fmg_post_cycles)
@@ -87,7 +91,7 @@ class MultigridPoisson(JacobiPoisson):
         self.config = GlobalParams(**kwargs)
         self.config.mpi_size = self.size
         self.config.decomposition = self.decomposition_strategy if self.size > 1 else "none"
-        self.config.communicator = "distributed_grid"
+        self.config.communicator = communicator
 
         # Determine number of levels automatically if not provided
         self.levels = levels if levels is not None else self._infer_levels(self.config.N)
@@ -191,7 +195,11 @@ class MultigridPoisson(JacobiPoisson):
             h = 2.0 / (N - 1)
 
             # Create distributed grid (unified for sliced/cubic)
-            grid = DistributedGrid(N, self.comm, strategy=self.decomposition_strategy)
+            grid = DistributedGrid(
+                N, self.comm,
+                strategy=self.decomposition_strategy,
+                halo_exchange=self.communicator
+            )
 
             # Allocate arrays using grid's allocator
             u1 = grid.allocate()

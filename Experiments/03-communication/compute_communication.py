@@ -40,19 +40,13 @@ def _run_benchmark():
     """MPI worker - collects per-iteration timings."""
     import pandas as pd
     from mpi4py import MPI
-    from Poisson import (
-        JacobiPoisson,
-        DomainDecomposition,
-        NumpyHaloExchange,
-        CustomHaloExchange,
-        get_project_root,
-    )
+    from Poisson import JacobiPoisson, get_project_root
 
     # --- MLflow Setup ---
     # Initialize MLflow tracking from environment variables
     # Must be called by all ranks to ensure proper MPI barrier synchronization if needed
     setup_mlflow_tracking()
-    
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -62,11 +56,14 @@ def _run_benchmark():
     ITERATIONS = 500  # Per-iteration data gives us 500 samples each
     WARMUP = 50
 
+    # Test configurations: strategy x communicator
+    # - sliced: 1D decomposition along z-axis (contiguous memory access)
+    # - cubic: 3D decomposition (includes non-contiguous x/y communication)
     CONFIGS = [
-        ("z", "numpy", "NumPy (Z-axis, contiguous)"),
-        ("z", "custom", "Custom (Z-axis, contiguous)"),
-        ("x", "numpy", "NumPy (X-axis, non-contiguous)"),
-        ("x", "custom", "Custom (X-axis, non-contiguous)"),
+        ("sliced", "numpy", "NumPy (sliced, contiguous)"),
+        ("sliced", "custom", "Custom (sliced, contiguous)"),
+        ("cubic", "numpy", "NumPy (cubic, mixed)"),
+        ("cubic", "custom", "Custom (cubic, mixed)"),
     ]
 
     repo_root = get_project_root()
@@ -84,19 +81,15 @@ def _run_benchmark():
         if rank == 0:
             print(f"\nN={N}")
 
-        for axis, comm_type, label in CONFIGS:
+        for strategy, comm_type, label in CONFIGS:
             if rank == 0:
                 print(f"  {label}...", end=" ", flush=True)
 
-            # Create and run solver
-            decomp = DomainDecomposition(N=N, size=size, strategy="sliced", axis=axis)
-            halo = (
-                CustomHaloExchange() if comm_type == "custom" else NumpyHaloExchange()
-            )
+            # Create and run solver using unified DistributedGrid API
             solver = JacobiPoisson(
                 N=N,
-                decomposition=decomp,
-                communicator=halo,
+                strategy=strategy,
+                communicator=comm_type,
                 max_iter=WARMUP + ITERATIONS,
                 tolerance=0,
             )
@@ -114,7 +107,7 @@ def _run_benchmark():
                         {
                             "N": N,
                             "local_N": local_N,
-                            "axis": axis,
+                            "strategy": strategy,
                             "communicator": comm_type,
                             "label": label,
                             "iteration": range(len(max_times)),

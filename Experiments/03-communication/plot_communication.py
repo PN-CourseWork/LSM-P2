@@ -50,10 +50,10 @@ print(f"Problem sizes: {sorted(df['N'].unique())}")
 fig, ax = plt.subplots(figsize=(10, 6))
 
 palette = {
-    "NumPy (Z-axis, contiguous)": "#1f77b4",
-    "Custom (Z-axis, contiguous)": "#2ca02c",
-    "NumPy (X-axis, non-contiguous)": "#d62728",
-    "Custom (X-axis, non-contiguous)": "#ff7f0e",
+    "NumPy (sliced, contiguous)": "#1f77b4",
+    "Custom (sliced, contiguous)": "#2ca02c",
+    "NumPy (cubic, mixed)": "#d62728",
+    "Custom (cubic, mixed)": "#ff7f0e",
 }
 
 sns.lineplot(
@@ -74,7 +74,7 @@ sns.lineplot(
 ax.set_xlabel("Local Subdomain Size (N / nprocs)", fontsize=12)
 ax.set_ylabel("Halo Exchange Time (μs)", fontsize=12)
 ax.set_title(
-    "Halo Exchange Performance: Contiguous vs Non-Contiguous Memory", fontsize=13
+    "Halo Exchange Performance: Sliced vs Cubic Decomposition", fontsize=13
 )
 ax.legend(title="Configuration", fontsize=9, loc="upper left")
 ax.grid(True, alpha=0.3)
