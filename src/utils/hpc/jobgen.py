@@ -137,7 +137,8 @@ def generate_pack_lines(
             all_args = {**static_args, **combo_dict}
 
             # Generate job name: group_val1_val2_..._idx
-            sweep_values = [str(v) for v in combo_dict.values()]
+            # Sanitize values: replace spaces/colons with underscores for LSF-safe job names
+            sweep_values = [str(v).replace(" ", "_").replace(":", "_") for v in combo_dict.values()]
             job_suffix = "_".join(sweep_values) if sweep_values else "base"
             current_job_name = f"{group_name}_{job_suffix}_{i:03d}"
 
