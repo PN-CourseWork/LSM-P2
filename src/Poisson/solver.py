@@ -269,12 +269,33 @@ class JacobiPoisson:
         self.kernel.warmup(warmup_size=warmup_size)
 
     def save_hdf5(self, path):
-        """Save config and results to HDF5 (rank 0 only)."""
+        """Save config, results, and timeseries to HDF5 (rank 0 only)."""
         if self.rank != 0:
             return
 
         import pandas as pd
+        import warnings
 
         row = {**asdict(self.config), **asdict(self.results)}
-        pd.DataFrame([row]).to_hdf(path, key="results", mode="w")
+        df_results = pd.DataFrame([row])
+
+        # Convert string columns to avoid PyTables pickle warning
+        for col in df_results.select_dtypes(include=['object']).columns:
+            df_results[col] = df_results[col].astype(str)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", pd.errors.PerformanceWarning)
+            df_results.to_hdf(path, key="results", mode="w", format="table")
+
+            # Save timeseries data for per-iteration analysis
+            ts_dict = asdict(self.timeseries)
+            # Filter out None/empty lists and ensure equal lengths
+            ts_data = {k: v for k, v in ts_dict.items() if v}
+            if ts_data:
+                max_len = max(len(v) for v in ts_data.values())
+                # Pad shorter lists with NaN
+                for k, v in ts_data.items():
+                    if len(v) < max_len:
+                        ts_data[k] = v + [float('nan')] * (max_len - len(v))
+                pd.DataFrame(ts_data).to_hdf(path, key="timeseries", mode="a", format="table")
 

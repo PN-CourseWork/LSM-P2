@@ -124,6 +124,7 @@ if rank == 0:
     print(f"  Iterations: {solver.results.iterations}")
     print(f"  L2 error: {solver.results.final_error:.6e}")
     print(f"  Wall time: {solver.results.wall_time:.4f} seconds")
+    print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
 
     # Timing breakdown
     total_time = (solver.results.total_compute_time or 0) + (solver.results.total_halo_time or 0) + (solver.results.total_mpi_comm_time or 0)

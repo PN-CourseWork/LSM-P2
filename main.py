@@ -8,7 +8,8 @@ from pathlib import Path
 # Ensure src directory is in python path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from utils import runners, mlflow
+from utils import runners
+from utils import mlflow as mlflow_utils
 from utils.config import get_repo_root, load_project_config, clean_all
 from utils.hpc import interactive_generate
 
@@ -105,9 +106,9 @@ def main():
         mlflow_conf = config.get("mlflow", {})
         repo_root = get_repo_root()
 
-        mlflow.setup_mlflow_tracking()
+        mlflow_utils.setup_mlflow_tracking()
         output_dir = repo_root / mlflow_conf.get("download_dir", "data")
-        mlflow.fetch_project_artifacts(output_dir, force=args.force)
+        mlflow_utils.fetch_project_artifacts(output_dir, force=args.force)
 
     if args.hpc:
         config = load_project_config()

@@ -23,8 +23,21 @@ sns.set_theme()
 
 # Get paths
 repo_root = get_project_root()
-data_dir = repo_root / "data" / "06-scaling"
-fmg_dir = data_dir / "fmg"
+data_base = repo_root / "data"
+# MLflow downloads to separate directories per experiment
+jacobi_dirs = [
+    data_base / "06-scaling",  # Original expected location
+    data_base / "06-scaling-strong_scaling",
+    data_base / "06-scaling-weak_scaling",
+    data_base / "06-scaling-single_socket_strong",
+    data_base / "06-scaling-single_socket_weak",
+    data_base / "06-scaling-test",  # Local test data with timeseries
+]
+fmg_dirs = [
+    data_base / "06-scaling" / "fmg",  # Original expected location
+    data_base / "06-scaling-fmg_strong",
+    data_base / "06-scaling-fmg_weak",
+]
 fig_dir = repo_root / "figures" / "scaling"
 fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -32,17 +45,21 @@ fig_dir.mkdir(parents=True, exist_ok=True)
 # Load Data
 # ---------
 
-def load_scaling_data(data_dir: Path, solver_type: str = "jacobi") -> pd.DataFrame:
-    """Load all HDF5 scaling results into a DataFrame."""
+def load_scaling_data(data_dirs: list[Path], solver_type: str = "jacobi") -> pd.DataFrame:
+    """Load all HDF5 scaling results from multiple directories into a DataFrame."""
     results = []
 
-    for h5_file in data_dir.glob("*.h5"):
-        try:
-            df = pd.read_hdf(h5_file, key="results")
-            df["solver"] = solver_type
-            results.append(df)
-        except Exception as e:
-            print(f"Warning: Could not load {h5_file}: {e}")
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        for h5_file in data_dir.glob("*.h5"):
+            try:
+                df = pd.read_hdf(h5_file, key="results")
+                df["solver"] = solver_type
+                df["source_file"] = str(h5_file)
+                results.append(df)
+            except Exception as e:
+                print(f"Warning: Could not load {h5_file}: {e}")
 
     if not results:
         return pd.DataFrame()
@@ -50,22 +67,98 @@ def load_scaling_data(data_dir: Path, solver_type: str = "jacobi") -> pd.DataFra
     return pd.concat(results, ignore_index=True)
 
 
+def load_timeseries_data(data_dirs: list[Path], solver_type: str = "jacobi", warmup_iters: int = 5) -> pd.DataFrame:
+    """Load per-iteration timeseries data for CI plotting.
+
+    Returns DataFrame with columns: mpi_size, N, method, iteration, iter_time, speedup
+    """
+    all_timeseries = []
+    baselines = {}  # (N, solver) -> mean baseline iter_time
+
+    for data_dir in data_dirs:
+        if not data_dir.exists():
+            continue
+        for h5_file in data_dir.glob("*.h5"):
+            try:
+                # Check if timeseries exists
+                df_ts = pd.read_hdf(h5_file, key="timeseries")
+                df_res = pd.read_hdf(h5_file, key="results")
+
+                N = int(df_res["N"].iloc[0])
+                P = int(df_res["mpi_size"].iloc[0])
+                decomp = str(df_res["decomposition"].iloc[0])
+                comm = str(df_res["communicator"].iloc[0])
+                method = f"{decomp}/{comm}"
+
+                # Compute total iteration time
+                df_ts["iter_time"] = (
+                    df_ts["compute_times"].fillna(0) +
+                    df_ts["halo_exchange_times"].fillna(0) +
+                    df_ts["mpi_comm_times"].fillna(0)
+                )
+                df_ts["mpi_size"] = P
+                df_ts["N"] = N
+                df_ts["method"] = method
+                df_ts["solver"] = solver_type
+                df_ts["iteration"] = range(len(df_ts))
+
+                # Skip warmup iterations
+                df_ts = df_ts[df_ts["iteration"] >= warmup_iters].copy()
+
+                # Store baseline (P=1) for later speedup computation
+                if P == 1:
+                    key = (N, solver_type)
+                    baselines[key] = df_ts["iter_time"].mean()
+
+                all_timeseries.append(df_ts)
+
+            except KeyError:
+                # No timeseries data in this file
+                pass
+            except Exception as e:
+                print(f"Warning: Could not load timeseries from {h5_file}: {e}")
+
+    if not all_timeseries:
+        return pd.DataFrame()
+
+    df = pd.concat(all_timeseries, ignore_index=True)
+
+    # Compute speedup using baseline
+    def compute_speedup(row):
+        key = (row["N"], row["solver"])
+        baseline = baselines.get(key)
+        if baseline and baseline > 0:
+            return baseline / row["iter_time"]
+        return np.nan
+
+    df["speedup"] = df.apply(compute_speedup, axis=1)
+    df["efficiency"] = df["speedup"] / df["mpi_size"] * 100
+
+    return df
+
+
 # Load Jacobi data
-df_jacobi = load_scaling_data(data_dir, "Jacobi")
+df_jacobi = load_scaling_data(jacobi_dirs, "Jacobi")
 print(f"Loaded {len(df_jacobi)} Jacobi results")
 
 # Load FMG data
-df_fmg = pd.DataFrame()
-if fmg_dir.exists():
-    df_fmg = load_scaling_data(fmg_dir, "FMG")
-    print(f"Loaded {len(df_fmg)} FMG results")
+df_fmg = load_scaling_data(fmg_dirs, "FMG")
+print(f"Loaded {len(df_fmg)} FMG results")
+
+# Load timeseries data for CI plots (if available)
+df_ts_jacobi = load_timeseries_data(jacobi_dirs, "Jacobi")
+df_ts_fmg = load_timeseries_data(fmg_dirs, "FMG")
+df_ts_all = pd.concat([df_ts_jacobi, df_ts_fmg], ignore_index=True) if not df_ts_fmg.empty else df_ts_jacobi
+has_timeseries = not df_ts_all.empty
+print(f"Loaded {len(df_ts_all)} timeseries data points (for CI plots): {'Yes' if has_timeseries else 'No'}")
 
 # Combine
 df_all = pd.concat([df_jacobi, df_fmg], ignore_index=True) if not df_fmg.empty else df_jacobi
 
 if df_all.empty:
-    print(f"No data found in {data_dir}")
-    print("Run scaling experiments first:")
+    print(f"No data found in scaling directories")
+    print("Run scaling experiments first or fetch from MLflow:")
+    print("  uv run python main.py --fetch")
     print("  mpiexec -n P uv run python Experiments/06-scaling/jacobi_runner.py --N 64")
     import sys
     sys.exit(0)
@@ -154,6 +247,7 @@ print(f"\nStrong scaling data points: {len(df_strong)}")
 # %%
 # Plot 1: Strong Scaling by Method (Jacobi only)
 # ---------------------------------------------
+# Uses seaborn CI plots when timeseries data is available
 
 df_jacobi_strong = df_strong[df_strong["solver"] == "Jacobi"]
 
@@ -165,44 +259,77 @@ if not df_jacobi_strong.empty:
     colors = plt.cm.tab10(np.linspace(0, 1, len(methods)))
     color_map = dict(zip(methods, colors))
     markers = {"sliced/numpy": "o", "sliced/custom": "s", "cubic/numpy": "^", "cubic/custom": "D"}
+    palette = {m: color_map[m] for m in methods}
+
+    # For strong scaling, find N with most P values (not just max N)
+    N_counts = df_jacobi_strong.groupby("N")["P"].nunique()
+    N_strong = N_counts.idxmax()  # N with most unique P values
+    df_plot = df_jacobi_strong[df_jacobi_strong["N"] == N_strong]
+    P_range = np.array(sorted(df_plot["P"].unique()))
+
+    # Check if we have timeseries data for CI plots
+    df_ts_jacobi_N = df_ts_all[(df_ts_all["solver"] == "Jacobi") & (df_ts_all["N"] == N_strong)] if has_timeseries else pd.DataFrame()
+    use_ci = not df_ts_jacobi_N.empty
 
     # Left: Speedup vs P
     ax = axes[0]
-    N_max = df_jacobi_strong["N"].max()
-    df_plot = df_jacobi_strong[df_jacobi_strong["N"] == N_max]
-
-    for method in sorted(methods):
-        df_m = df_plot[df_plot["method"] == method].sort_values("P")
-        marker = markers.get(method, "o")
-        ax.plot(df_m["P"], df_m["speedup"], marker=marker, linestyle="-",
-                color=color_map[method], label=method, markersize=8)
+    if use_ci:
+        # Use seaborn lineplot with confidence intervals
+        sns.lineplot(
+            data=df_ts_jacobi_N, x="mpi_size", y="speedup", hue="method",
+            style="method", markers=markers, dashes=False,
+            palette=palette, errorbar=("ci", 95), ax=ax, markersize=8
+        )
+        ax.set_xlabel("Number of Ranks (P)")
+        ax.set_ylabel("Speedup S(P) = T(1)/T(P)")
+    else:
+        # Fall back to simple line plot
+        for method in sorted(methods):
+            df_m = df_plot[df_plot["method"] == method].sort_values("P")
+            marker = markers.get(method, "o")
+            ax.plot(df_m["P"], df_m["speedup"], marker=marker, linestyle="-",
+                    color=color_map[method], label=method, markersize=8)
+        ax.set_xlabel("Number of Ranks (P)")
+        ax.set_ylabel("Speedup S(P) = T(1)/T(P)")
 
     # Ideal scaling line
-    P_range = np.array(sorted(df_plot["P"].unique()))
     ax.plot(P_range, P_range, "k--", alpha=0.5, label="Ideal (S=P)")
 
-    ax.set_xlabel("Number of Ranks (P)")
-    ax.set_ylabel("Speedup S(P) = T(1)/T(P)")
-    ax.set_title(f"Strong Scaling: Jacobi (N={N_max})")
+    ax.set_title(f"Strong Scaling: Jacobi (N={N_strong})" + (" [95% CI]" if use_ci else ""))
     ax.legend(loc="upper left")
     ax.set_xscale("log", base=2)
     ax.set_yscale("log", base=2)
+    ax.set_xticks(P_range)
+    ax.set_xticklabels([str(int(p)) for p in P_range])
+    ax.set_yticks(P_range)
+    ax.set_yticklabels([str(int(p)) for p in P_range])
     ax.grid(True, alpha=0.3)
 
     # Right: Efficiency vs P
     ax = axes[1]
-    for method in sorted(methods):
-        df_m = df_plot[df_plot["method"] == method].sort_values("P")
-        marker = markers.get(method, "o")
-        ax.plot(df_m["P"], df_m["efficiency"], marker=marker, linestyle="-",
-                color=color_map[method], label=method, markersize=8)
+    if use_ci:
+        sns.lineplot(
+            data=df_ts_jacobi_N, x="mpi_size", y="efficiency", hue="method",
+            style="method", markers=markers, dashes=False,
+            palette=palette, errorbar=("ci", 95), ax=ax, markersize=8
+        )
+        ax.set_xlabel("Number of Ranks (P)")
+        ax.set_ylabel("Parallel Efficiency (%)")
+    else:
+        for method in sorted(methods):
+            df_m = df_plot[df_plot["method"] == method].sort_values("P")
+            marker = markers.get(method, "o")
+            ax.plot(df_m["P"], df_m["efficiency"], marker=marker, linestyle="-",
+                    color=color_map[method], label=method, markersize=8)
+        ax.set_xlabel("Number of Ranks (P)")
+        ax.set_ylabel("Parallel Efficiency (%)")
 
     ax.axhline(y=100, color="k", linestyle="--", alpha=0.5, label="Ideal (100%)")
-    ax.set_xlabel("Number of Ranks (P)")
-    ax.set_ylabel("Parallel Efficiency (%)")
-    ax.set_title(f"Strong Scaling: Jacobi (N={N_max})")
+    ax.set_title(f"Strong Scaling: Jacobi (N={N_strong})" + (" [95% CI]" if use_ci else ""))
     ax.legend(loc="upper right")
     ax.set_xscale("log", base=2)
+    ax.set_xticks(P_range)
+    ax.set_xticklabels([str(int(p)) for p in P_range])
     ax.set_ylim(0, 110)
     ax.grid(True, alpha=0.3)
 
@@ -355,6 +482,203 @@ if not df_jacobi_strong.empty:
     plt.tight_layout()
     fig.savefig(fig_dir / "04_decomposition_comparison.pdf")
     print(f"Saved: {fig_dir / '04_decomposition_comparison.pdf'}")
+
+# %%
+# Plot 5: Timing Fractions vs Ranks
+# ---------------------------------
+# Shows how compute/halo/mpi fractions change with increasing parallelism
+
+if has_timeseries:
+    # Get Jacobi timeseries data for timing fractions
+    df_ts_jacobi = df_ts_all[df_ts_all["solver"] == "Jacobi"].copy()
+
+    if not df_ts_jacobi.empty:
+        # Find N with most P values for strong scaling analysis
+        N_counts = df_ts_jacobi.groupby("N")["mpi_size"].nunique()
+        N_strong = N_counts.idxmax()
+        df_ts_N = df_ts_jacobi[df_ts_jacobi["N"] == N_strong].copy()
+
+        # Compute fractions for each iteration
+        df_ts_N["total_time"] = (
+            df_ts_N["compute_times"].fillna(0) +
+            df_ts_N["halo_exchange_times"].fillna(0) +
+            df_ts_N["mpi_comm_times"].fillna(0)
+        )
+        df_ts_N["compute_frac"] = df_ts_N["compute_times"].fillna(0) / df_ts_N["total_time"] * 100
+        df_ts_N["halo_frac"] = df_ts_N["halo_exchange_times"].fillna(0) / df_ts_N["total_time"] * 100
+        df_ts_N["mpi_frac"] = df_ts_N["mpi_comm_times"].fillna(0) / df_ts_N["total_time"] * 100
+
+        # Filter for a single method (cubic/custom is typically best)
+        methods_available = df_ts_N["method"].unique()
+        target_method = "cubic/custom" if "cubic/custom" in methods_available else methods_available[0]
+        df_ts_method = df_ts_N[df_ts_N["method"] == target_method]
+
+        if not df_ts_method.empty:
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+            # Melt data for seaborn
+            df_fracs = df_ts_method[["mpi_size", "compute_frac", "halo_frac", "mpi_frac"]].melt(
+                id_vars=["mpi_size"],
+                value_vars=["compute_frac", "halo_frac", "mpi_frac"],
+                var_name="component",
+                value_name="fraction"
+            )
+
+            # Rename for legend
+            component_names = {
+                "compute_frac": "Compute",
+                "halo_frac": "Halo Exchange",
+                "mpi_frac": "MPI Allreduce"
+            }
+            df_fracs["component"] = df_fracs["component"].map(component_names)
+
+            # Plot with CI
+            sns.lineplot(
+                data=df_fracs, x="mpi_size", y="fraction", hue="component",
+                style="component", markers=True, dashes=False,
+                palette={"Compute": "tab:blue", "Halo Exchange": "tab:orange", "MPI Allreduce": "tab:green"},
+                errorbar=("ci", 95), ax=ax, markersize=8
+            )
+
+            P_range = np.array(sorted(df_ts_method["mpi_size"].unique()))
+            ax.set_xlabel("Number of Ranks (P)")
+            ax.set_ylabel("Time Fraction (%)")
+            ax.set_title(f"Timing Breakdown: {target_method} (N={N_strong}) [95% CI]")
+            ax.set_xscale("log", base=2)
+            ax.set_xticks(P_range)
+            ax.set_xticklabels([str(int(p)) for p in P_range])
+            ax.set_ylim(0, 105)
+            ax.legend(title="Component")
+            ax.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            fig.savefig(fig_dir / "05_timing_fractions.pdf")
+            print(f"Saved: {fig_dir / '05_timing_fractions.pdf'}")
+
+# %%
+# Plot 6: Weak Scaling (if data available)
+# ----------------------------------------
+# Weak scaling: N scales with P to keep work per rank constant
+
+def compute_weak_scaling(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute weak scaling efficiency.
+
+    Weak scaling: Problem size N grows with P.
+    Efficiency E(P) = T(1) / T(P) where N(P) ~ P * N(1)
+    """
+    results = []
+
+    for solver in df["solver"].unique():
+        df_solver = df[df["solver"] == solver]
+
+        # Group by method
+        for method in df_solver["method"].unique():
+            df_method = df_solver[df_solver["method"] == method]
+
+            # Get baseline at P=1
+            baseline = df_method[df_method["mpi_size"] == 1]
+            if baseline.empty:
+                continue
+
+            T1 = baseline["wall_time"].values[0]
+            N1 = baseline["N"].values[0]
+
+            for _, row in df_method.iterrows():
+                P = row["mpi_size"]
+                T_P = row["wall_time"]
+                N = row["N"]
+
+                # For weak scaling, efficiency is T1/T(P)
+                efficiency = (T1 / T_P) * 100 if T_P > 0 else 0
+
+                results.append({
+                    "solver": solver,
+                    "N": N,
+                    "P": P,
+                    "method": method,
+                    "wall_time": T_P,
+                    "efficiency": efficiency,
+                    "work_per_rank": (N ** 3) / P,  # For reference
+                })
+
+    return pd.DataFrame(results)
+
+
+# Check if we have weak scaling data (N varies with P)
+df_jacobi_only = df_all[df_all["solver"] == "Jacobi"]
+if not df_jacobi_only.empty:
+    # Group by method and check if N varies
+    has_weak = False
+    for method in df_jacobi_only["method"].unique():
+        df_m = df_jacobi_only[df_jacobi_only["method"] == method]
+        N_values = df_m["N"].nunique()
+        P_values = df_m["mpi_size"].nunique()
+        if N_values > 1 and P_values > 1:
+            has_weak = True
+            break
+
+    if has_weak:
+        df_weak = compute_weak_scaling(df_jacobi_only)
+
+        if not df_weak.empty and len(df_weak) > 2:
+            fig, ax = plt.subplots(figsize=(8, 5))
+
+            methods = df_weak["method"].unique()
+            colors = plt.cm.tab10(np.linspace(0, 1, len(methods)))
+            color_map = dict(zip(methods, colors))
+            markers = {"sliced/numpy": "o", "sliced/custom": "s", "cubic/numpy": "^", "cubic/custom": "D"}
+            palette = {m: color_map[m] for m in methods}
+
+            # Check if we have timeseries data for weak scaling CI
+            df_ts_weak = df_ts_all[df_ts_all["solver"] == "Jacobi"].copy() if has_timeseries else pd.DataFrame()
+            use_ci_weak = not df_ts_weak.empty and df_ts_weak["N"].nunique() > 1
+
+            if use_ci_weak:
+                # Compute weak scaling efficiency per iteration
+                # Get baseline (P=1) iter_time per method
+                baselines_weak = {}
+                for method in df_ts_weak["method"].unique():
+                    df_m = df_ts_weak[(df_ts_weak["method"] == method) & (df_ts_weak["mpi_size"] == 1)]
+                    if not df_m.empty:
+                        baselines_weak[method] = df_m["iter_time"].mean()
+
+                def compute_weak_eff(row):
+                    baseline = baselines_weak.get(row["method"])
+                    if baseline and baseline > 0:
+                        return (baseline / row["iter_time"]) * 100
+                    return np.nan
+
+                df_ts_weak["weak_efficiency"] = df_ts_weak.apply(compute_weak_eff, axis=1)
+
+                sns.lineplot(
+                    data=df_ts_weak, x="mpi_size", y="weak_efficiency", hue="method",
+                    style="method", markers=markers, dashes=False,
+                    palette=palette, errorbar=("ci", 95), ax=ax, markersize=8
+                )
+                ax.set_ylabel("Weak Scaling Efficiency (%)")
+                ax.set_title("Weak Scaling: Jacobi [95% CI]")
+            else:
+                for method in sorted(methods):
+                    df_m = df_weak[df_weak["method"] == method].sort_values("P")
+                    marker = markers.get(method, "o")
+                    ax.plot(df_m["P"], df_m["efficiency"], marker=marker, linestyle="-",
+                            color=color_map[method], label=method, markersize=8)
+                ax.set_ylabel("Weak Scaling Efficiency (%)")
+                ax.set_title("Weak Scaling: Jacobi")
+
+            ax.axhline(y=100, color="k", linestyle="--", alpha=0.5, label="Ideal (100%)")
+            P_range = np.array(sorted(df_weak["P"].unique()))
+            ax.set_xlabel("Number of Ranks (P)")
+            ax.legend(loc="best")
+            ax.set_xscale("log", base=2)
+            ax.set_xticks(P_range)
+            ax.set_xticklabels([str(int(p)) for p in P_range])
+            ax.set_ylim(0, 110)
+            ax.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            fig.savefig(fig_dir / "06_weak_scaling.pdf")
+            print(f"Saved: {fig_dir / '06_weak_scaling.pdf'}")
 
 # %%
 # Summary Statistics
