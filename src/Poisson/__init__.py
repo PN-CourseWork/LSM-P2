@@ -22,11 +22,11 @@ from .kernels import NumPyKernel, NumbaKernel
 from .solver import JacobiPoisson
 from .multigrid import MultigridPoisson
 from .mpi import (
-    DomainDecomposition,
-    RankInfo,
-    NoDecomposition,
-    NumpyHaloExchange,
-    CustomHaloExchange,
+    #DomainDecomposition,
+    #RankInfo,
+    #NoDecomposition,
+    #NumpyHaloExchange,
+    #CustomHaloExchange,
     DistributedGrid,
     RankGeometry,
 )

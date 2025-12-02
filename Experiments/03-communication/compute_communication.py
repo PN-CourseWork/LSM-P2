@@ -45,7 +45,7 @@ def _run_benchmark():
     # --- MLflow Setup ---
     # Initialize MLflow tracking from environment variables
     # Must be called by all ranks to ensure proper MPI barrier synchronization if needed
-    setup_mlflow_tracking()
+    #setup_mlflow_tracking()
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -115,7 +115,7 @@ def _run_benchmark():
                         }
                     )
                 )
-
+"""
     if rank == 0:
         df = pd.concat(dfs, ignore_index=True)
         output_file = data_dir / f"communication_np{size}.parquet"
@@ -140,6 +140,6 @@ def _run_benchmark():
         except Exception as e:
             print(f"  ✗ WARNING: MLflow logging failed: {e}")
 
-
+"""
 if __name__ == "__main__":
     main()
