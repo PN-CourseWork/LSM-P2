@@ -1,0 +1,15 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 04-validation
+solver: jacobi
+
+# Validation defaults (override via CLI for sweeps)
+N: 32
+n_ranks: 8
+max_iter: 50000
+tolerance: 1.0e-10
+strategy: sliced
+communicator: custom

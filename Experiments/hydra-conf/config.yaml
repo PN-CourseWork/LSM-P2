@@ -1,34 +1,35 @@
 defaults:
   - _self_
-  - 01-kernels: benchmark
-  - optional 06-scaling: null
 
-# Shared defaults
+# ============================================================
+# Shared defaults for all experiments
+# Override via experiment-specific configs or CLI
+# ============================================================
+
+# Grid and parallelization
 N: 64
-omega: 0.8
-max_iter: 100
-tolerance: 0.0
+n_ranks: 1
+numba_threads: 1
 
-# Scaling experiment defaults
+# Solver selection
+solver: jacobi  # jacobi, multigrid, fmg
 strategy: sliced
 communicator: custom
-tol: 0.0
-cycles: 2
-n_smooth: 3
 use_numba: false
 
-# Kernel experiment defaults
-kernel: numba
-threads: 4
-run_mode: null
+# Solver parameters
+omega: 0.8
+max_iter: 1000
+tolerance: 1.0e-6
 
-# Logging
+# Multigrid-specific
+n_smooth: 3
+fmg_cycles: 1
+
+# MLflow logging
+experiment_name: null
 job_name: null
 log_dir: logs/lsf
-experiment_name: null
-
-# Placeholder for sweep
-sweep: {}
 
 mlflow:
   mode: local

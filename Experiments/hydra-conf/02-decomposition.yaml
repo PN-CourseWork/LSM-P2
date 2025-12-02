@@ -1,0 +1,7 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 02-decomposition
+N: 32

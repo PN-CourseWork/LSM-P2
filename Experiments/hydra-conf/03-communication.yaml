@@ -1,0 +1,11 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 03-communication
+
+# Benchmark settings
+problem_sizes: [32, 48, 64, 80, 100]
+iterations: 500
+warmup: 50

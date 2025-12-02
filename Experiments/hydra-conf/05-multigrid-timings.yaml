@@ -1,0 +1,12 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 05-multigrid-timings
+
+# Timing comparison settings
+N: 257
+n_ranks: 8
+strategy: sliced
+communicator: custom

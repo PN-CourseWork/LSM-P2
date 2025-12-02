@@ -9,6 +9,10 @@ docs/reports/TexReport/
 
 # Generated data (keep README.md)
 data/*
+mlruns/
+mlflow_ui.log
+multirun/
+outputs/
 
 # Uv stuff 
 uv.lock

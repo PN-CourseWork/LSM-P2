@@ -10,36 +10,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+import hydra
+from omegaconf import DictConfig
+
 from Poisson import get_project_root
 
 # Setup
 sns.set_theme(style="whitegrid")
-repo_root = get_project_root()
-data_base = repo_root / "data"
-fig_dir = repo_root / "figures" / "scaling"
-fig_dir.mkdir(parents=True, exist_ok=True)
-
-# Data directories - SEPARATE strong vs weak
-STRONG_DIRS = {
-    "Jacobi": [
-        data_base / "06-scaling-strong_sliced",
-        data_base / "06-scaling-strong_cubic",
-    ],
-    "FMG": [
-        data_base / "06-scaling-fmg_strong_sliced",
-        data_base / "06-scaling-fmg_strong_cubic",
-    ],
-}
-WEAK_DIRS = {
-    "Jacobi": [
-        data_base / "06-scaling-weak_sliced",
-        data_base / "06-scaling-weak_cubic",
-    ],
-    "FMG": [
-        data_base / "06-scaling-fmg_weak_sliced",
-        data_base / "06-scaling-fmg_weak_cubic",
-    ],
-}
 
 
 def load_scaling_data(dirs_by_solver: dict) -> pd.DataFrame:
@@ -133,7 +110,7 @@ def compute_weak_scaling(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def plot_strong_scaling(df: pd.DataFrame, title: str, filename: str):
+def plot_strong_scaling(df: pd.DataFrame, title: str, filename: str, fig_dir: Path):
     """Plot strong scaling (speedup + efficiency) with shared legend."""
     df = df[df["P"] > 1].copy()  # Exclude baseline from plot
     if df.empty:
@@ -177,7 +154,7 @@ def plot_strong_scaling(df: pd.DataFrame, title: str, filename: str):
     plt.close()
 
 
-def plot_weak_scaling(df: pd.DataFrame, title: str, filename: str):
+def plot_weak_scaling(df: pd.DataFrame, title: str, filename: str, fig_dir: Path):
     """Plot weak scaling efficiency with legend outside."""
     df = df[df["P"] > 1].copy()  # Exclude baseline from plot
     if df.empty:
@@ -206,54 +183,89 @@ def plot_weak_scaling(df: pd.DataFrame, title: str, filename: str):
     plt.close()
 
 
-# Load data separately for strong and weak scaling
-df_strong = load_scaling_data(STRONG_DIRS)
-df_weak = load_scaling_data(WEAK_DIRS)
+@hydra.main(config_path="../hydra-conf", config_name="06-scaling", version_base=None)
+def main(cfg: DictConfig):
+    """Main plotting function with Hydra configuration."""
+    # Setup paths
+    repo_root = get_project_root()
+    data_base = repo_root / "data"
+    fig_dir = repo_root / "figures" / "scaling"
+    fig_dir.mkdir(parents=True, exist_ok=True)
 
-print(f"Strong scaling: {len(df_strong)} data points")
-print(f"Weak scaling: {len(df_weak)} data points")
+    # Data directories - SEPARATE strong vs weak
+    STRONG_DIRS = {
+        "Jacobi": [
+            data_base / "06-scaling-strong_sliced",
+            data_base / "06-scaling-strong_cubic",
+        ],
+        "FMG": [
+            data_base / "06-scaling-fmg_strong_sliced",
+            data_base / "06-scaling-fmg_strong_cubic",
+        ],
+    }
+    WEAK_DIRS = {
+        "Jacobi": [
+            data_base / "06-scaling-weak_sliced",
+            data_base / "06-scaling-weak_cubic",
+        ],
+        "FMG": [
+            data_base / "06-scaling-fmg_weak_sliced",
+            data_base / "06-scaling-fmg_weak_cubic",
+        ],
+    }
 
-if df_strong.empty and df_weak.empty:
-    print("No data found.")
-    import sys
-    sys.exit(0)
+    # Load data separately for strong and weak scaling
+    df_strong = load_scaling_data(STRONG_DIRS)
+    df_weak = load_scaling_data(WEAK_DIRS)
 
-# Compute metrics
-df_strong_metrics = compute_strong_scaling(df_strong)
-df_weak_metrics = compute_weak_scaling(df_weak)
+    print(f"Strong scaling: {len(df_strong)} data points")
+    print(f"Weak scaling: {len(df_weak)} data points")
 
-# Strong scaling plots
-N_strong = df_strong_metrics["N"].mode().values[0] if not df_strong_metrics.empty else 513
-print(f"Strong scaling N={N_strong}")
+    if df_strong.empty and df_weak.empty:
+        print("No data found.")
+        import sys
+        sys.exit(0)
 
-df_jac_strong = df_strong_metrics[(df_strong_metrics["solver"] == "Jacobi") &
-                                   (df_strong_metrics["N"] == N_strong)]
-df_all_strong = df_strong_metrics[df_strong_metrics["N"] == N_strong]
+    # Compute metrics
+    df_strong_metrics = compute_strong_scaling(df_strong)
+    df_weak_metrics = compute_weak_scaling(df_weak)
 
-plot_strong_scaling(df_jac_strong, f"Strong Scaling: Jacobi (N={N_strong})",
-                    "01_strong_scaling_jacobi.pdf")
-plot_strong_scaling(df_all_strong, f"Strong Scaling: Jacobi vs FMG (N={N_strong})",
-                    "02_strong_scaling_comparison.pdf")
+    # Strong scaling plots
+    N_strong = df_strong_metrics["N"].mode().values[0] if not df_strong_metrics.empty else 513
+    print(f"Strong scaling N={N_strong}")
 
-# Weak scaling plots
-df_jac_weak = df_weak_metrics[df_weak_metrics["solver"] == "Jacobi"]
-plot_weak_scaling(df_jac_weak, "Weak Scaling: Jacobi", "03_weak_scaling_jacobi.pdf")
-plot_weak_scaling(df_weak_metrics, "Weak Scaling: Jacobi vs FMG", "04_weak_scaling_comparison.pdf")
+    df_jac_strong = df_strong_metrics[(df_strong_metrics["solver"] == "Jacobi") &
+                                       (df_strong_metrics["N"] == N_strong)]
+    df_all_strong = df_strong_metrics[df_strong_metrics["N"] == N_strong]
 
-# Summary
-print("\n" + "=" * 50)
-print("SCALING SUMMARY")
-print("=" * 50)
-if not df_strong_metrics.empty:
-    print(f"\nStrong Scaling (N={N_strong}):")
-    summary = df_strong_metrics[df_strong_metrics["N"] == N_strong].groupby("method").agg({
-        "P": "max", "speedup": "max", "efficiency": lambda x: x.iloc[-1]
-    }).round(2)
-    print(summary.to_string())
+    plot_strong_scaling(df_jac_strong, f"Strong Scaling: Jacobi (N={N_strong})",
+                        "01_strong_scaling_jacobi.pdf", fig_dir)
+    plot_strong_scaling(df_all_strong, f"Strong Scaling: Jacobi vs FMG (N={N_strong})",
+                        "02_strong_scaling_comparison.pdf", fig_dir)
 
-if not df_weak_metrics.empty:
-    print(f"\nWeak Scaling:")
-    summary = df_weak_metrics.groupby("method").agg({
-        "P": "max", "efficiency": lambda x: x.iloc[-1]
-    }).round(2)
-    print(summary.to_string())
+    # Weak scaling plots
+    df_jac_weak = df_weak_metrics[df_weak_metrics["solver"] == "Jacobi"]
+    plot_weak_scaling(df_jac_weak, "Weak Scaling: Jacobi", "03_weak_scaling_jacobi.pdf", fig_dir)
+    plot_weak_scaling(df_weak_metrics, "Weak Scaling: Jacobi vs FMG", "04_weak_scaling_comparison.pdf", fig_dir)
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("SCALING SUMMARY")
+    print("=" * 50)
+    if not df_strong_metrics.empty:
+        print(f"\nStrong Scaling (N={N_strong}):")
+        summary = df_strong_metrics[df_strong_metrics["N"] == N_strong].groupby("method").agg({
+            "P": "max", "speedup": "max", "efficiency": lambda x: x.iloc[-1]
+        }).round(2)
+        print(summary.to_string())
+
+    if not df_weak_metrics.empty:
+        print(f"\nWeak Scaling:")
+        summary = df_weak_metrics.groupby("method").agg({
+            "P": "max", "efficiency": lambda x: x.iloc[-1]
+        }).round(2)
+        print(summary.to_string())
+
+
+if __name__ == "__main__":
+    main()

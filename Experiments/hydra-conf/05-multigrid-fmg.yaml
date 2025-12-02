@@ -1,0 +1,18 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 05-multigrid-fmg
+solver: fmg
+
+# FMG defaults (override via CLI for sweeps)
+N: 129
+n_ranks: 8
+n_smooth: 3
+omega: 0.6666666666666666
+max_iter: 3000
+tolerance: 1.0e-16
+fmg_cycles: 1
+strategy: sliced
+communicator: custom

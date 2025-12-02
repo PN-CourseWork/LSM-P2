@@ -1,4 +1,8 @@
-# @package _global_
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
 experiment_name: 01-kernels
 run_mode: benchmark
 

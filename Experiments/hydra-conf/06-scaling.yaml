@@ -1,0 +1,18 @@
+defaults:
+  - config
+  - _self_
+
+# Experiment settings
+experiment_name: 06-scaling
+
+# Default solver configuration
+solver: jacobi
+N: 65
+max_iter: 100
+omega: 0.8
+strategy: sliced
+communicator: custom
+tol: 0.0
+cycles: 2
+n_smooth: 3
+use_numba: false

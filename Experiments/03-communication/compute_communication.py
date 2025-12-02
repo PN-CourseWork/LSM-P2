@@ -6,22 +6,31 @@ Compare NumPy vs Custom MPI datatype halo exchange for contiguous (Z-axis)
 and non-contiguous (X-axis) memory layouts.
 
 Uses per-iteration timeseries data for statistical analysis.
+All data is logged to MLflow for retrieval by plotting scripts.
 """
 
 import subprocess
-import mlflow
+import numpy as np
+import hydra
+from omegaconf import DictConfig
 
 from Poisson import get_project_root
-from utils.mlflow.io import setup_mlflow_tracking
+from utils.mlflow.io import (
+    setup_mlflow_tracking,
+    start_mlflow_run_context,
+    log_parameters,
+    log_metrics_dict,
+)
 
 
-def main():
+@hydra.main(config_path="../hydra-conf", config_name="03-communication", version_base=None)
+def main(cfg: DictConfig):
     """Entry point - spawns MPI if needed."""
     try:
         from mpi4py import MPI
 
         if MPI.COMM_WORLD.Get_size() > 1:
-            _run_benchmark()
+            _run_benchmark(cfg)
             return
     except ImportError:
         pass
@@ -36,29 +45,21 @@ def main():
     subprocess.run(["mpiexec", "-n", "4", "uv", "run", "python", str(script)])
 
 
-def _run_benchmark():
-    """MPI worker - collects per-iteration timings."""
-    import pandas as pd
+def _run_benchmark(cfg: DictConfig):
+    """MPI worker - collects per-iteration timings and logs to MLflow."""
     from mpi4py import MPI
-    from Poisson import JacobiPoisson, get_project_root
-
-    # --- MLflow Setup ---
-    # Initialize MLflow tracking from environment variables
-    # Must be called by all ranks to ensure proper MPI barrier synchronization if needed
-    #setup_mlflow_tracking()
+    from Poisson import JacobiPoisson
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
 
-    # Config
-    PROBLEM_SIZES = [32, 48, 64, 80, 100]
-    ITERATIONS = 500  # Per-iteration data gives us 500 samples each
-    WARMUP = 50
+    # Config from Hydra
+    PROBLEM_SIZES = list(cfg.problem_sizes)
+    ITERATIONS = cfg.iterations
+    WARMUP = cfg.warmup
 
     # Test configurations: strategy x communicator
-    # - sliced: 1D decomposition along z-axis (contiguous memory access)
-    # - cubic: 3D decomposition (includes non-contiguous x/y communication)
     CONFIGS = [
         ("sliced", "numpy", "NumPy (sliced, contiguous)"),
         ("sliced", "custom", "Custom (sliced, contiguous)"),
@@ -66,16 +67,11 @@ def _run_benchmark():
         ("cubic", "custom", "Custom (cubic, mixed)"),
     ]
 
-    repo_root = get_project_root()
-    data_dir = repo_root / "data" / "03-communication"
-    data_dir.mkdir(parents=True, exist_ok=True)
-
     if rank == 0:
+        setup_mlflow_tracking(mode=cfg.mlflow.mode)
         print("Communication Benchmark: Per-Iteration Timings")
         print(f"Ranks: {size}, Iterations: {ITERATIONS}, Warmup: {WARMUP}")
         print("=" * 60)
-
-    dfs = []
 
     for N in PROBLEM_SIZES:
         if rank == 0:
@@ -85,7 +81,7 @@ def _run_benchmark():
             if rank == 0:
                 print(f"  {label}...", end=" ", flush=True)
 
-            # Create and run solver using unified DistributedGrid API
+            # Create and run solver
             solver = JacobiPoisson(
                 N=N,
                 strategy=strategy,
@@ -100,46 +96,40 @@ def _run_benchmark():
             max_times = comm.allreduce(local_times, op=MPI.MAX)
 
             if rank == 0:
-                local_N = N // size  # Local subdomain size along decomposed axis
-                print(f"mean={sum(max_times) / len(max_times) * 1e6:.1f} μs/iter")
-                dfs.append(
-                    pd.DataFrame(
-                        {
-                            "N": N,
-                            "local_N": local_N,
-                            "strategy": strategy,
-                            "communicator": comm_type,
-                            "label": label,
-                            "iteration": range(len(max_times)),
-                            "halo_time_us": [t * 1e6 for t in max_times],
-                        }
-                    )
-                )
-"""
+                local_N = N // size
+                halo_times_us = [t * 1e6 for t in max_times]
+                mean_time = np.mean(halo_times_us)
+                std_time = np.std(halo_times_us)
+
+                print(f"mean={mean_time:.1f} μs/iter")
+
+                # Log to MLflow
+                run_name = f"N{N}_{strategy}_{comm_type}"
+                with start_mlflow_run_context(
+                    experiment_name=cfg.experiment_name or "03-communication",
+                    parent_run_name=f"np{size}",
+                    child_run_name=run_name,
+                ):
+                    log_parameters({
+                        "N": N,
+                        "local_N": local_N,
+                        "strategy": strategy,
+                        "communicator": comm_type,
+                        "label": label,
+                        "n_ranks": size,
+                        "iterations": ITERATIONS,
+                        "warmup": WARMUP,
+                    })
+                    log_metrics_dict({
+                        "halo_time_mean_us": mean_time,
+                        "halo_time_std_us": std_time,
+                        "halo_time_min_us": np.min(halo_times_us),
+                        "halo_time_max_us": np.max(halo_times_us),
+                    })
+
     if rank == 0:
-        df = pd.concat(dfs, ignore_index=True)
-        output_file = data_dir / f"communication_np{size}.parquet"
-        df.to_parquet(output_file, index=False)
-        print(f"\nSaved {len(df)} measurements to: {output_file}")
+        print("\nAll results logged to MLflow.")
 
-        # --- MLflow Logging ---
-        # To disable MLflow logging, comment out the following lines.
-        try:
-            mlflow.set_experiment("/Shared/LSM-PoissonMPI/Experiment-03-Communication")
-            with mlflow.start_run(run_name=f"Communication-Data-np{size}") as run:
-                print(f"INFO: Started MLflow run '{run.info.run_name}' for artifact logging.")
-                
-                mlflow.log_param("ranks", size)
-                mlflow.log_param("problem_sizes", PROBLEM_SIZES)
-                mlflow.log_param("iterations", ITERATIONS)
 
-                if output_file.exists():
-                    mlflow.log_artifact(str(output_file))
-                    print(f"  ✓ Logged artifact: {output_file.name}")
-        
-        except Exception as e:
-            print(f"  ✗ WARNING: MLflow logging failed: {e}")
-
-"""
 if __name__ == "__main__":
     main()
