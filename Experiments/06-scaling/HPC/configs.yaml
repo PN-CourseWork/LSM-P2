@@ -14,21 +14,26 @@ experiments:
             WORKDIR: "$LSB_SUBCWD"
             RUNNER_SCRIPT: "uv run python Experiments/06-scaling/jacobi_runner.py"
 
+          # each row = ONE job array (one resource / MPI config)
           matrix:
-            - { JOB_NAME: "jacobi_P1[1-4]",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package",
-                ARGS_FILE: "arrays/jacobi_P1.json" }
-            - { JOB_NAME: "jacobi_P8[1-4]",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package",
-                ARGS_FILE: "arrays/jacobi_P8.json" }
-            - { JOB_NAME: "jacobi_P12[1-4]", N_CORES: 24, RANKS: 12, MAP_BY: "--map-by ppr:12:package",
-                ARGS_FILE: "arrays/jacobi_P12.json" }
-            # etc.
+            - { NAME: "jacobi_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jacobi_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jacobi_P12", N_CORES: 24, RANKS: 12, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jacobi_P24", N_CORES: 24, RANKS: 24, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jacobi_P48", N_CORES: 48, RANKS: 48, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jacobi_P96", N_CORES: 96, RANKS: 96, MAP_BY: "--map-by ppr:12:package" }
 
         runtime:
+          # these go into ARGS_FILE as JSON, then become --flags for the runner
           static:
             tol: 0.0
             max_iter: 100
 
+          # Cartesian product → entries in ARGS_FILE → job array length
           grid:
             N: [288]
             strategy: ["sliced", "cubic"]
             communicator: ["numpy", "custom"]
+
+          # use this instead of grid if you need tied combos, e.g. weak scaling
+          matrix: []
