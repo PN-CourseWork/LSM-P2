@@ -1,0 +1,35 @@
+defaults:
+  - _self_
+  - 01-kernels: benchmark
+  - optional 06-scaling: null
+
+# Shared defaults
+N: 64
+omega: 0.8
+max_iter: 100
+tolerance: 0.0
+
+# Scaling experiment defaults
+strategy: sliced
+communicator: custom
+tol: 0.0
+cycles: 2
+n_smooth: 3
+use_numba: false
+
+# Kernel experiment defaults
+kernel: numba
+threads: 4
+run_mode: null
+
+# Logging
+job_name: null
+log_dir: logs/lsf
+experiment_name: null
+
+# Placeholder for sweep
+sweep: {}
+
+mlflow:
+  mode: local
+  databricks_project_prefix: "/Shared/LSM-PoissonMPI"

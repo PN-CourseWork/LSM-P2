@@ -38,13 +38,13 @@ def main(cfg: DictConfig):
 
     print("Fetching convergence data from MLflow...")
     try:
-        # Use adjusted experiment name for Databricks if mode is databricks
-        exp_name_conv = cfg.mlflow.databricks_project_prefix + "/kernels_convergence" if cfg.mlflow.mode == "databricks" else "kernels_convergence"
-
-        df_conv_runs = load_runs(exp_name_conv, converged_only=False)
+        # Fetch all runs from the unified '01-kernels' experiment
+        # and filter for 'convergence' mode
+        all_runs = load_runs(exp_name_base, converged_only=False)
+        df_conv_runs = all_runs[all_runs["params.run_mode"] == "convergence"]
         
         if df_conv_runs.empty:
-            print(f"No convergence runs found for experiment '{exp_name_conv}'.")
+            print(f"No convergence runs found for experiment '{exp_name_base}'.")
         else:
             client = get_mlflow_client()
             history_list = []
@@ -100,11 +100,13 @@ def main(cfg: DictConfig):
 
     print("Fetching benchmark data from MLflow...")
     try:
-        exp_name_bench = cfg.mlflow.databricks_project_prefix + "/kernels_benchmark" if cfg.mlflow.mode == "databricks" else "kernels_benchmark"
-        df_bench = load_runs(exp_name_bench, converged_only=False)
+        # Fetch all runs from the unified '01-kernels' experiment
+        # and filter for 'benchmark' mode
+        all_runs = load_runs(exp_name_base, converged_only=False)
+        df_bench = all_runs[all_runs["params.run_mode"] == "benchmark"]
         
         if df_bench.empty:
-            print(f"No benchmark runs found for experiment '{exp_name_bench}'.")
+            print(f"No benchmark runs found for experiment '{exp_name_base}'.")
         else:
             # Convert columns
             df_bench["N"] = df_bench["params.N"].astype(int)

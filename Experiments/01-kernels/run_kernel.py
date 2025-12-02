@@ -66,12 +66,12 @@ def run_kernel(kernel, f, max_iter, track_residuals=False):
     
     return u, wall_time, residuals
 
-@hydra.main(config_path="conf", config_name="benchmark", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     # Setup MLflow tracking
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
-    is_convergence = (cfg.get("experiment_name") == "kernels_convergence")
+    is_convergence = (cfg.get("run_mode") == "convergence")
     
     f = sinusoidal_source_term(cfg.N) if is_convergence else np.ones((cfg.N, cfg.N, cfg.N))
     
@@ -129,10 +129,11 @@ def main(cfg: DictConfig):
 
     with start_mlflow_run_context(
         experiment_name=cfg.experiment_name or "kernels",
-        parent_run_name=f"Batch_{cfg.get('experiment_name', 'manual')}",
+        parent_run_name=f"Batch_{cfg.get('run_mode', 'manual')}",
         child_run_name=run_name
     ):
         log_parameters({
+            "run_mode": cfg.get("run_mode", "manual"),
             "N": cfg.N,
             "kernel": cfg.kernel,
             "threads": cfg.threads,

@@ -52,3 +52,282 @@ INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/experiments/search-datase
 INFO:     127.0.0.1:62714 - "GET /ajax-api/2.0/mlflow/gateway-proxy?gateway_path=api%2F2.0%2Fendpoints%2F HTTP/1.1" 200 OK
 INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/logged-models/search HTTP/1.1" 200 OK
 INFO:     127.0.0.1:62718 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+2025/12/02 17:59:20 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:62722 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62725 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:256: FutureWarning: Filesystem tracking backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri, artifact_uri)
+INFO:     127.0.0.1:62728 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62734 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62737 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62740 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62742 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62744 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62747 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62749 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62751 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62752 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62755 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62756 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62762 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+2025/12/02 18:06:55 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:62765 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+2025/12/02 18:07:25 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:62767 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+2025/12/02 18:07:55 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:62769 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:62773 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62776 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62834 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62907 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62914 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62920 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63033 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63039 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63128 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63187 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63287 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63432 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63521 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63522 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63688 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63765 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+2025/12/02 18:16:26 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:63857 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+2025/12/02 18:16:56 ERROR mlflow.server: Exception on /ajax-api/2.0/mlflow/runs/search [POST]
+Traceback (most recent call last):
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 727, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 768, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1207, in _search_runs
+    response_message = search_runs_impl(request_message)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py", line 1233, in search_runs_impl
+    run_entities = _get_tracking_store().search_runs(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/abstract_store.py", line 752, in search_runs
+    runs, token = self._search_runs(
+                  ^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 1040, in _search_runs
+    run_infos = self._list_run_infos(experiment_id, run_view_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 980, in _list_run_infos
+    self._check_root_dir()
+  File "/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/store/tracking/file_store.py", line 253, in _check_root_dir
+    raise Exception(f"'{self.root_directory}' does not exist.")
+Exception: './mlruns' does not exist.
+INFO:     127.0.0.1:63915 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:63922 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK

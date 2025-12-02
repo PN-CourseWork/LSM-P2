@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/203472146807667258/0f2523d413714ef282aa9d5bbd90014c/artifacts
+end_time: 1764695845752
+entry_point_name: ''
+experiment_id: '203472146807667258'
+lifecycle_stage: active
+run_id: 0f2523d413714ef282aa9d5bbd90014c
+run_name: numpy_N100_t1
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764695845747
+status: 3
+tags: []
+user_id: philipnickel

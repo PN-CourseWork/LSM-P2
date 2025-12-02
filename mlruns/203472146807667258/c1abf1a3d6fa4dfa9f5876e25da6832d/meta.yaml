@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns/203472146807667258/c1abf1a3d6fa4dfa9f5876e25da6832d/artifacts
+end_time: 1764695842329
+entry_point_name: ''
+experiment_id: '203472146807667258'
+lifecycle_stage: active
+run_id: c1abf1a3d6fa4dfa9f5876e25da6832d
+run_name: numba_N25_t8
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1764695842325
+status: 3
+tags: []
+user_id: philipnickel

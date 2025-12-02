@@ -187,7 +187,7 @@ def run_fmg(params, args, comm, rank, n_ranks):
         print(f"  Wall time: {solver.results.wall_time:.4f}s, {solver.results.mlups:.2f} Mlup/s")
 
 
-@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     OmegaConf.set_struct(cfg, False)  # Allow adding keys from sweep (e.g. ranks)
     comm = MPI.COMM_WORLD
