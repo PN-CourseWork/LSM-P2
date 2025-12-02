@@ -6,6 +6,10 @@
 #BSUB -R "span[ptile=24]"
 #BSUB -N
 
+# ==================================================================================================
+# Template job script for parameter sweeping in job-array (With same requested resources)
+# ==================================================================================================
+
 # Default values (for testing)
 N=64
 STRAT="sliced"
