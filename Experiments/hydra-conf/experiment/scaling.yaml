@@ -6,15 +6,18 @@ defaults:
 
 experiment_name: scaling
 
-# HPC MPI options - NPS calculated from LSB_DJOB_NUMPROC
+# HPC MPI options
 mpi:
   bind_to: core
 
-# Scaling experiment settings
-N: 65
-n_ranks: 1
+# Sweep parameters (filtered by LSB_DJOB_NUMPROC allocation)
+sweep:
+  n_ranks: [1, 2, 4, 8, 12, 24, 32, 48, 64, 72, 96]
+  N: [65, 129, 257]
+  strategy: [sliced, cubic]
+
+# Fixed solver settings
 max_iter: 100
 omega: 0.8
 tolerance: 0.0
-strategy: sliced
 communicator: custom

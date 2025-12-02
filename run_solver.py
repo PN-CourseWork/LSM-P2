@@ -5,20 +5,22 @@ Unified Solver Runner
 Single runner for all solver-based experiments. Spawns MPI subprocess
 with rank count from Hydra config. Results logged to MLflow.
 
+Supports LSF job arrays for parallel experiment execution:
+- LSB_DJOB_NUMPROC: allocated cores (determines valid rank counts)
+- LSB_JOBINDEX: job array index (selects which config to run)
+
 Usage
 -----
 
 .. code-block:: bash
 
-    # Single run
-    uv run python run_solver.py --config-name=experiment/04-validation
+    # Single run (local)
+    uv run python run_solver.py -cn experiment/validation
 
-    # Override parameters
-    uv run python run_solver.py --config-name=experiment/04-validation N=64 n_ranks=8
-
-    # Hydra multirun sweep
-    uv run python run_solver.py --config-name=experiment/04-validation \\
-        --multirun N=16,32,48 strategy=sliced,cubic
+    # HPC with job array (each element runs one config)
+    #BSUB -J scaling[1-66]
+    #BSUB -n 48
+    uv run python run_solver.py -cn experiment/scaling
 """
 
 # %%
@@ -29,9 +31,45 @@ import os
 import subprocess
 import sys
 from dataclasses import asdict
+from itertools import product
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
+
+
+def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 24):
+    """Generate valid experiment configs for this allocation tier.
+
+    Filters sweep parameters to only include configs that:
+    1. Fit within the allocated cores (n_ranks <= alloc_cores)
+    2. Require this tier (n_ranks > prev_tier, avoiding duplicates)
+    """
+    sweep = cfg.get("sweep", {})
+    if not sweep:
+        # No sweep defined - return single config from cfg
+        return [{"n_ranks": cfg.get("n_ranks", 1),
+                 "N": cfg.get("N", 64),
+                 "strategy": cfg.get("strategy", "sliced")}]
+
+    prev_tier = alloc_cores - cores_per_node  # Previous allocation tier
+
+    # Get sweep parameters with defaults
+    rank_values = list(sweep.get("n_ranks", [cfg.get("n_ranks", 1)]))
+    N_values = list(sweep.get("N", [cfg.get("N", 64)]))
+    strategy_values = list(sweep.get("strategy", [cfg.get("strategy", "sliced")]))
+
+    # Filter ranks: must fit in allocation AND require this tier
+    valid_ranks = [r for r in rank_values if prev_tier < r <= alloc_cores]
+
+    if not valid_ranks:
+        return []
+
+    # Generate all combinations
+    configs = []
+    for n_ranks, N, strategy in product(valid_ranks, N_values, strategy_values):
+        configs.append({"n_ranks": n_ranks, "N": N, "strategy": strategy})
+
+    return configs
 
 
 @hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
@@ -50,10 +88,43 @@ def main(cfg: DictConfig) -> None:
         pass
 
     # %%
+    # Job Array Configuration
+    # -----------------------
+
+    mpi = cfg.get("mpi", {})
+    cores_per_node = mpi.get("cores_per_node", 24)
+    alloc_cores = int(os.environ.get("LSB_DJOB_NUMPROC", cores_per_node))
+    job_index = int(os.environ.get("LSB_JOBINDEX", 0))
+
+    # Get valid configs for this allocation tier
+    configs = _get_sweep_configs(cfg, alloc_cores, cores_per_node)
+
+    if not configs:
+        print(f"No valid configs for allocation={alloc_cores} cores")
+        return
+
+    if job_index > 0:
+        # Job array mode: run config at this index
+        if job_index > len(configs):
+            print(f"Job index {job_index} > num configs {len(configs)}, exiting")
+            return
+        run_cfg = configs[job_index - 1]  # LSB_JOBINDEX is 1-based
+    else:
+        # Local/single mode: should not happen, but fallback to first
+        print(f"Warning: No LSB_JOBINDEX set, running first config")
+        run_cfg = configs[0]
+
+    # Override cfg with selected config
+    n_ranks = run_cfg["n_ranks"]
+    cfg_override = OmegaConf.create(run_cfg)
+    cfg = OmegaConf.merge(cfg, cfg_override)
+
+    print(f"[Job {job_index}/{len(configs)}] n_ranks={n_ranks}, N={run_cfg['N']}, strategy={run_cfg['strategy']}")
+
+    # %%
     # Spawn MPI Subprocess
     # --------------------
 
-    n_ranks = cfg.get("n_ranks", 1)
     script = os.path.abspath(__file__)
 
     # Set env var to prevent recursive spawning
@@ -62,25 +133,29 @@ def main(cfg: DictConfig) -> None:
 
     # Build MPI command with optional args
     cmd = ["mpiexec", "-n", str(n_ranks)]
-
-    mpi = cfg.get("mpi", {})
     cmd.append("--report-binding")
 
-    # Calculate NPS from LSF allocation if available
-    alloc_cores = os.environ.get("LSB_DJOB_NUMPROC")
-    if alloc_cores and mpi.get("bind_to"):
-        cores_per_node = mpi.get("cores_per_node", 24)
-        n_nodes = int(alloc_cores) // cores_per_node
+    # Calculate NPS from allocation
+    if mpi.get("bind_to"):
+        n_nodes = alloc_cores // cores_per_node
         ranks_per_node = n_ranks // max(n_nodes, 1)
         ranks_per_socket = ranks_per_node // 2  # 2 sockets per node
         if ranks_per_socket > 0:
             cmd.extend(["--map-by", f"ppr:{ranks_per_socket}:package"])
-
-    if mpi.get("bind_to"):
         cmd.extend(["--bind-to", str(mpi.bind_to)])
 
     cmd.extend(["uv", "run", "python", script])
-    cmd.extend(sys.argv[1:])
+    # Pass the resolved config, not original argv
+    cmd.extend([f"n_ranks={n_ranks}", f"N={run_cfg['N']}", f"strategy={run_cfg['strategy']}"])
+    # Keep the config-name from original args
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg.startswith("-c") or arg.startswith("--config"):
+            cmd.append(arg)
+            # If flag and value are separate args, also append value
+            if "=" not in arg and i + 1 < len(args):
+                cmd.append(args[i + 1])
+            break
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
@@ -88,37 +163,6 @@ def main(cfg: DictConfig) -> None:
         print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)
-
-    # Log output as MLflow artifact
-    if cfg.get("experiment_name") and (result.stdout or result.stderr):
-        from Poisson import get_project_root
-        from utils.mlflow.io import setup_mlflow_tracking
-        import mlflow
-
-        setup_mlflow_tracking(mode=cfg.mlflow.mode)
-
-        log_dir = get_project_root() / "logs" / "runs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        run_id = f"{cfg.experiment_name}_N{cfg.N}_p{n_ranks}"
-        log_file = log_dir / f"{run_id}.log"
-
-        with open(log_file, "w") as f:
-            if result.stdout:
-                f.write(result.stdout)
-            if result.stderr:
-                f.write("\n--- STDERR ---\n")
-                f.write(result.stderr)
-
-        try:
-            mlflow.set_experiment(cfg.experiment_name)
-            runs = mlflow.search_runs(max_results=1, order_by=["start_time DESC"])
-            if not runs.empty:
-                run_id = runs.iloc[0]["run_id"]
-                with mlflow.start_run(run_id=run_id):
-                    mlflow.log_artifact(str(log_file), artifact_path="logs")
-        except Exception:
-            pass
 
 
 def _run_solver(cfg: DictConfig, comm):

@@ -22,7 +22,6 @@ hydra:
   job:
     env_set:
       NUMBA_NUM_THREADS: "1"
-      NUMEXPR_MAX_THREADS: "1"
 
 # Solver selection
 solver: jacobi  # jacobi, multigrid, fmg

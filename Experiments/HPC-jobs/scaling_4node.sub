@@ -1,0 +1,14 @@
+#!/bin/bash
+#BSUB -J scaling_4node[1-6]
+#BSUB -q hpcintro
+#BSUB -W 00:30
+#BSUB -n 96
+#BSUB -R "span[ptile=24]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -o logs/lsf/scaling_4node_%J_%I.out
+#BSUB -e logs/lsf/scaling_4node_%J_%I.err
+
+module load mpi/5.0.8-gcc-13.4.0-binutils-2.44 >& /dev/null
+cd $LSB_SUBCWD
+
+uv run python run_solver.py -cn experiment/scaling
