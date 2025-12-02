@@ -14,9 +14,7 @@ import hydra
 from omegaconf import DictConfig
 
 from Poisson import get_project_root
-
-# Setup
-sns.set_theme(style="whitegrid")
+from utils import plotting  # Apply scientific style
 
 
 def load_scaling_data(dirs_by_solver: dict) -> pd.DataFrame:
@@ -183,7 +181,7 @@ def plot_weak_scaling(df: pd.DataFrame, title: str, filename: str, fig_dir: Path
     plt.close()
 
 
-@hydra.main(config_path="../hydra-conf", config_name="experiment/06-scaling", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/scaling", version_base=None)
 def main(cfg: DictConfig):
     """Main plotting function with Hydra configuration."""
     # Setup paths

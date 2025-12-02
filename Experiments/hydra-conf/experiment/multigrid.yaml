@@ -7,7 +7,7 @@ defaults:
 experiment_name: multigrid
 
 # FMG settings
-solver: fmg
+solver_type: fmg
 N: 129
 n_ranks: 8
 n_smooth: 3

@@ -6,18 +6,20 @@ defaults:
 
 experiment_name: kernel
 
-# Benchmark configuration
-N: 100
+# Sequential Jacobi kernel benchmark
 n_ranks: 1
-max_iter: 200
-omega: 1.0
-tolerance: 0.0
+max_iter: 500
+omega: 0.8
+tolerance: 1.0e-6
 
-# Multirun sweep
+# Override NUMBA_NUM_THREADS to allow thread sweep
 hydra:
-  mode: MULTIRUN
-  sweeper:
-    params:
-      N: 25,50,75,100,125,150
-      use_numba: true,false
-      numba_threads: 1,4,6,8
+  job:
+    env_set:
+      NUMBA_NUM_THREADS: "8"
+
+# Sweep over problem size, numba on/off, and threads
+sweep:
+  N: [33, 65, 97, 129]
+  use_numba: [false, true]
+  numba_threads: [1, 4]

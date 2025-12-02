@@ -87,13 +87,17 @@ def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 
         return [{"n_ranks": cfg.get("n_ranks", 1),
                  "N": cfg.get("N", 64),
                  "strategy": cfg.get("strategy", "sliced"),
-                 "solver_type": cfg.get("solver_type", "jacobi")}]
+                 "solver_type": cfg.get("solver_type", "jacobi"),
+                 "use_numba": cfg.get("use_numba", False),
+                 "numba_threads": cfg.get("numba_threads", 1)}]
 
     # Get sweep parameters with defaults
     rank_values = list(sweep.get("n_ranks", [cfg.get("n_ranks", 1)]))
     N_values = list(sweep.get("N", [cfg.get("N", 64)]))
     strategy_values = list(sweep.get("strategy", [cfg.get("strategy", "sliced")]))
     solver_values = list(sweep.get("solver_type", [cfg.get("solver_type", "jacobi")]))
+    use_numba_values = list(sweep.get("use_numba", [cfg.get("use_numba", False)]))
+    numba_threads_values = list(sweep.get("numba_threads", [cfg.get("numba_threads", 1)]))
 
     # Filter ranks: must fit in allocation AND require this tier
     valid_ranks = [r for r in rank_values if prev_tier < r <= alloc_cores]
@@ -103,8 +107,16 @@ def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 
 
     # Generate all combinations
     configs = []
-    for n_ranks, N, strategy, solver_type in product(valid_ranks, N_values, strategy_values, solver_values):
-        configs.append({"n_ranks": n_ranks, "N": N, "strategy": strategy, "solver_type": solver_type})
+    for n_ranks, N, strategy, solver_type, use_numba, numba_threads in product(
+        valid_ranks, N_values, strategy_values, solver_values, use_numba_values, numba_threads_values
+    ):
+        # Skip numba_threads variations when not using numba
+        if not use_numba and numba_threads != numba_threads_values[0]:
+            continue
+        configs.append({
+            "n_ranks": n_ranks, "N": N, "strategy": strategy, "solver_type": solver_type,
+            "use_numba": use_numba, "numba_threads": numba_threads
+        })
 
     return configs
 

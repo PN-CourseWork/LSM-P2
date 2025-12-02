@@ -160,7 +160,7 @@ def main(cfg: DictConfig) -> None:
         facet_kws={"sharex": False, "sharey": False, "legend_out": True},
     )
 
-    # Add O(N^-2) reference line to each panel
+    # Add O(N^-2) reference line to each panel and format x-axis as N³
     for ax, solver in zip(g.axes.flat, df["Solver"].unique()):
         solver_df = df[df["Solver"] == solver]
         N_min, N_max = solver_df["N"].min(), solver_df["N"].max()
@@ -171,12 +171,15 @@ def main(cfg: DictConfig) -> None:
         scale = err_mid * (N_mid**2)
         err_ref = scale / (N_ref**2)
         ax.loglog(N_ref, err_ref, "k--", alpha=0.5, linewidth=1, label=r"$O(N^{-2})$")
+        N_vals = sorted(solver_df["N"].unique())
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.grid(True, alpha=0.3, which="both")
+        ax.set_xticks(N_vals, labels=[f"${n}^3$" for n in N_vals])
+        ax.minorticks_off()
+        ax.grid(True, alpha=0.3)
 
     # Shared legend is automatically placed outside by legend_out=True
-    g.set_axis_labels(r"Grid size $N$", r"$L_2$ error")
+    g.set_axis_labels("Grid Size", r"$L_2$ error")
     g.figure.suptitle("Spatial Convergence Validation", y=1.02)
     g.tight_layout()
 

@@ -29,17 +29,12 @@ from omegaconf import DictConfig
 
 from Poisson import get_project_root
 from utils.mlflow.io import setup_mlflow_tracking, load_runs
+from utils import plotting  # Apply scientific style
 
 
-@hydra.main(config_path="../hydra-conf", config_name="experiment/05-multigrid-fmg", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/multigrid", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Plot FMG spatial convergence with data from MLflow."""
-
-    # %%
-    # Initialize
-    # ----------
-
-    sns.set_style()
 
     repo_root = get_project_root()
     fig_dir = repo_root / "figures" / "multigrid"
@@ -100,10 +95,13 @@ def main(cfg: DictConfig) -> None:
         label=r"$O(N^{-2})$",
     )
 
+    N_vals = sorted(df["N"].unique())
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.grid(True, which="both", alpha=0.3)
-    ax.set_xlabel("Grid Size N")
+    ax.set_xticks(N_vals, labels=[f"${n}^3$" for n in N_vals])
+    ax.minorticks_off()
+    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Grid Size")
     ax.set_ylabel("L2 Error")
     ax.set_title("Spatial Convergence: FMG")
     ax.legend()

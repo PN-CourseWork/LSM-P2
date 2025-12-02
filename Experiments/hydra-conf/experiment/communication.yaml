@@ -12,11 +12,8 @@ n_ranks: 4
 max_iter: 200
 tolerance: 0.0
 
-# Multirun sweep
-hydra:
-  mode: MULTIRUN
-  sweeper:
-    params:
-      N: 32,48,64,80
-      strategy: sliced,cubic
-      communicator: numpy,custom
+# Sweep config for run_solver.py
+sweep:
+  N: [32, 48, 64, 80]
+  strategy: [sliced, cubic]
+  communicator: [numpy, custom]

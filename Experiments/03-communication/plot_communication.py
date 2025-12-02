@@ -29,18 +29,12 @@ from omegaconf import DictConfig
 
 from Poisson import get_project_root
 from utils.mlflow.io import setup_mlflow_tracking, load_runs
+from utils import plotting  # Apply scientific style
 
 
-@hydra.main(config_path="../hydra-conf", config_name="experiment/03-communication", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/communication", version_base=None)
 def main(cfg: DictConfig):
     """Generate communication analysis plots from MLflow data."""
-
-    # %%
-    # Initialize
-    # ----------
-
-    sns.set_style("whitegrid")
-    plt.rcParams["figure.dpi"] = 100
 
     repo_root = get_project_root()
     experiment_name = cfg.get("experiment_name", "03-communication")
@@ -78,13 +72,6 @@ def main(cfg: DictConfig):
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    palette = {
-        "NumPy (sliced, contiguous)": "#1f77b4",
-        "Custom (sliced, contiguous)": "#2ca02c",
-        "NumPy (cubic, mixed)": "#d62728",
-        "Custom (cubic, mixed)": "#ff7f0e",
-    }
-
     sns.lineplot(
         data=df,
         x="local_volume",
@@ -93,7 +80,6 @@ def main(cfg: DictConfig):
         style="label",
         markers=True,
         dashes=False,
-        palette=palette,
         ax=ax,
         markersize=8,
         linewidth=2,

@@ -93,7 +93,7 @@ def get_rank_bounds(N: int, size: int, strategy: str, rank: int) -> RankBounds:
     )
 
 
-@hydra.main(config_path="../hydra-conf", config_name="experiment/02-decomposition", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Main function for domain decomposition visualization."""
 

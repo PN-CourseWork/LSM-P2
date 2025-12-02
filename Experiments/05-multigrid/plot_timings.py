@@ -1,6 +1,6 @@
 """
 Plotting script for Jacobi vs FMG timings.
-Reveals grid traversal patterns.
+Reveals grid traversal patterns using data from validation experiment.
 """
 
 import hydra
@@ -9,92 +9,90 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 from Poisson import get_project_root
+from utils import plotting  # Apply scientific style
+from utils.mlflow.io import setup_mlflow_tracking, load_runs, get_mlflow_client
 
 
-def load_timeseries(path, method_name):
-    """Load timeseries data from HDF5 file."""
-    if not path.exists():
-        print(f"Warning: {path} not found.")
-        return pd.DataFrame()
-
-    try:
-        # Read the 'timeseries' key from HDF5
-        df = pd.read_hdf(path, key="timeseries")
-        df["method"] = method_name
-        df["step"] = df.index
-        return df
-    except Exception as e:
-        print(f"Error reading {path}: {e}")
-        return pd.DataFrame()
-
-
-@hydra.main(config_path="../hydra-conf", config_name="experiment/05-multigrid-timings", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/validation", version_base=None)
 def main(cfg: DictConfig) -> None:
-    """Plot timing comparison with Hydra configuration."""
+    """Plot timing comparison using validation experiment data."""
 
     # Setup paths
     repo_root = get_project_root()
-    data_dir = repo_root / "data" / "05-multigrid"
     figure_dir = repo_root / "figures" / "multigrid"
     figure_dir.mkdir(parents=True, exist_ok=True)
 
-    # Input files
-    jacobi_file = data_dir / "timings_jacobi.h5"
-    fmg_file = data_dir / "timings_fmg.h5"
+    # Load data from MLflow
+    print("Loading timing data from MLflow validation experiment...")
+    setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
-    # Load data
-    df_jacobi = load_timeseries(jacobi_file, "Jacobi")
-    df_fmg = load_timeseries(fmg_file, "FMG")
+    df = load_runs("validation", converged_only=False)
+    if df.empty:
+        print("Warning: No validation data found.")
+        return
 
-    if df_jacobi.empty or df_fmg.empty:
-        print("Error: Missing data. Run compute_timings.py first.")
-        exit(1)
+    # Get one Jacobi and one FMG run (largest N for each)
+    df["solver"] = df["params.solver"].fillna("jacobi")
+    df["N"] = df["params.N"].astype(int)
 
-    # Combine
-    df_all = pd.concat([df_jacobi, df_fmg], ignore_index=True)
+    client = get_mlflow_client()
+    history_data = []
 
-    # Melt to have "Timing Type" (Compute vs Halo)
-    # We are interested in 'compute_times' and 'halo_exchange_times'
-    df_melted = df_all.melt(
-        id_vars=["method", "step"],
-        value_vars=["compute_times", "halo_exchange_times"],
-        var_name="timing_type",
-        value_name="time_sec"
-    )
+    for solver in ["jacobi", "fmg"]:
+        solver_df = df[df["solver"] == solver].sort_values("N", ascending=False)
+        if solver_df.empty:
+            continue
 
-    # Rename for cleaner legend
-    df_melted["timing_type"] = df_melted["timing_type"].replace({
-        "compute_times": "Compute",
-        "halo_exchange_times": "Halo Exchange"
-    })
+        # Get the largest N run
+        run = solver_df.iloc[0]
+        run_id = run.run_id
+        N = run["N"]
+        print(f"  Loading {solver.upper()} timeseries (N={N})...")
+
+        # Fetch compute_times and halo_exchange_times metrics
+        for metric_name in ["compute_times", "halo_exchange_times"]:
+            try:
+                history = client.get_metric_history(run_id, metric_name)
+                for m in history:
+                    history_data.append({
+                        "step": m.step,
+                        "time_sec": m.value,
+                        "timing_type": "Compute" if "compute" in metric_name else "Halo Exchange",
+                        "method": solver.upper(),
+                    })
+            except Exception as e:
+                print(f"    Warning: Could not load {metric_name}: {e}")
+
+    if not history_data:
+        print("Warning: No timing data found in validation runs.")
+        return
+
+    df_timings = pd.DataFrame(history_data)
+    print(f"Loaded {len(df_timings)} timing measurements")
 
     # Plot
     print("Generating plot...")
-    sns.set_theme(style="whitegrid")
 
-    # Relplot: separate columns for Method
     g = sns.relplot(
-        data=df_melted,
+        data=df_timings,
         x="step",
         y="time_sec",
         hue="timing_type",
         col="method",
         kind="line",
-        height=5,
-        aspect=1.5,
-        facet_kws={"sharex": False, "sharey": False}  # FMG has fewer steps but varying times, Jacobi has many steps constant time
+        height=4,
+        aspect=1.3,
+        facet_kws={"sharex": False, "sharey": False}
     )
 
     g.set_titles("{col_name}")
     g.set_axis_labels("Step / Iteration", "Time (s)")
+    g.figure.suptitle("Grid Traversal Patterns: Jacobi vs FMG", y=1.02)
+    g.tight_layout()
 
-    # Adjust titles/layout
-    plt.subplots_adjust(top=0.85)
-    g.fig.suptitle("Grid Traversal Patterns: Jacobi vs FMG (N=257, 8 Ranks)", fontsize=16)
-
-    output_path = figure_dir / "timings_traversal_pattern.png"
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    print(f"Saved plot to {output_path}")
+    output_path = figure_dir / "timings_traversal_pattern.pdf"
+    g.savefig(output_path, bbox_inches="tight")
+    print(f"Saved: {output_path}")
 
 
 if __name__ == "__main__":
