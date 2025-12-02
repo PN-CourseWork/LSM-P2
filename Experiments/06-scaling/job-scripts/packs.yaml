@@ -349,14 +349,15 @@ jacobi_strong:
       max_iter: 300
       N: 513
       communicator: "custom"
+      n_cores: 24 
+      map_by: "--map_by "
 
     sweep_paired:
-      ranks: [1, 2, 4, 8, 16, 32, 64]
-      n_cores: [24, 24, 24, 24, 24, 48, 96]
+      ranks: [1, 8, 36, 64, 96, 144]
       map_by: ["--map-by core", "--map-by ppr:1:package", "--map-by ppr:2:package", "--map-by ppr:4:package", "--map-by ppr:8:package", "--map-by ppr:8:package", "--map-by ppr:8:package"]
 
     sweep:
-
+      decomposition: ["cubic","sliced"]
 
 
 

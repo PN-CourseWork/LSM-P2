@@ -33,7 +33,7 @@ from utils.mlflow.io import (
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="MPI Jacobi solver for 3D Poisson equation")
 parser.add_argument("--N", type=int, default=16, help="Grid size N³")
-parser.add_argument("--tol", type=float, default=1e-6, help="Convergence tolerance")
+parser.add_argument("--tol", type=float, default=0.0, help="Convergence tolerance. When set to 0.0 solver will run for max_iter iterations.")
 parser.add_argument("--max-iter", type=int, default=5, help="Max iterations")
 parser.add_argument("--omega", type=float, default=0.8, help="Relaxation parameter")
 parser.add_argument("--strategy", choices=["sliced", "cubic"], default="sliced", help="Decomposition strategy")
