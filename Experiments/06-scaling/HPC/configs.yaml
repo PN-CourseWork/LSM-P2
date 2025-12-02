@@ -1,39 +1,212 @@
+packs_dir: "Experiments/06-scaling/HPC/Packs/" 
+log_dir: "/tmp/logs/"
+data_dir: "data/"
+
 experiments:
-  poisson_strong:
+  Strong-Scaling:
 
     groups:
-      jacobi:
+      # =========================================================================
+      # JACOBI STRONG SCALING (Section 3.8)
+      # Fixed problem size, increasing ranks
+      # =========================================================================
+      jacobi_strong:
         env:
           static:
             QUEUE: "hpcintro"
-            WALLTIME: "00:05"
+            WALLTIME: "00:10"
             MEM_PER_CORE: "4GB"
             PTILE: 24
             MODULES: "mpi"
             NUMBA_NUM_THREADS: 1
             WORKDIR: "$LSB_SUBCWD"
-            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/jacobi_runner.py"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/jacobi_runner.py --numba"
 
-          # each row = ONE job array (one resource / MPI config)
           matrix:
-            - { NAME: "jacobi_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
-            - { NAME: "jacobi_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
-            - { NAME: "jacobi_P12", N_CORES: 24, RANKS: 12, MAP_BY: "--map-by ppr:12:package" }
-            - { NAME: "jacobi_P24", N_CORES: 24, RANKS: 24, MAP_BY: "--map-by ppr:12:package" }
-            - { NAME: "jacobi_P48", N_CORES: 48, RANKS: 48, MAP_BY: "--map-by ppr:12:package" }
-            - { NAME: "jacobi_P96", N_CORES: 96, RANKS: 96, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P12", N_CORES: 24, RANKS: 12, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P24", N_CORES: 24, RANKS: 24, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P48", N_CORES: 48, RANKS: 48, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_strong_P96", N_CORES: 96, RANKS: 96, MAP_BY: "--map-by ppr:12:package" }
 
         runtime:
-          # these go into ARGS_FILE as JSON, then become --flags for the runner
           static:
             tol: 0.0
             max_iter: 100
 
-          # Cartesian product → entries in ARGS_FILE → job array length
           grid:
-            N: [288]
+            N: [144, 216, 288]
             strategy: ["sliced", "cubic"]
-            communicator: ["numpy", "custom"]
+            communicator: ["custom"]
 
-          # use this instead of grid if you need tied combos, e.g. weak scaling
           matrix: []
+
+      # =========================================================================
+      # FMG SCALING (Section 3.9)
+      # Full Multigrid solver - strong scaling
+      # N must be 2^k + 1 for multigrid levels
+      # =========================================================================
+      fmg_strong:
+        env:
+          static:
+            QUEUE: "hpcintro"
+            WALLTIME: "00:10"
+            MEM_PER_CORE: "4GB"
+            PTILE: 24
+            MODULES: "mpi"
+            NUMBA_NUM_THREADS: 1
+            WORKDIR: "$LSB_SUBCWD"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/fmg_runner.py"
+
+          matrix:
+            - { NAME: "fmg_strong_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_strong_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_strong_P27", N_CORES: 48, RANKS: 27, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_strong_P64", N_CORES: 72, RANKS: 64, MAP_BY: "--map-by ppr:12:package" }
+
+        runtime:
+          static:
+            cycles: 2
+            n_smooth: 3
+            omega: 0.666667
+            communicator: "custom"
+
+          grid:
+            N: [65, 129, 257]
+            strategy: ["cubic"]
+
+          matrix: []
+      # =========================================================================
+      # FMG HYBRID MPI+THREADS (Section 3.9)
+      # Sweep NUMBA_NUM_THREADS with different MPI rank counts
+      # Total parallelism = ranks × threads
+      # =========================================================================
+      fmg_hybrid:
+        env:
+          static:
+            QUEUE: "hpcintro"
+            WALLTIME: "00:10"
+            MEM_PER_CORE: "4GB"
+            PTILE: 24
+            MODULES: "mpi"
+            NUMBA_NUM_THREADS: 1
+            WORKDIR: "$LSB_SUBCWD"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/fmg_runner.py"
+
+          matrix:
+            - { NAME: "fmg_hyb_1t_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_hyb_1t_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_hyb_1t_P24", N_CORES: 24, RANKS: 24, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_hyb_1t_P48", N_CORES: 48, RANKS: 48, MAP_BY: "--map-by ppr:12:package" }
+
+        runtime:
+          static:
+            cycles: 2
+            n_smooth: 3
+            omega: 0.666667
+            strategy: "cubic"
+            communicator: "custom"
+            N: 257
+
+          grid: {}
+          matrix: []
+
+
+
+  Weak-Scaling: 
+      # =========================================================================
+      # JACOBI WEAK SCALING (Section 3.8)
+      # Constant work per rank: local subdomain ~48^3, N scales with P^(1/3)
+      # =========================================================================
+      jacobi_weak:
+        env:
+          static:
+            QUEUE: "hpcintro"
+            WALLTIME: "00:10"
+            MEM_PER_CORE: "4GB"
+            PTILE: 24
+            MODULES: "mpi"
+            NUMBA_NUM_THREADS: 1
+            WORKDIR: "$LSB_SUBCWD"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/jacobi_runner.py --numba"
+
+          matrix:
+            - { NAME: "jac_weak_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_weak_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_weak_P27", N_CORES: 48, RANKS: 27, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "jac_weak_P64", N_CORES: 72, RANKS: 64, MAP_BY: "--map-by ppr:12:package" }
+
+        runtime:
+          static:
+            tol: 0.0
+            max_iter: 100
+            communicator: "custom"
+
+          grid:
+            strategy: ["sliced", "cubic"]
+
+          # Weak scaling: N tied to P (local ~48^3 per rank)
+          # P=1: 48, P=8: 96, P=27: 144, P=64: 192
+          matrix:
+            - { N: 48,  _ranks: 1 }
+            - { N: 96,  _ranks: 8 }
+            - { N: 144, _ranks: 27 }
+            - { N: 192, _ranks: 64 }
+
+            # =========================================================================
+      # FMG WEAK SCALING (Section 3.9)
+      # Constant work per rank for FMG
+      # =========================================================================
+      fmg_weak:
+        env:
+          static:
+            QUEUE: "hpcintro"
+            WALLTIME: "00:10"
+            MEM_PER_CORE: "4GB"
+            PTILE: 24
+            MODULES: "mpi"
+            NUMBA_NUM_THREADS: 1
+            WORKDIR: "$LSB_SUBCWD"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/fmg_runner.py"
+
+          matrix:
+            - { NAME: "fmg_weak_P1",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_weak_P8",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_weak_P27", N_CORES: 48, RANKS: 27, MAP_BY: "--map-by ppr:12:package" }
+            - { NAME: "fmg_weak_P64", N_CORES: 72, RANKS: 64, MAP_BY: "--map-by ppr:12:package" }
+
+        runtime:
+          static:
+            cycles: 2
+            n_smooth: 3
+            omega: 0.666667
+            strategy: "cubic"
+            communicator: "custom"
+
+          grid: {}
+
+          # Weak scaling: N tied to P (N = 33 * P^(1/3) rounded to 2^k+1)
+          # P=1: 33, P=8: 65, P=27: 97->129, P=64: 129->129 or 257
+          matrix:
+            - { N: 33,  _ranks: 1 }
+            - { N: 65,  _ranks: 8 }
+            - { N: 129, _ranks: 27 }
+            - { N: 257, _ranks: 64 }
+
+      fmg_hybrid_weak: 
+        env:
+              static:
+                QUEUE: "hpcintro"
+                WALLTIME: "00:10"
+                MEM_PER_CORE: "4GB"
+                PTILE: 24
+                MODULES: "mpi"
+                NUMBA_NUM_THREADS: 1
+                WORKDIR: "$LSB_SUBCWD"
+                RUNNER_SCRIPT: "uv run python Experiments/06-scaling/fmg_runner.py"
+
+
+
+
+
