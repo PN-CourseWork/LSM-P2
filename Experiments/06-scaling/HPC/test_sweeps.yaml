@@ -1,0 +1,63 @@
+# ========================================================================================================
+# Syntax
+# Top level keys: Different Experiments (used when creating output directories and for mlflow bookkeeping)
+# ---Groups: Different groups requiring different requested resources 
+# ------- Resources: Specifies requested resources for the given group 
+# ------------ static: 
+# ----------------- -M 8GB
+# ------- Template: Specifies a template job script 
+# ------- RuntimeArgs: 
+# ------------ static: 
+# ----------------- tol: 
+# ----------------- max_iter: 
+# ------------ sweep: 
+# ----------------- N: []
+# ----------------- comm: []
+# ----------------- strategy: []
+# ========================================================================================================
+
+06-scaling-HPC: 
+  
+
+
+# Define your job groups here
+jobs:
+  # 1. Simple Parameter Sweep (Generates one LSF Job Array with all combinations)
+  jacobi_tuning:
+    script: Experiments/06-scaling/jacobi_runner.py
+    resources: # Resources for this specific job array (can override global defaults)
+      n_cores: 1 # Assuming single core for this tuning run
+      queue: hpcintro
+      walltime: "00:05"
+      mem: "1GB"
+    # Parameters to sweep over. A Cartesian product of these lists will be generated.
+    sweep:
+      N: [128, 256, 513]
+      decomposition: ["sliced", "cubic"]
+      tol: ["1e-6", "1e-7"] # Example of a string argument
+      max_iter: [100, 200]
+    
+  # 2. Strong Scaling Experiment (Generates multiple LSF Job Arrays, one per changing resource)
+  strong_scaling:
+    script: Experiments/06-scaling/fmg_runner.py
+    resources:
+      # n_cores will be dynamically set from the sweep value for each distinct resource group
+      queue: hpcintro
+      walltime: "00:20"
+      mem: "2GB"
+    # 'sweep' here is used to define parameters that change resource requirements (like n_cores)
+    # and other script arguments. The sweeper will group combinations by resource signature.
+    sweep:
+      n_cores: [1, 24, 48] # This will cause job array splitting
+      N: [513, 1025] # Problem size
+      communicator: ["custom"]
+      strategy: ["sliced", "cubic"]
+
+  # 3. Another example group (if needed)
+  # my_other_job:
+  #   script: path/to/another_script.py
+  #   resources:
+  #     n_cores: 8
+  #   sweep:
+  #     param_a: [10, 20]
+  #     param_b: ["val_x"]

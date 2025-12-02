@@ -76,6 +76,7 @@ def main():
     actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow (skips existing files)")
     actions.add_argument("--force", action="store_true", help="Force re-download of existing files (use with --fetch)")
     actions.add_argument("--hpc", nargs="?", const="DEFAULT", help="Interactive HPC job generator (optional: config path)")
+    actions.add_argument("--sweep", nargs="?", const="Experiments/06-scaling/job-scripts/sweeps.yaml", help="Generate LSF job arrays from config (default: sweeps.yaml)")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -91,6 +92,14 @@ def main():
         import mlflow
         print("\nSetting up MLflow...")
         mlflow.login(backend="databricks", interactive=True)
+
+    if args.sweep:
+        from utils.hpc import sweeper
+        config_path = Path(args.sweep)
+        output_dir = config_path.parent / "generated_jobs"
+        print(f"\nGenerating sweep jobs from: {config_path}")
+        print(f"Output directory: {output_dir}")
+        sweeper.generate_arrays(config_path, output_dir)
 
     if args.compute:
         runners.run_compute_scripts()
