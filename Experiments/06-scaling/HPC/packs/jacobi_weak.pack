@@ -1,0 +1,13 @@
+# Jacobi Weak Scaling
+# Submit: source jacobi_weak.pack
+
+export RUNNER=jacobi
+
+export EXPERIMENT=jacobi_weak_1node N_TASKS=4 N_CORES=24
+bsub < ../jobscripts/template.lsf
+
+export EXPERIMENT=jacobi_weak_2node N_TASKS=2 N_CORES=48
+bsub < ../jobscripts/template.lsf
+
+export EXPERIMENT=jacobi_weak_3node N_TASKS=2 N_CORES=72
+bsub < ../jobscripts/template.lsf

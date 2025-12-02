@@ -1,0 +1,230 @@
+# ===========================================================================
+# Scaling Experiments - Split by node requirement
+# ===========================================================================
+# Each experiment is sized for a specific node count to avoid index mapping
+
+# ---------------------------------------------------------------------------
+# JACOBI STRONG SCALING
+# ---------------------------------------------------------------------------
+jacobi_strong_1node:
+  # ranks ≤ 24, N ∈ {144,216,288}, strategy ∈ {sliced,cubic} = 24 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    ranks: [1, 8, 12, 24]
+    N: [144, 216, 288]
+    strategy: ["sliced", "cubic"]
+
+jacobi_strong_2node:
+  # ranks=48, N ∈ {144,216,288}, strategy ∈ {sliced,cubic} = 6 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    ranks: [48]
+    N: [144, 216, 288]
+    strategy: ["sliced", "cubic"]
+
+jacobi_strong_4node:
+  # ranks=96, N ∈ {144,216,288}, strategy ∈ {sliced,cubic} = 6 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    ranks: [96]
+    N: [144, 216, 288]
+    strategy: ["sliced", "cubic"]
+
+# ---------------------------------------------------------------------------
+# JACOBI WEAK SCALING
+# ---------------------------------------------------------------------------
+jacobi_weak_1node:
+  # 4 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    strategy: ["sliced", "cubic"]
+  matrix_sweep:
+    - { N: 48,  ranks: 1 }
+    - { N: 96,  ranks: 8 }
+
+jacobi_weak_2node:
+  # 2 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    strategy: ["sliced", "cubic"]
+  matrix_sweep:
+    - { N: 144, ranks: 27 }
+
+jacobi_weak_3node:
+  # 2 tasks
+  static:
+    tol: 0.0
+    max_iter: 100
+    communicator: "custom"
+  grid_sweep:
+    strategy: ["sliced", "cubic"]
+  matrix_sweep:
+    - { N: 192, ranks: 64 }
+
+# ---------------------------------------------------------------------------
+# FMG STRONG SCALING
+# ---------------------------------------------------------------------------
+fmg_strong_1node:
+  # ranks ∈ {1,8}, N ∈ {65,129,257} = 6 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  grid_sweep:
+    ranks: [1, 8]
+    N: [65, 129, 257]
+
+fmg_strong_2node:
+  # ranks=27, N ∈ {65,129,257} = 3 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  grid_sweep:
+    ranks: [27]
+    N: [65, 129, 257]
+
+fmg_strong_3node:
+  # ranks=64, N ∈ {65,129,257} = 3 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  grid_sweep:
+    ranks: [64]
+    N: [65, 129, 257]
+
+# ---------------------------------------------------------------------------
+# FMG WEAK SCALING
+# ---------------------------------------------------------------------------
+fmg_weak_1node:
+  # 2 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { N: 33,  ranks: 1 }
+    - { N: 65,  ranks: 8 }
+
+fmg_weak_2node:
+  # 1 task
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { N: 129, ranks: 27 }
+
+fmg_weak_3node:
+  # 1 task
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { N: 257, ranks: 64 }
+
+# ---------------------------------------------------------------------------
+# FMG HYBRID (MPI + Threads)
+# ---------------------------------------------------------------------------
+fmg_hybrid_1node:
+  # ranks ≤ 24, various thread counts = 9 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+    N: 257
+  matrix_sweep:
+    - { ranks: 1,  numba_threads: 1 }
+    - { ranks: 8,  numba_threads: 1 }
+    - { ranks: 24, numba_threads: 1 }
+    - { ranks: 1,  numba_threads: 4 }
+    - { ranks: 6,  numba_threads: 4 }
+    - { ranks: 12, numba_threads: 4 }
+    - { ranks: 1,  numba_threads: 8 }
+    - { ranks: 3,  numba_threads: 8 }
+    - { ranks: 6,  numba_threads: 8 }
+
+fmg_hybrid_2node:
+  # ranks=48, 1 thread = 1 task
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+    N: 257
+  matrix_sweep:
+    - { ranks: 48, numba_threads: 1 }
+
+# ---------------------------------------------------------------------------
+# FMG HYBRID WEAK SCALING
+# ---------------------------------------------------------------------------
+fmg_hybrid_weak_1node:
+  # 6 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { ranks: 1,  N: 33,  numba_threads: 1 }
+    - { ranks: 8,  N: 65,  numba_threads: 1 }
+    - { ranks: 1,  N: 33,  numba_threads: 4 }
+    - { ranks: 8,  N: 65,  numba_threads: 4 }
+    - { ranks: 1,  N: 33,  numba_threads: 8 }
+    - { ranks: 8,  N: 65,  numba_threads: 8 }
+
+fmg_hybrid_weak_2node:
+  # 2 tasks
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { ranks: 27, N: 129, numba_threads: 1 }
+    - { ranks: 27, N: 129, numba_threads: 4 }
+
+fmg_hybrid_weak_3node:
+  # 1 task
+  static:
+    cycles: 2
+    n_smooth: 3
+    omega: 0.666667
+    strategy: "cubic"
+    communicator: "custom"
+  matrix_sweep:
+    - { ranks: 64, N: 257, numba_threads: 1 }

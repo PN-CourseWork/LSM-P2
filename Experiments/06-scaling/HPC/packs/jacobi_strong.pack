@@ -1,0 +1,13 @@
+# Jacobi Strong Scaling
+# Submit: source jacobi_strong.pack
+
+export RUNNER=jacobi
+
+export EXPERIMENT=jacobi_strong_1node N_TASKS=24 N_CORES=24
+bsub < ../jobscripts/template.lsf
+
+export EXPERIMENT=jacobi_strong_2node N_TASKS=6 N_CORES=48
+bsub < ../jobscripts/template.lsf
+
+export EXPERIMENT=jacobi_strong_4node N_TASKS=6 N_CORES=96
+bsub < ../jobscripts/template.lsf

@@ -1,0 +1,10 @@
+# FMG Hybrid (MPI + Threads)
+# Submit: source fmg_hybrid.pack
+
+export RUNNER=fmg
+
+export EXPERIMENT=fmg_hybrid_1node N_TASKS=9 N_CORES=24
+bsub < ../jobscripts/template.lsf
+
+export EXPERIMENT=fmg_hybrid_2node N_TASKS=1 N_CORES=48
+bsub < ../jobscripts/template.lsf
