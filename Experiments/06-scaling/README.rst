@@ -45,3 +45,10 @@ Characterize the parallel performance limits of the validated solver by analyzin
 * **Memory usage scaling** - Analyze per-rank memory footprint and total memory requirements as problem size and rank count vary
 * **Parallel I/O considerations** - Demonstrate impact of parallel HDF5 writes vs serial gather-to-rank-0 on scaling behavior
 
+Configuration
+-------------
+
+.. literalinclude:: ../hydra-conf/06-scaling.yaml
+   :language: yaml
+   :caption: 06-scaling.yaml
+

@@ -2,13 +2,27 @@
 Validation Analysis and Visualization
 ======================================
 
-1. Analyze and visualize spatial convergence for solver validation
-2. Generate 3D visualization of analytical solution
+Analyze and visualize spatial convergence for solver validation.
+Generates 3D visualization of the analytical solution.
 
-Fetches data from MLflow (run with unified runner first).
-Verifies O(h²) = O(N⁻²) convergence by comparing numerical solutions
-against the analytical solution u(x,y,z) = sin(πx)sin(πy)sin(πz).
+Verifies O(h^2) = O(N^-2) convergence by comparing numerical solutions
+against the analytical solution u(x,y,z) = sin(pi*x)sin(pi*y)sin(pi*z).
+
+Usage
+-----
+
+.. code-block:: bash
+
+    # Run validation experiment first
+    uv run python run_solver.py --config-name=04-validation
+
+    # Then plot results
+    uv run python Experiments/04-validation/plot_validation.py
 """
+
+# %%
+# Setup
+# -----
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,9 +40,9 @@ from utils.mlflow.io import setup_mlflow_tracking, load_runs
 def main(cfg: DictConfig) -> None:
     """Run validation plotting with Hydra configuration."""
 
-    # ============================================================================
-    # Setup
-    # ============================================================================
+    # %%
+    # Initialize
+    # ----------
 
     sns.set_style()
     pv.set_plot_theme("paraview")
@@ -37,21 +51,20 @@ def main(cfg: DictConfig) -> None:
     fig_dir = repo_root / "figures" / "validation"
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    # ============================================================================
-    # Part 1: Convergence Analysis (from MLflow)
-    # ============================================================================
+    # %%
+    # Load Data from MLflow
+    # ---------------------
 
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
     experiment_name = cfg.get("experiment_name", "04-validation")
-
-    # Load runs from MLflow
     df = load_runs(experiment_name, converged_only=False)
 
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
-        print("Run the experiment first: uv run python Experiments/run_experiment.py --config-name=04-validation")
+        print("Run the experiment first:")
+        print("  uv run python Experiments/run_experiment.py --config-name=04-validation")
         return
 
     # Extract parameters and metrics from MLflow columns
@@ -69,7 +82,10 @@ def main(cfg: DictConfig) -> None:
     print(f"Methods: {df['Method'].unique()}")
     print(f"Problem sizes: {sorted(df['N'].unique())}")
 
-    # Plot convergence
+    # %%
+    # Plot Convergence
+    # ----------------
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
     sns.lineplot(
@@ -100,12 +116,12 @@ def main(cfg: DictConfig) -> None:
     fig.savefig(output_file)
     print(f"Saved: {output_file}")
 
-    # ============================================================================
-    # Part 2: 3D Solution Visualization
-    # ============================================================================
+    # %%
+    # 3D Solution Visualization
+    # -------------------------
 
     print("\n" + "=" * 60)
-    print("PART 2: 3D Solution Visualization")
+    print("3D Solution Visualization")
     print("=" * 60)
 
     # Generate analytical solution at high resolution
@@ -126,7 +142,6 @@ def main(cfg: DictConfig) -> None:
     # Create single view plotter
     plotter = pv.Plotter(off_screen=True, window_size=[2400, 2000])
 
-    # Add orthogonal slices
     plotter.add_mesh(
         slices,
         scalars="solution",
@@ -146,7 +161,6 @@ def main(cfg: DictConfig) -> None:
         },
     )
 
-    # Add coordinate axes
     plotter.add_axes(
         interactive=False,
         line_width=5,
@@ -158,7 +172,6 @@ def main(cfg: DictConfig) -> None:
         zlabel="Z",
     )
 
-    # Add bounds with labels
     plotter.show_bounds(
         grid="back",
         location="outer",

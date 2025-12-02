@@ -3,7 +3,20 @@ Domain Decomposition Visualization
 ===================================
 
 Visualize how domain partitioning works for sliced vs cubic decompositions.
+Generates 3D visualizations showing how the computational domain is
+divided among MPI ranks.
+
+Usage
+-----
+
+.. code-block:: bash
+
+    uv run python Experiments/02-decomposition/plot_decompositions.py
 """
+
+# %%
+# Setup
+# -----
 
 import hydra
 import matplotlib.pyplot as plt
@@ -30,8 +43,6 @@ def compute_dims(size: int, ndims: int = 3) -> list[int]:
     """
     dims = [1] * ndims
     remaining = size
-
-    # Use prime factorization approach
     primes = []
     n = remaining
     d = 2
@@ -43,10 +54,8 @@ def compute_dims(size: int, ndims: int = 3) -> list[int]:
     if n > 1:
         primes.append(n)
 
-    # Distribute prime factors among dimensions (largest first)
     primes.sort(reverse=True)
     for p in primes:
-        # Assign to the smallest dimension
         min_idx = dims.index(min(dims))
         dims[min_idx] *= p
 
@@ -55,27 +64,23 @@ def compute_dims(size: int, ndims: int = 3) -> list[int]:
 
 def get_rank_bounds(N: int, size: int, strategy: str, rank: int) -> RankBounds:
     """Compute the domain bounds for a given rank without MPI."""
-    interior_N = N - 2  # Interior points per dimension
+    interior_N = N - 2
 
     if strategy == "sliced":
-        # 1D decomposition along z-axis
         dims = [size, 1, 1]
-    else:  # cubic
+    else:
         dims = compute_dims(size, 3)
 
     pz, py, px = dims
-
-    # Get rank coordinates in processor grid
     iz = rank // (py * px)
     iy = (rank % (py * px)) // px
     ix = rank % px
 
-    # Split interior points
     def split_interior(n_interior, n_parts, idx):
         base = n_interior // n_parts
         rem = n_interior % n_parts
         counts = [base + (1 if i < rem else 0) for i in range(n_parts)]
-        start = 1 + sum(counts[:idx])  # +1 for boundary offset
+        start = 1 + sum(counts[:idx])
         return start, start + counts[idx]
 
     z_start, z_end = split_interior(interior_N, pz, iz)
@@ -91,7 +96,11 @@ def get_rank_bounds(N: int, size: int, strategy: str, rank: int) -> RankBounds:
 @hydra.main(config_path="../hydra-conf", config_name="02-decomposition", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Main function for domain decomposition visualization."""
-    # Setup
+
+    # %%
+    # Initialize
+    # ----------
+
     pv.set_plot_theme(themes.ParaViewTheme())
     pv.global_theme.anti_aliasing = "ssaa"
     pv.global_theme.smooth_shading = True
@@ -104,8 +113,10 @@ def main(cfg: DictConfig) -> None:
     cmap = plt.cm.viridis
     N = cfg.N
 
+    # %%
     # Sliced Decomposition (4 ranks)
-    # 1D decomposition along Z-axis - each rank owns horizontal slices.
+    # ------------------------------
+
     n_ranks = 4
     plotter = pv.Plotter(window_size=[1500, 1500], off_screen=True)
 
@@ -124,8 +135,10 @@ def main(cfg: DictConfig) -> None:
     print(f"Saved: {fig_dir / '01a_sliced_decomposition.png'}")
     plotter.close()
 
+    # %%
     # Cubic Decomposition (8 ranks)
-    # 3D Cartesian decomposition - domain split across all dimensions.
+    # -----------------------------
+
     n_ranks = 8
     plotter = pv.Plotter(window_size=[1500, 1500], off_screen=True)
 
@@ -144,8 +157,10 @@ def main(cfg: DictConfig) -> None:
     print(f"Saved: {fig_dir / '01b_cubic_decomposition.png'}")
     plotter.close()
 
+    # %%
     # Cubic Decomposition (18 ranks)
-    # 3D Cartesian decomposition with 18 ranks.
+    # ------------------------------
+
     n_ranks = 18
     plotter = pv.Plotter(window_size=[1500, 1500], off_screen=True)
 

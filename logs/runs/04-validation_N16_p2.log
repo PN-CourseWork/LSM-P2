@@ -1,5 +1,5 @@
-[2025-12-02 18:57:10,175][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
-[2025-12-02 18:57:10,175][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 19:07:50,559][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 19:07:50,559][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
 INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
 
 ============================================================
@@ -9,11 +9,11 @@ Strategy: sliced, Communicator: custom
 ============================================================
 DEBUG: Attempting to set MLflow experiment: 04-validation
 INFO: Using MLflow experiment: 04-validation
-INFO: Started MLflow run 'jacobi_N16_p2_sliced' (1c47ed8f660f4d24b3d40e22c3251b11)
+INFO: Started MLflow run 'jacobi_N16_p2_sliced' (7bc3ba3186884f88aebf8f4d96eae417)
   ✓ Logged 652 time-series metrics.
 
 --- JACOBI Complete ---
   Iterations: 217
   L2 error: 1.475063e-02
   Wall time: 0.0063s
-  Performance: 93.87 Mlup/s
+  Performance: 94.98 Mlup/s

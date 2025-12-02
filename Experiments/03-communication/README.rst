@@ -20,3 +20,21 @@ Determine whether custom MPI datatypes provide measurable performance improvemen
 * **Scaling behavior** - Analyze how each method scales with problem size and rank count
 * **Scaling order analysis** - Use log-log plots with reference lines to derive computational complexity
 
+Usage
+-----
+
+.. code-block:: bash
+
+    # Run communication benchmark (requires MPI)
+    mpiexec -n 4 uv run python Experiments/03-communication/compute_communication.py
+
+    # Plot results from MLflow
+    uv run python Experiments/03-communication/plot_communication.py
+
+Configuration
+-------------
+
+.. literalinclude:: ../hydra-conf/03-communication.yaml
+   :language: yaml
+   :caption: 03-communication.yaml
+

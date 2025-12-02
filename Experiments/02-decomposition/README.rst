@@ -21,5 +21,20 @@ with the 'connectivity' of different ranks.
 
 * **Visual comparison** - Illustrate how the domain is partitioned for each method
 
-* **Surface-area-to-volume ratios** - investigate how much data needs to be communicated between ranks depending on the decomposition strategy 
+* **Surface-area-to-volume ratios** - investigate how much data needs to be communicated between ranks depending on the decomposition strategy
+
+Usage
+-----
+
+.. code-block:: bash
+
+    # Generate domain decomposition visualizations
+    uv run python Experiments/02-decomposition/plot_decompositions.py
+
+Configuration
+-------------
+
+.. literalinclude:: ../hydra-conf/02-decomposition.yaml
+   :language: yaml
+   :caption: 02-decomposition.yaml 
 

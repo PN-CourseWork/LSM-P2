@@ -1,12 +1,25 @@
 """
-Plot FMG Spatial Convergence
-============================
+FMG Spatial Convergence
+=======================
 
 Fetches FMG validation results from MLflow and plots spatial convergence
-against the analytical solution. Run experiment first with:
+against the analytical solution.
 
-    uv run python Experiments/run_experiment.py --config-name=05-multigrid-fmg
+Usage
+-----
+
+.. code-block:: bash
+
+    # Run FMG experiment first
+    uv run python run_solver.py --config-name=05-multigrid-fmg
+
+    # Then plot results
+    uv run python Experiments/05-multigrid/plot_multigrid_fmg.py
 """
+
+# %%
+# Setup
+# -----
 
 import hydra
 import matplotlib.pyplot as plt
@@ -22,14 +35,20 @@ from utils.mlflow.io import setup_mlflow_tracking, load_runs
 def main(cfg: DictConfig) -> None:
     """Plot FMG spatial convergence with data from MLflow."""
 
-    # Setup
+    # %%
+    # Initialize
+    # ----------
+
     sns.set_style()
 
     repo_root = get_project_root()
     fig_dir = repo_root / "figures" / "multigrid"
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load from MLflow
+    # %%
+    # Load Data from MLflow
+    # ---------------------
+
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
@@ -38,7 +57,8 @@ def main(cfg: DictConfig) -> None:
 
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
-        print("Run the experiment first: uv run python Experiments/run_experiment.py --config-name=05-multigrid-fmg")
+        print("Run the experiment first:")
+        print("  uv run python Experiments/run_experiment.py --config-name=05-multigrid-fmg")
         return
 
     # Extract parameters and metrics from MLflow columns
@@ -50,7 +70,10 @@ def main(cfg: DictConfig) -> None:
     print(f"Decompositions: {df['Decomposition'].unique()}")
     print(f"Problem sizes: {sorted(df['N'].unique())}")
 
-    # Plot
+    # %%
+    # Plot Convergence
+    # ----------------
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
     sns.lineplot(

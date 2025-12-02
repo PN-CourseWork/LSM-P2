@@ -1,18 +1,29 @@
 """
-Unified Experiment Runner
-=========================
+Unified Solver Runner
+=====================
 
 Single runner for all solver-based experiments. Spawns MPI subprocess
 with rank count from Hydra config. Results logged to MLflow.
 
-Usage:
-    # Single run:
-    uv run python Experiments/run_experiment.py --config-name=04-validation
+Usage
+-----
 
-    # Hydra multirun sweep:
-    uv run python Experiments/run_experiment.py --config-name=04-validation \\
+.. code-block:: bash
+
+    # Single run
+    uv run python run_solver.py --config-name=04-validation
+
+    # Override parameters
+    uv run python run_solver.py --config-name=04-validation N=64 n_ranks=8
+
+    # Hydra multirun sweep
+    uv run python run_solver.py --config-name=04-validation \\
         --multirun N=16,32,48 strategy=sliced,cubic
 """
+
+# %%
+# Setup
+# -----
 
 import os
 import subprocess
@@ -23,7 +34,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 
-@hydra.main(config_path="hydra-conf", config_name="config", version_base=None)
+@hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Entry point - spawns MPI if needed, otherwise runs solver."""
 
@@ -40,29 +51,28 @@ def main(cfg: DictConfig) -> None:
     except ImportError:
         pass
 
-    # Spawn MPI with n_ranks from config
+    # %%
+    # Spawn MPI Subprocess
+    # --------------------
+
     n_ranks = cfg.get("n_ranks", 1)
     script = os.path.abspath(__file__)
 
-    # Rebuild command with Hydra overrides
     cmd = [
         "mpiexec", "-n", str(n_ranks),
         "--report-bindings",
         "uv", "run", "python", script,
     ]
-    # Pass through all Hydra overrides from sys.argv
     cmd.extend(sys.argv[1:])
 
-    # Run and capture output
     result = subprocess.run(cmd, capture_output=True, text=True)
 
-    # Print output
     if result.stdout:
         print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)
 
-    # Log output as MLflow artifact if experiment has a name
+    # Log output as MLflow artifact
     if cfg.get("experiment_name") and (result.stdout or result.stderr):
         from Poisson import get_project_root
         from utils.mlflow.io import setup_mlflow_tracking
@@ -70,7 +80,6 @@ def main(cfg: DictConfig) -> None:
 
         setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
-        # Save combined output to file
         log_dir = get_project_root() / "logs" / "runs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -84,7 +93,6 @@ def main(cfg: DictConfig) -> None:
                 f.write("\n--- STDERR ---\n")
                 f.write(result.stderr)
 
-        # Log to most recent MLflow run
         try:
             mlflow.set_experiment(cfg.experiment_name)
             runs = mlflow.search_runs(max_results=1, order_by=["start_time DESC"])
@@ -93,11 +101,16 @@ def main(cfg: DictConfig) -> None:
                 with mlflow.start_run(run_id=run_id):
                     mlflow.log_artifact(str(log_file), artifact_path="logs")
         except Exception:
-            pass  # Don't fail if logging fails
+            pass
 
 
 def _run_solver(cfg: DictConfig, comm):
     """MPI worker - runs solver and logs to MLflow."""
+
+    # %%
+    # Initialize
+    # ----------
+
     from mpi4py import MPI
     from Poisson import JacobiPoisson, MultigridPoisson, get_project_root
     from utils.mlflow.io import (
@@ -112,7 +125,6 @@ def _run_solver(cfg: DictConfig, comm):
     rank = comm.Get_rank()
     n_ranks = comm.Get_size()
 
-    # Extract config
     N = cfg.N
     solver_type = cfg.get("solver", "jacobi")
     strategy = cfg.get("strategy", "sliced")
@@ -127,7 +139,10 @@ def _run_solver(cfg: DictConfig, comm):
         print(f"Strategy: {strategy}, Communicator: {communicator}")
         print(f"{'='*60}")
 
-    # Create solver
+    # %%
+    # Create Solver
+    # -------------
+
     if solver_type == "jacobi":
         solver = JacobiPoisson(
             N=N,
@@ -153,7 +168,10 @@ def _run_solver(cfg: DictConfig, comm):
             print(f"Unknown solver: {solver_type}")
         sys.exit(1)
 
-    # Run solver
+    # %%
+    # Run Solver
+    # ----------
+
     comm.Barrier()
     t0 = MPI.Wtime()
 
@@ -165,7 +183,6 @@ def _run_solver(cfg: DictConfig, comm):
 
     wall_time = MPI.Wtime() - t0
 
-    # Compute metrics
     if rank == 0:
         solver.results.wall_time = wall_time
         n_interior = (N - 2) ** 3
@@ -174,7 +191,10 @@ def _run_solver(cfg: DictConfig, comm):
 
     solver.compute_l2_error()
 
-    # Log to MLflow (rank 0 only)
+    # %%
+    # Log to MLflow
+    # -------------
+
     if rank == 0:
         run_name = f"{solver_type}_N{N}_p{n_ranks}_{strategy}"
 

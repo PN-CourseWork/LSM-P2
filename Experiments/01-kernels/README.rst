@@ -49,3 +49,10 @@ Identify impacts of the choice of kernel implementations and parameters like thr
 * **Compute time scaling** - Measure computation cost with fixed iteration count and also fixed tolerance.
 
 **Decision Point:** Choose optimal kernel (NumPy or Numba) and thread count for subsequent experiments.
+
+Configuration
+-------------
+
+.. literalinclude:: ../hydra-conf/01-kernels.yaml
+   :language: yaml
+   :caption: 01-kernels.yaml

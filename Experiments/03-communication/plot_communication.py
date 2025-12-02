@@ -1,13 +1,25 @@
 """
-Communication Analysis: Contiguous vs Non-Contiguous
-=====================================================
+Communication Analysis
+======================
 
 Compares NumPy array copies vs MPI custom datatypes for halo exchange,
 demonstrating the benefit of zero-copy communication for non-contiguous data.
 
-Fetches data from MLflow. Run experiment first:
-    uv run python Experiments/03-communication/compute_communication.py
+Usage
+-----
+
+.. code-block:: bash
+
+    # Run communication benchmark first
+    mpiexec -n 4 uv run python Experiments/03-communication/compute_communication.py
+
+    # Then plot results
+    uv run python Experiments/03-communication/plot_communication.py
 """
+
+# %%
+# Setup
+# -----
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -23,7 +35,10 @@ from utils.mlflow.io import setup_mlflow_tracking, load_runs
 def main(cfg: DictConfig):
     """Generate communication analysis plots from MLflow data."""
 
-    # Setup
+    # %%
+    # Initialize
+    # ----------
+
     sns.set_style("whitegrid")
     plt.rcParams["figure.dpi"] = 100
 
@@ -32,7 +47,10 @@ def main(cfg: DictConfig):
     fig_dir = repo_root / "figures" / experiment_name.replace("03-", "")
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load from MLflow
+    # %%
+    # Load Data from MLflow
+    # ---------------------
+
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
@@ -40,7 +58,8 @@ def main(cfg: DictConfig):
 
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
-        print("Run the experiment first: uv run python Experiments/03-communication/compute_communication.py")
+        print("Run the experiment first:")
+        print("  mpiexec -n 4 uv run python Experiments/03-communication/compute_communication.py")
         return
 
     # Extract parameters and metrics from MLflow columns
@@ -53,7 +72,10 @@ def main(cfg: DictConfig):
     print(f"Configurations: {df['label'].unique()}")
     print(f"Problem sizes: {sorted(df['N'].unique())}")
 
-    # Halo Exchange Time vs Problem Size
+    # %%
+    # Plot Halo Exchange Time
+    # -----------------------
+
     fig, ax = plt.subplots(figsize=(10, 6))
 
     palette = {
@@ -88,7 +110,10 @@ def main(cfg: DictConfig):
     plt.savefig(output_file, bbox_inches="tight")
     print(f"Saved: {output_file}")
 
+    # %%
     # Summary Statistics
+    # ------------------
+
     print("\n" + "=" * 70)
     print("Summary: Mean halo time (us) by local subdomain size")
     print("=" * 70)

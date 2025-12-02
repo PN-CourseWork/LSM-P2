@@ -22,3 +22,25 @@ Establish correctness of the solver implementation by:
 * **Analytical comparison** - Test against known exact solution: ``u(x,y,z) = sin(πx)sin(πy)sin(πz)``
 * **Spatial convergence** - Demonstrate expected O(h²) convergence order as grid is refined
 
+Usage
+-----
+
+.. code-block:: bash
+
+    # Run validation experiment
+    uv run python run_solver.py --config-name=04-validation
+
+    # Parameter sweep
+    uv run python run_solver.py --config-name=04-validation \
+        --multirun N=16,32,48 strategy=sliced,cubic
+
+    # Plot convergence results
+    uv run python Experiments/04-validation/plot_validation.py
+
+Configuration
+-------------
+
+.. literalinclude:: ../hydra-conf/04-validation.yaml
+   :language: yaml
+   :caption: 04-validation.yaml
+
