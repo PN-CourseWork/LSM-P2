@@ -37,14 +37,14 @@ test:
       cd $LSB_SUBCWD && mkdir -p {LSF_OUTPUT_DIR} &&
       module purge && module load mpi && uv sync &&
       export NUMBA_NUM_THREADS=1 &&
-      mpiexec {map_by} --bind-to core -n {ranks}
+      mpiexec {map_by} --bind-to core --report-bindings -n {ranks}
       uv run python Experiments/06-scaling/jacobi_runner.py
       --N {N} --strategy sliced --communicator custom
       --tol 0.0 --max-iter 20 --numba
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
     static_args:
-      N: 513
+      N: 257
 
     sweep_paired:
       ranks: [1, 8, 64]
@@ -55,7 +55,7 @@ test:
 # ############################################################################
 #                    JACOBI STRONG SCALING - SLICED
 # ############################################################################
-# More data points since sliced only needs ranks to divide 1024
+# More data points since sliced only needs ranks to divide 512
 
 jacobi_strong_sliced:
 
@@ -83,7 +83,7 @@ jacobi_strong_sliced:
     static_args:
       tol: 0.0
       max_iter: 300
-      N: 1025
+      N: 513
 
     sweep_paired:
       ranks: [1, 2, 4, 8, 16, 32, 64]
@@ -125,7 +125,7 @@ jacobi_strong_cubic:
     static_args:
       tol: 0.0
       max_iter: 300
-      N: 1025
+      N: 513
 
     sweep_paired:
       ranks: [1, 8, 64]
@@ -139,7 +139,7 @@ jacobi_strong_cubic:
 # ############################################################################
 #                    JACOBI WEAK SCALING - SLICED
 # ############################################################################
-# N = 256 * cbrt(ranks), using N values where ranks divide N-1
+# N = 128 * cbrt(ranks): 129 -> 257 -> 513
 
 jacobi_weak_sliced:
 
@@ -171,7 +171,7 @@ jacobi_weak_sliced:
     sweep_paired:
       ranks: [1, 8, 64]
       n_cores: [24, 24, 96]
-      N: [257, 513, 1025]
+      N: [129, 257, 513]
       map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
@@ -212,7 +212,7 @@ jacobi_weak_cubic:
     sweep_paired:
       ranks: [1, 8, 64]
       n_cores: [24, 24, 96]
-      N: [257, 513, 1025]
+      N: [129, 257, 513]
       map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
@@ -233,7 +233,7 @@ FMG_strong_sliced:
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=5GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -247,7 +247,7 @@ FMG_strong_sliced:
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
     static_args:
-      N: 1025
+      N: 513
       cycles: 1
       n_smooth: 3
 
@@ -274,7 +274,7 @@ FMG_strong_cubic:
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=5GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -288,7 +288,7 @@ FMG_strong_cubic:
       --job-name {job_name} --experiment-name 06-scaling-{experiment_name}
 
     static_args:
-      N: 1025
+      N: 513
       cycles: 1
       n_smooth: 3
 
@@ -315,7 +315,7 @@ FMG_weak_sliced:
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=5GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -335,7 +335,7 @@ FMG_weak_sliced:
     sweep_paired:
       ranks: [1, 8, 64]
       n_cores: [24, 24, 96]
-      N: [257, 513, 1025]
+      N: [129, 257, 513]
       map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
@@ -356,7 +356,7 @@ FMG_weak_cubic:
       - "-J {job_name}"
       - "-o {LSF_OUTPUT_DIR}/{job_name}.out"
       - "-e {LSF_OUTPUT_DIR}/{job_name}.err"
-      - "-R 'rusage[mem=5GB]'"
+      - "-R 'rusage[mem=4GB]'"
       - "-R 'span[ptile=24]'"
 
     command: >-
@@ -376,7 +376,7 @@ FMG_weak_cubic:
     sweep_paired:
       ranks: [1, 8, 64]
       n_cores: [24, 24, 96]
-      N: [257, 513, 1025]
+      N: [129, 257, 513]
       map_by: ["--map-by core", "--map-by ppr:4:package", "--map-by ppr:8:package"]
 
     sweep:
