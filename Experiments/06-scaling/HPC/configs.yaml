@@ -1,0 +1,34 @@
+experiments:
+  poisson_strong:
+
+    groups:
+      jacobi:
+        env:
+          static:
+            QUEUE: "hpcintro"
+            WALLTIME: "00:05"
+            MEM_PER_CORE: "4GB"
+            PTILE: 24
+            MODULES: "mpi"
+            NUMBA_NUM_THREADS: 1
+            WORKDIR: "$LSB_SUBCWD"
+            RUNNER_SCRIPT: "uv run python Experiments/06-scaling/jacobi_runner.py"
+
+          matrix:
+            - { JOB_NAME: "jacobi_P1[1-4]",  N_CORES: 24, RANKS: 1,  MAP_BY: "--map-by ppr:12:package",
+                ARGS_FILE: "arrays/jacobi_P1.json" }
+            - { JOB_NAME: "jacobi_P8[1-4]",  N_CORES: 24, RANKS: 8,  MAP_BY: "--map-by ppr:12:package",
+                ARGS_FILE: "arrays/jacobi_P8.json" }
+            - { JOB_NAME: "jacobi_P12[1-4]", N_CORES: 24, RANKS: 12, MAP_BY: "--map-by ppr:12:package",
+                ARGS_FILE: "arrays/jacobi_P12.json" }
+            # etc.
+
+        runtime:
+          static:
+            tol: 0.0
+            max_iter: 100
+
+          grid:
+            N: [288]
+            strategy: ["sliced", "cubic"]
+            communicator: ["numpy", "custom"]
