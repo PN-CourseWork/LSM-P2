@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 from utils import runners
 from utils import mlflow as mlflow_utils
 from utils.config import get_repo_root, load_project_config, clean_all
-from utils.hpc import interactive_generate
+from utils.hpc.scaling import interactive_scaling
 
 
 def build_docs():
@@ -75,8 +75,7 @@ def main():
     actions.add_argument("--setup-mlflow", action="store_true", help="Interactive MLflow setup (login to Databricks)")
     actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow (skips existing files)")
     actions.add_argument("--force", action="store_true", help="Force re-download of existing files (use with --fetch)")
-    actions.add_argument("--hpc", nargs="?", const="DEFAULT", help="Interactive HPC job generator (optional: config path)")
-    actions.add_argument("--sweep", nargs="?", const="Experiments/06-scaling/job-scripts/sweeps.yaml", help="Generate LSF job arrays from config (default: sweeps.yaml)")
+    actions.add_argument("--hpc", action="store_true", help="Interactive HPC job generator for scaling experiments")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -92,14 +91,6 @@ def main():
         import mlflow
         print("\nSetting up MLflow...")
         mlflow.login(backend="databricks", interactive=True)
-
-    if args.sweep:
-        from utils.hpc import sweeper
-        config_path = Path(args.sweep)
-        output_dir = config_path.parent / "generated_jobs"
-        print(f"\nGenerating sweep jobs from: {config_path}")
-        print(f"Output directory: {output_dir}")
-        sweeper.generate_arrays(config_path, output_dir)
 
     if args.compute:
         runners.run_compute_scripts()
@@ -120,12 +111,7 @@ def main():
         mlflow_utils.fetch_project_artifacts(output_dir, force=args.force)
 
     if args.hpc:
-        config = load_project_config()
-        default_conf = config.get("hpc", {}).get(
-            "default_config", "Experiments/06-scaling/job-packs/packs.yaml"
-        )
-        config_path = default_conf if args.hpc == "DEFAULT" else args.hpc
-        interactive_generate(config_path)
+        interactive_scaling()
 
     if args.docs:
         if not build_docs():

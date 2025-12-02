@@ -1,0 +1,6 @@
+#!/bin/bash
+# Generated scaling experiment submission
+
+bsub < 1node.sub
+bsub < 2node.sub
+bsub < 4node.sub

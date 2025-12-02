@@ -4,6 +4,7 @@ Provides tools for:
 - Generating job pack files for LSF/SLURM
 - Submitting jobs to HPC schedulers
 - Interactive job selection and preview
+- Scaling experiment job generation
 """
 
 from .jobgen import (
@@ -21,6 +22,10 @@ from .submit import (
     get_pack_files,
     submit_pack,
 )
+from .scaling import (
+    interactive_scaling,
+    generate_scaling_jobs,
+)
 
 __all__ = [
     "load_config",
@@ -34,4 +39,6 @@ __all__ = [
     "get_available_groups",
     "get_pack_files",
     "submit_pack",
+    "interactive_scaling",
+    "generate_scaling_jobs",
 ]
