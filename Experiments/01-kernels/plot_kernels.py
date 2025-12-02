@@ -23,7 +23,7 @@ from utils.mlflow.io import load_runs, get_mlflow_client, setup_mlflow_tracking
 
 sns.set_theme()
 
-@hydra.main(config_path="../hydra-conf", config_name="01-kernels", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/01-kernels", version_base=None)
 def main(cfg: DictConfig):
     # Get experiment name from config or use default
     exp_name_base = cfg.experiment_name or "01-kernels"

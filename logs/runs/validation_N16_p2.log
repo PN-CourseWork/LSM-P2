@@ -1,0 +1,18 @@
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: validation
+Solver: jacobi, N=16, ranks=2
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: validation
+INFO: Using MLflow experiment: validation
+INFO: Started MLflow run 'jacobi_N16_p2_sliced' (657d211927174ed98e4b03aa7c7514a3)
+  ✓ Logged 652 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 217
+  L2 error: 1.475063e-02
+  Wall time: 0.0067s
+  Performance: 88.82 Mlup/s
+  Bandwidth: 2.84 GB/s

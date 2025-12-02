@@ -31,7 +31,7 @@ from Poisson import get_project_root
 from utils.mlflow.io import setup_mlflow_tracking, load_runs
 
 
-@hydra.main(config_path="../hydra-conf", config_name="03-communication", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/03-communication", version_base=None)
 def main(cfg: DictConfig):
     """Generate communication analysis plots from MLflow data."""
 

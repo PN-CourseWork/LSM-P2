@@ -1,0 +1,8 @@
+# @package _global_
+solver: jacobi
+strategy: sliced
+communicator: custom
+use_numba: false
+omega: 0.8
+max_iter: 1000
+tolerance: 1.0e-6

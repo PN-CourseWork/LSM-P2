@@ -11,6 +11,19 @@ N: 64
 n_ranks: 1
 numba_threads: 1
 
+# MPI options (null = disabled, set for HPC)
+mpi:
+  bind_to: null           # e.g., "core" - set to enable binding
+  cores_per_node: 24      # HPC node config (used with LSB_DJOB_NUMPROC to calc NPS)
+
+# Set environment variables for the job
+# Note: Using hardcoded value since env_set is processed before config merge
+hydra:
+  job:
+    env_set:
+      NUMBA_NUM_THREADS: "1"
+      NUMEXPR_MAX_THREADS: "1"
+
 # Solver selection
 solver: jacobi  # jacobi, multigrid, fmg
 strategy: sliced
@@ -24,7 +37,7 @@ tolerance: 1.0e-6
 
 # Multigrid-specific
 n_smooth: 3
-fmg_cycles: 1
+fmg_post_vcycles: 1  # V-cycles after FMG to converge
 
 # MLflow logging
 experiment_name: null

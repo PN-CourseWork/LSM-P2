@@ -34,7 +34,6 @@ Usage
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/02-decomposition.yaml
+.. literalinclude:: ../hydra-conf/experiment/02-decomposition.yaml
    :language: yaml
-   :caption: 02-decomposition.yaml 
-
+   :caption: experiment/02-decomposition.yaml 

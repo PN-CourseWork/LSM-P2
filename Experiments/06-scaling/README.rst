@@ -48,7 +48,6 @@ Characterize the parallel performance limits of the validated solver by analyzin
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/06-scaling.yaml
+.. literalinclude:: ../hydra-conf/experiment/06-scaling.yaml
    :language: yaml
-   :caption: 06-scaling.yaml
-
+   :caption: experiment/06-scaling.yaml

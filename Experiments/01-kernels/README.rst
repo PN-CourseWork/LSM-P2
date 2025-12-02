@@ -53,6 +53,6 @@ Identify impacts of the choice of kernel implementations and parameters like thr
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/01-kernels.yaml
+.. literalinclude:: ../hydra-conf/experiment/01-kernels.yaml
    :language: yaml
-   :caption: 01-kernels.yaml
+   :caption: experiment/01-kernels.yaml

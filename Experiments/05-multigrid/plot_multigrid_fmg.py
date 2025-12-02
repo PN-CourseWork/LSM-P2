@@ -11,7 +11,7 @@ Usage
 .. code-block:: bash
 
     # Run FMG experiment first
-    uv run python run_solver.py --config-name=05-multigrid-fmg
+    uv run python run_solver.py --config-name=experiment/05-multigrid-fmg
 
     # Then plot results
     uv run python Experiments/05-multigrid/plot_multigrid_fmg.py
@@ -31,7 +31,7 @@ from Poisson import get_project_root
 from utils.mlflow.io import setup_mlflow_tracking, load_runs
 
 
-@hydra.main(config_path="../hydra-conf", config_name="05-multigrid-fmg", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/05-multigrid-fmg", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Plot FMG spatial convergence with data from MLflow."""
 
@@ -58,7 +58,7 @@ def main(cfg: DictConfig) -> None:
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
         print("Run the experiment first:")
-        print("  uv run python Experiments/run_experiment.py --config-name=05-multigrid-fmg")
+        print("  uv run python Experiments/run_experiment.py --config-name=experiment/05-multigrid-fmg")
         return
 
     # Extract parameters and metrics from MLflow columns

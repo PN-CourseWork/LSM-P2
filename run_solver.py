@@ -11,13 +11,13 @@ Usage
 .. code-block:: bash
 
     # Single run
-    uv run python run_solver.py --config-name=04-validation
+    uv run python run_solver.py --config-name=experiment/04-validation
 
     # Override parameters
-    uv run python run_solver.py --config-name=04-validation N=64 n_ranks=8
+    uv run python run_solver.py --config-name=experiment/04-validation N=64 n_ranks=8
 
     # Hydra multirun sweep
-    uv run python run_solver.py --config-name=04-validation \\
+    uv run python run_solver.py --config-name=experiment/04-validation \\
         --multirun N=16,32,48 strategy=sliced,cubic
 """
 
@@ -37,15 +37,13 @@ from omegaconf import DictConfig, OmegaConf
 @hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Entry point - spawns MPI if needed, otherwise runs solver."""
+    # Note: NUMBA_NUM_THREADS is set via hydra.job.env_set in config.yaml
 
-    # Set numba threads from config
-    if cfg.get("numba_threads"):
-        os.environ["NUMBA_NUM_THREADS"] = str(cfg.numba_threads)
-
+    # Check if we're in an MPI subprocess (spawned by mpiexec)
     try:
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
-        if comm.Get_size() > 1:
+        if comm.Get_size() > 1 or os.environ.get("MPI_SUBPROCESS"):
             _run_solver(cfg, comm)
             return
     except ImportError:
@@ -58,14 +56,33 @@ def main(cfg: DictConfig) -> None:
     n_ranks = cfg.get("n_ranks", 1)
     script = os.path.abspath(__file__)
 
-    cmd = [
-        "mpiexec", "-n", str(n_ranks),
-        "--report-bindings",
-        "uv", "run", "python", script,
-    ]
+    # Set env var to prevent recursive spawning
+    env = os.environ.copy()
+    env["MPI_SUBPROCESS"] = "1"
+
+    # Build MPI command with optional args
+    cmd = ["mpiexec", "-n", str(n_ranks)]
+
+    mpi = cfg.get("mpi", {})
+    cmd.append("--report-binding")
+
+    # Calculate NPS from LSF allocation if available
+    alloc_cores = os.environ.get("LSB_DJOB_NUMPROC")
+    if alloc_cores and mpi.get("bind_to"):
+        cores_per_node = mpi.get("cores_per_node", 24)
+        n_nodes = int(alloc_cores) // cores_per_node
+        ranks_per_node = n_ranks // max(n_nodes, 1)
+        ranks_per_socket = ranks_per_node // 2  # 2 sockets per node
+        if ranks_per_socket > 0:
+            cmd.extend(["--map-by", f"ppr:{ranks_per_socket}:package"])
+
+    if mpi.get("bind_to"):
+        cmd.extend(["--bind-to", str(mpi.bind_to)])
+
+    cmd.extend(["uv", "run", "python", script])
     cmd.extend(sys.argv[1:])
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     if result.stdout:
         print(result.stdout)
@@ -162,6 +179,7 @@ def _run_solver(cfg: DictConfig, comm):
             communicator=communicator,
             tolerance=cfg.get("tolerance", 1e-16),
             max_iter=cfg.get("max_iter", 100),
+            fmg_post_cycles=cfg.get("fmg_post_vcycles", 1),
         )
     else:
         if rank == 0:
@@ -173,8 +191,7 @@ def _run_solver(cfg: DictConfig, comm):
     # ----------
 
     if solver_type == "fmg":
-        cycles = cfg.get("fmg_cycles", 1)
-        solver.fmg_solve(cycles=cycles)
+        solver.fmg_solve()  # FMG is 1 cycle by definition
     else:
         solver.solve()
 

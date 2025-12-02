@@ -1,18 +1,19 @@
+# @package _global_
 defaults:
-  - config
+  - /config
+  - /solver: multigrid
   - _self_
 
-# Experiment settings
-experiment_name: 05-multigrid-fmg
-solver: fmg
+experiment_name: multigrid
 
-# FMG defaults (override via CLI for sweeps)
+# FMG settings
+solver: fmg
 N: 129
 n_ranks: 8
 n_smooth: 3
 omega: 0.6666666666666666
 max_iter: 3000
 tolerance: 1.0e-16
-fmg_cycles: 1
+fmg_post_vcycles: 1
 strategy: sliced
 communicator: custom

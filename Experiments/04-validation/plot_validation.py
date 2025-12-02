@@ -14,7 +14,7 @@ Usage
 .. code-block:: bash
 
     # Run validation experiment first
-    uv run python run_solver.py --config-name=04-validation
+    uv run python run_solver.py --config-name=experiment/04-validation
 
     # Then plot results
     uv run python Experiments/04-validation/plot_validation.py
@@ -36,7 +36,7 @@ from Poisson import get_project_root
 from utils.mlflow.io import setup_mlflow_tracking, load_runs
 
 
-@hydra.main(config_path="../hydra-conf", config_name="04-validation", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/04-validation", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Run validation plotting with Hydra configuration."""
 
@@ -64,7 +64,7 @@ def main(cfg: DictConfig) -> None:
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
         print("Run the experiment first:")
-        print("  uv run python Experiments/run_experiment.py --config-name=04-validation")
+        print("  uv run python Experiments/run_experiment.py --config-name=experiment/04-validation")
         return
 
     # Extract parameters and metrics from MLflow columns

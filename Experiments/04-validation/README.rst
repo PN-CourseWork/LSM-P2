@@ -28,10 +28,10 @@ Usage
 .. code-block:: bash
 
     # Run validation experiment
-    uv run python run_solver.py --config-name=04-validation
+    uv run python run_solver.py --config-name=experiment/04-validation
 
     # Parameter sweep
-    uv run python run_solver.py --config-name=04-validation \
+    uv run python run_solver.py --config-name=experiment/04-validation \
         --multirun N=16,32,48 strategy=sliced,cubic
 
     # Plot convergence results
@@ -40,7 +40,6 @@ Usage
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/04-validation.yaml
+.. literalinclude:: ../hydra-conf/experiment/04-validation.yaml
    :language: yaml
-   :caption: 04-validation.yaml
-
+   :caption: experiment/04-validation.yaml

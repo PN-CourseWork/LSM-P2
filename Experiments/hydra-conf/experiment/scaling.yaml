@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - /config
+  - /solver: jacobi
+  - _self_
+
+experiment_name: scaling
+
+# HPC MPI options - NPS calculated from LSB_DJOB_NUMPROC
+mpi:
+  bind_to: core
+
+# Scaling experiment settings
+N: 65
+n_ranks: 1
+max_iter: 100
+omega: 0.8
+tolerance: 0.0
+strategy: sliced
+communicator: custom

@@ -34,7 +34,6 @@ Usage
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/03-communication.yaml
+.. literalinclude:: ../hydra-conf/experiment/03-communication.yaml
    :language: yaml
-   :caption: 03-communication.yaml
-
+   :caption: experiment/03-communication.yaml

@@ -183,7 +183,7 @@ def plot_weak_scaling(df: pd.DataFrame, title: str, filename: str, fig_dir: Path
     plt.close()
 
 
-@hydra.main(config_path="../hydra-conf", config_name="06-scaling", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/06-scaling", version_base=None)
 def main(cfg: DictConfig):
     """Main plotting function with Hydra configuration."""
     # Setup paths

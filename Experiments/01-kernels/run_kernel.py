@@ -66,7 +66,7 @@ def run_kernel(kernel, f, max_iter, track_residuals=False):
     
     return u, wall_time, residuals
 
-@hydra.main(config_path="../hydra-conf", config_name="01-kernels", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/01-kernels", version_base=None)
 def main(cfg: DictConfig):
     # Setup MLflow tracking
     setup_mlflow_tracking(mode=cfg.mlflow.mode)

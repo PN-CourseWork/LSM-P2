@@ -1,0 +1,23 @@
+# @package _global_
+defaults:
+  - /config
+  - /solver: jacobi
+  - _self_
+
+experiment_name: kernel
+
+# Benchmark configuration
+N: 100
+n_ranks: 1
+max_iter: 200
+omega: 1.0
+tolerance: 0.0
+
+# Multirun sweep
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      N: 25,50,75,100,125,150
+      use_numba: true,false
+      numba_threads: 1,4,6,8

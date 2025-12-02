@@ -28,7 +28,7 @@ def load_timeseries(path, method_name):
         return pd.DataFrame()
 
 
-@hydra.main(config_path="../hydra-conf", config_name="05-multigrid-timings", version_base=None)
+@hydra.main(config_path="../hydra-conf", config_name="experiment/05-multigrid-timings", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Plot timing comparison with Hydra configuration."""
 

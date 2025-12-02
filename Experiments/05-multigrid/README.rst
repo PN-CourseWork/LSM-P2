@@ -10,16 +10,16 @@ Usage
 .. code-block:: bash
 
     # Run FMG spatial convergence study
-    uv run python run_solver.py --config-name=05-multigrid-fmg
+    uv run python run_solver.py --config-name=experiment/05-multigrid-fmg
 
     # Parameter sweep
-    uv run python run_solver.py --config-name=05-multigrid-fmg \
+    uv run python run_solver.py --config-name=experiment/05-multigrid-fmg \
         --multirun N=65,129,257 strategy=sliced,cubic
 
     # Run timing comparison (Jacobi vs FMG)
-    uv run python run_solver.py --config-name=05-multigrid-fmg \
+    uv run python run_solver.py --config-name=experiment/05-multigrid-fmg \
         solver=jacobi max_iter=200
-    uv run python run_solver.py --config-name=05-multigrid-fmg \
+    uv run python run_solver.py --config-name=experiment/05-multigrid-fmg \
         solver=fmg
 
     # Plot results
@@ -29,9 +29,9 @@ Usage
 Configuration
 -------------
 
-.. literalinclude:: ../hydra-conf/05-multigrid-fmg.yaml
+.. literalinclude:: ../hydra-conf/experiment/05-multigrid-fmg.yaml
    :language: yaml
-   :caption: 05-multigrid-fmg.yaml
+   :caption: experiment/05-multigrid-fmg.yaml
 
 Scripts
 -------
