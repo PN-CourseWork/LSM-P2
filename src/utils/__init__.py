@@ -16,10 +16,15 @@ Import examples:
     from utils.config import get_repo_root, load_project_config
 """
 
+import warnings
+
+# Suppress MLflow FutureWarning about filesystem backend deprecation
+warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow")
+
 from . import plotting, runners, hpc, config, mlflow, cli
 
 # Re-export common config functions for convenience
-from .config import get_repo_root, load_project_config
+from .config import get_repo_root
 
 __all__ = [
     "plotting",
@@ -29,5 +34,4 @@ __all__ = [
     "mlflow",
     "cli",
     "get_repo_root",
-    "load_project_config",
 ]

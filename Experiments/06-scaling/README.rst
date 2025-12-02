@@ -1,4 +1,4 @@
-05 - Scaling Analysis
+06 - Scaling Analysis
 =====================
 
 Description
@@ -10,6 +10,30 @@ This experiment measures **the performance limits** of the complete solver acros
 **Strong Scaling:** Fixed problem size with increasing ranks → measures parallel speedup.
 
 **Weak Scaling:** Constant work per rank with proportional growth → measures scalability.
+
+Usage
+-----
+
+This experiment uses **Hydra** for configuration and parameter sweeping.
+
+**Local Execution:**
+To run a specific experiment configuration locally:
+
+.. code-block:: bash
+
+    # Run the first case of the jacobi_strong_1node experiment
+    uv run python Experiments/06-scaling/runner.py experiment=jacobi_strong_1node
+
+**LSF Job Arrays:**
+Submit job arrays that map `LSB_JOBINDEX` to parameter combinations defined in `conf/experiment/*.yaml`.
+
+.. code-block:: bash
+
+    # Example LSF script submission
+    bsub -J "scaling[1-24]" < jobscript.lsf
+
+    # Inside jobscript.lsf:
+    mpiexec -n $LSB_DJOB_NUMPROC uv run python Experiments/06-scaling/runner.py experiment=jacobi_strong_1node
 
 Purpose
 -------

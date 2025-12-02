@@ -1,0 +1,15 @@
+# @package _global_
+experiment_name: jacobi_strong_1node
+solver: jacobi
+
+# Base static params
+tol: 0.0
+max_iter: 100
+communicator: custom
+
+# Sweep definition
+sweep:
+  grid:
+    ranks: [1, 8, 12, 24]
+    N: [144, 216, 288]
+    strategy: ["sliced", "cubic"]

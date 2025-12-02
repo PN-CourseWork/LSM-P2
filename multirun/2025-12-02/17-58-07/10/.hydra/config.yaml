@@ -1,0 +1,9 @@
+experiment_name: kernels_benchmark
+max_iter: 200
+omega: 1.0
+tolerance: 0.0
+'N': 50
+kernel: numba
+threads: 4
+mlflow:
+  mode: local

@@ -15,7 +15,6 @@ from .io import (
     log_metrics_dict,
     log_timeseries_metrics,
     log_artifact_file,
-    fetch_project_artifacts,
     load_runs,
     download_artifacts,
 )
@@ -28,7 +27,6 @@ __all__ = [
     "log_metrics_dict",
     "log_timeseries_metrics",
     "log_artifact_file",
-    "fetch_project_artifacts",
     "load_runs",
     "download_artifacts",
     "upload_logs",

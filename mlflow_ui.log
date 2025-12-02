@@ -1,0 +1,54 @@
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:256: FutureWarning: Filesystem tracking backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri, artifact_uri)
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:285: FutureWarning: Filesystem model registry backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri)
+[MLflow] Security middleware enabled with default settings (localhost-only). To allow connections from other hosts, use --host 0.0.0.0 and configure --allowed-hosts and --cors-allowed-origins.
+INFO:     Uvicorn running on http://127.0.0.1:5000 (Press CTRL+C to quit)
+INFO:     Started parent process [52566]
+INFO:     Started server process [52569]
+INFO:     Waiting for application startup.
+INFO:     Started server process [52568]
+INFO:     Started server process [52571]
+INFO:     Application startup complete.
+INFO:     Waiting for application startup.
+INFO:     Waiting for application startup.
+INFO:     Started server process [52570]
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:62707 - "GET / HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:62707 - "GET /static-files/static/css/762.26533251.chunk.css HTTP/1.1" 200 OK
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:256: FutureWarning: Filesystem tracking backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri, artifact_uri)
+INFO:     127.0.0.1:62710 - "GET /ajax-api/2.0/mlflow/experiments/search?max_results=5&order_by=last_update_time+DESC HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /graphql HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "GET /ajax-api/2.0/mlflow/traces?experiment_ids=973069746140441673&order_by=timestamp_ms%20DESC&max_results=1&filter= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62712 - "GET /ajax-api/2.0/mlflow/gateway-proxy?gateway_path=api%2F2.0%2Fendpoints%2F HTTP/1.1" 200 OK
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:256: FutureWarning: Filesystem tracking backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri, artifact_uri)
+INFO:     127.0.0.1:62713 - "POST /ajax-api/2.0/mlflow/logged-models/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/experiments/search-datasets HTTP/1.1" 200 OK
+/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/.venv/lib/python3.12/site-packages/mlflow/server/handlers.py:256: FutureWarning: Filesystem tracking backend (e.g., './mlruns') is deprecated. Please switch to a database backend (e.g., 'sqlite:///mlflow.db'). For feedback, see: https://github.com/mlflow/mlflow/issues/18534
+  return FileStore(store_uri, artifact_uri)
+INFO:     127.0.0.1:62711 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /ajax-api/2.0/mlflow/gateway-proxy?gateway_path=api%2F2.0%2Fendpoints%2F HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62711 - "POST /ajax-api/2.0/mlflow/logged-models/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /ajax-api/2.0/mlflow/traces?experiment_ids=973069746140441673&order_by=timestamp_ms%20DESC&max_results=1&filter= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /ajax-api/2.0/mlflow/traces?experiment_ids=973069746140441673&order_by=timestamp_ms%20DESC&max_results=1&filter= HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "POST /ajax-api/2.0/mlflow/experiments/set-experiment-tag HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /graphql HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "GET /static-files/static/js/5776.36e18643.chunk.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /static-files/static/js/1876.132109ab.chunk.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62717 - "GET /static-files/static/css/6733.f482616c.chunk.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62718 - "GET /static-files/static/js/6733.fa0f7442.chunk.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/logged-models/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /static-files/static/media/versions-empty.3e2d8bb8c5b8ddd0a19a34890b36ad41.svg HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/experiments/search-datasets HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62714 - "GET /ajax-api/2.0/mlflow/gateway-proxy?gateway_path=api%2F2.0%2Fendpoints%2F HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62710 - "POST /ajax-api/2.0/mlflow/logged-models/search HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62718 - "POST /ajax-api/2.0/mlflow/runs/search HTTP/1.1" 200 OK

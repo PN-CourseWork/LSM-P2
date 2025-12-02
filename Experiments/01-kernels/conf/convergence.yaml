@@ -1,0 +1,24 @@
+# @package _global_
+experiment_name: kernels_convergence
+
+# Base configuration
+N: 25
+max_iter: 5000
+omega: 1.0
+tolerance: 0.0
+
+# Defaults
+kernel: numba
+threads: 4
+
+mlflow:
+  mode: local
+
+# Sweep: Check both kernels
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      kernel: numpy,numba
+      # Just run Numba with one thread count for validity check
+      threads: 4

@@ -1,0 +1,3 @@
+- N=25
+- kernel=numpy
+- threads=8

@@ -1,0 +1,3 @@
+- N=100
+- kernel=numpy
+- threads=4

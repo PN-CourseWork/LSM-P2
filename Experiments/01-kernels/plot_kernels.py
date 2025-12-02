@@ -1,15 +1,21 @@
+
 """
 Visualization of Kernel Experiments
 ====================================
 
 Comprehensive analysis and visualization of NumPy vs Numba kernel benchmarks.
+Fetches data directly from MLflow.
 """
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import mlflow
+import hydra
+from omegaconf import DictConfig
 
 from Poisson import get_project_root
+from utils.mlflow.io import load_runs, get_mlflow_client, setup_mlflow_tracking
 
 # %%
 # Setup
@@ -17,126 +23,155 @@ from Poisson import get_project_root
 
 sns.set_theme()
 
-# Get paths using installed package utility (works in Sphinx-Gallery)
-repo_root = get_project_root()
-data_dir = repo_root / "data" / "01-kernels"
-fig_dir = repo_root / "figures" / "kernels"
-fig_dir.mkdir(parents=True, exist_ok=True)
+@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    # Setup MLflow tracking based on config
+    setup_mlflow_tracking(mode=cfg.mlflow.mode)
 
-# Check if data exists
-if not list(data_dir.glob("*.parquet")):
-    print(f"Data not found: {data_dir}. Run compute_kernels.py first.")
-    # Graceful exit for docs build
-    import sys
+    repo_root = get_project_root()
+    fig_dir = repo_root / "figures" / "kernels"
+    fig_dir.mkdir(parents=True, exist_ok=True)
 
-    sys.exit(0)
+    # %%
+    # Plot 1: Convergence Validation
+    # -------------------------------
 
-# %%
-# Plot 1: Convergence Validation
-# -------------------------------
+    print("Fetching convergence data from MLflow...")
+    try:
+        # Use adjusted experiment name for Databricks if mode is databricks
+        exp_name_conv = cfg.mlflow.databricks_project_prefix + "/kernels_convergence" if cfg.mlflow.mode == "databricks" else "kernels_convergence"
 
-convergence_file = data_dir / "kernel_convergence.parquet"
-if convergence_file.exists():
-    df_conv = pd.read_parquet(convergence_file)
+        df_conv_runs = load_runs(exp_name_conv, converged_only=False)
+        
+        if df_conv_runs.empty:
+            print(f"No convergence runs found for experiment '{exp_name_conv}'.")
+        else:
+            client = get_mlflow_client()
+            history_list = []
+            
+            for _, run in df_conv_runs.iterrows():
+                run_id = run.run_id
+                kernel = run["params.kernel"]
+                # Fetch metric history for 'residual_history'
+                try:
+                    history = client.get_metric_history(run_id, "residual_history")
+                    for m in history:
+                        history_list.append({
+                            "iteration": m.step,
+                            "residual": m.value,
+                            "kernel": kernel,
+                            "N": int(run["params.N"])
+                        })
+                except Exception:
+                    continue
+                    
+            if history_list:
+                df_history = pd.DataFrame(history_list)
+                
+                g = sns.relplot(
+                    data=df_history,
+                    x="iteration",
+                    y="residual",
+                    col="N",
+                    hue="kernel",
+                    style="kernel",
+                    kind="line",
+                    dashes=True,
+                    markers=False,
+                    facet_kws={"sharey": True, "sharex": False},
+                )
 
-    # Create faceted plot: one subplot per problem size
-    g = sns.relplot(
-        data=df_conv,
-        x="iteration",
-        y="physical_errors",
-        col="N",
-        hue="kernel",
-        style="kernel",
-        kind="line",
-        dashes=True,
-        markers=False,
-        facet_kws={"sharey": True, "sharex": False},
-    )
+                g.set(xscale="log", yscale="log")
+                g.set_axis_labels("Iteration", r"Algebraic Residual $||Au - f||_\infty$")
+                g.set_titles(col_template="N={col_name}")
+                g.fig.suptitle(r"Kernel Convergence Validation", y=1.02)
+                g.savefig(fig_dir / "01_convergence_validation.pdf")
+                print("Saved convergence plot.")
+            else:
+                 print("No metric history found for convergence runs.")
 
-    g.set(xscale="log", yscale="log")
-    g.set_axis_labels("Iteration", r"Algebraic Residual $||Au - f||_\infty$")
-    g.set_titles(col_template="N={col_name}")
-    g.fig.suptitle(r"Kernel Convergence Validation", y=1.02)
+    except Exception as e:
+        print(f"Skipping convergence plot: {e}")
 
-    # Save figure
-    g.savefig(fig_dir / "01_convergence_validation.pdf")
 
-# %%
-# Load and Prepare Benchmark Data
-# --------------------------------
+    # %%
+    # Plot 2 & 3: Benchmark Performance
+    # ----------------------------------
 
-benchmark_file = data_dir / "kernel_benchmark.parquet"
-df = pd.read_parquet(benchmark_file)
+    print("Fetching benchmark data from MLflow...")
+    try:
+        exp_name_bench = cfg.mlflow.databricks_project_prefix + "/kernels_benchmark" if cfg.mlflow.mode == "databricks" else "kernels_benchmark"
+        df_bench = load_runs(exp_name_bench, converged_only=False)
+        
+        if df_bench.empty:
+            print(f"No benchmark runs found for experiment '{exp_name_bench}'.")
+        else:
+            # Convert columns
+            df_bench["N"] = df_bench["params.N"].astype(int)
+            df_bench["mlups"] = df_bench["metrics.mlups"]
+            # Use metrics.wall_time / metrics.iterations to get per-iter time
+            df_bench["time_per_iter_ms"] = (df_bench["metrics.wall_time"] / df_bench["params.max_iter"].astype(float)) * 1000
+            df_bench["num_threads"] = df_bench["params.threads"]
+            df_bench["kernel"] = df_bench["params.kernel"]
 
-# Convert to milliseconds
-df["time_ms"] = df["compute_times"] * 1000
+            # Prepare configuration labels
+            df_bench["config"] = df_bench.apply(
+                lambda row: "NumPy"
+                if row["kernel"] == "numpy"
+                else f"Numba ({int(row['num_threads'])} threads)",
+                axis=1,
+            )
 
-# Prepare configuration labels
-df["config"] = df.apply(
-    lambda row: "NumPy"
-    if row["kernel"] == "numpy"
-    else f"Numba ({int(row['num_threads'])} threads)",
-    axis=1,
-)
+            # -- Plot 2: Performance --
+            fig, ax = plt.subplots()
+            sns.lineplot(
+                data=df_bench,
+                x="N",
+                y="time_per_iter_ms",
+                hue="config",
+                style="config",
+                markers=True,
+                dashes=False,
+                errorbar="ci",
+                ax=ax,
+            )
+            ax.set_xscale("log")
+            ax.set_yscale("log")
+            ax.set_xlabel("Problem Size (N)")
+            ax.set_ylabel("Time per Iteration (ms)")
+            ax.set_title("Kernel Performance Comparison")
+            fig.savefig(fig_dir / "02_performance.pdf")
+            print("Saved performance plot.")
 
-# %%
-# Plot 2: Performance Comparison
-# -------------------------------
+            # -- Plot 3: Speedup --
+            # Filter for Numba runs and compute speedup vs average NumPy time for that N
+            df_numpy = df_bench[df_bench["kernel"] == "numpy"].groupby("N")["time_per_iter_ms"].mean().reset_index()
+            df_numpy = df_numpy.rename(columns={"time_per_iter_ms": "numpy_mean_time"})
+            
+            df_speedup = df_bench[df_bench["kernel"] == "numba"].merge(df_numpy, on="N", how="left")
+            df_speedup["speedup"] = df_speedup["numpy_mean_time"] / df_speedup["time_per_iter_ms"]
+            df_speedup["thread_label"] = df_speedup["num_threads"].astype(str) + " threads"
 
-# Create plot - seaborn will automatically compute mean and confidence intervals
-fig, ax = plt.subplots()
-sns.lineplot(
-    data=df,
-    x="N",
-    y="time_ms",
-    hue="config",
-    style="config",
-    markers=True,
-    dashes=False,
-    errorbar="ci",  # Show confidence intervals
-    ax=ax,
-)
+            fig, ax = plt.subplots()
+            sns.lineplot(
+                data=df_speedup,
+                x="N",
+                y="speedup",
+                hue="thread_label",
+                style="thread_label",
+                markers=True,
+                dashes=False,
+                errorbar="ci",
+                ax=ax,
+            )
+            ax.set_xlabel("Problem Size (N)")
+            ax.set_ylabel("Speedup vs NumPy")
+            ax.set_title("Speedup (Numba vs NumPy)")
+            fig.savefig(fig_dir / "03_speedup.pdf")
+            print("Saved speedup plot.")
 
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel("Problem Size (N)")
-ax.set_ylabel("Time per Iteration (ms)")
-ax.set_title("Kernel Performance Comparison")
+    except Exception as e:
+        print(f"Skipping benchmark plots: {e}")
 
-fig.savefig(fig_dir / "02_performance.pdf")
-
-# %%
-# Plot 3: Speedup Analysis
-# -------------------------
-
-# Compute numpy baseline for each N and iteration
-df_numpy = df[df["kernel"] == "numpy"][["N", "iteration", "compute_times"]].rename(
-    columns={"compute_times": "numpy_time"}
-)
-df_speedup = df[df["kernel"] == "numba"].merge(
-    df_numpy, on=["N", "iteration"], how="left"
-)
-df_speedup["speedup"] = df_speedup["numpy_time"] / df_speedup["compute_times"]
-df_speedup["thread_label"] = (
-    df_speedup["num_threads"].astype(int).astype(str) + " threads"
-)
-
-# Create speedup plot - seaborn will compute mean and error bars
-fig, ax = plt.subplots()
-sns.lineplot(
-    data=df_speedup,
-    x="N",
-    y="speedup",
-    hue="thread_label",
-    style="thread_label",
-    markers=True,
-    dashes=False,
-    errorbar="ci",
-    ax=ax,
-)
-
-ax.set_xlabel("Problem Size (N)")
-ax.set_ylabel("Speedup vs NumPy")
-ax.set_title("Fixed Iteration Speedup (200 iterations)")
-
-fig.savefig(fig_dir / "03_speedup_fixed_iter.pdf")
+if __name__ == "__main__":
+    main()

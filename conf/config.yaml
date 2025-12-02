@@ -1,0 +1,26 @@
+defaults:
+  - _self_
+  - experiment: null
+
+# Default parameters
+N: 64
+omega: 0.8
+strategy: sliced
+communicator: custom
+tol: 0.0
+max_iter: 100
+cycles: 2
+n_smooth: 3
+use_numba: false
+
+# Logging
+job_name: null
+log_dir: logs/lsf
+experiment_name: null
+
+# Placeholder for sweep (to avoid errors if not defined)
+sweep: {}
+
+mlflow:
+  mode: local
+  databricks_project_prefix: "/Shared/LSM-PoissonMPI"

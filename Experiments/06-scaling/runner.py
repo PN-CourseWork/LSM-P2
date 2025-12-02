@@ -6,18 +6,21 @@ MPI solver for 3D Poisson equation with MLflow logging.
 Supports both Jacobi and FMG solvers, selected by experiment name.
 
 Usage:
-    # Direct CLI args:
-    mpiexec -n 4 uv run python runner.py --solver jacobi --N 64 --numba
-
     # Job array mode (reads LSB_JOBINDEX):
-    mpiexec -n 8 uv run python runner.py \
-        --runtime-config HPC/Configs/runtime/experiments.yaml \
-        --experiment jacobi_strong_1node
+    mpiexec -n 8 uv run python runner.py +experiment=jacobi_strong_1node
+
+    # Local test:
+    uv run python runner.py +experiment=jacobi_strong_1node ++sweep.grid.ranks=[1]
 """
 
-import argparse
 import os
+import sys
+import itertools
+from argparse import Namespace
 from dataclasses import asdict
+
+import hydra
+from omegaconf import DictConfig, OmegaConf
 from mpi4py import MPI
 
 from Poisson import JacobiPoisson, MultigridPoisson, get_project_root
@@ -30,82 +33,34 @@ from utils.mlflow.io import (
     log_artifact_file,
     log_lsf_logs,
 )
-from runtime_config import load_runtime_config
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Unified MPI Poisson solver")
+def expand_sweep(sweep_cfg):
+    """Expand grid and matrix sweeps into a list of parameter dicts."""
+    grid = sweep_cfg.get("grid", {})
+    matrix = sweep_cfg.get("matrix", [])
 
-    # Runtime config mode
-    parser.add_argument("--runtime-config", type=str, help="Path to runtime YAML config")
-    parser.add_argument("--experiment", type=str, help="Experiment name in config")
-    parser.add_argument("--index", type=int, help="Task index (default: LSB_JOBINDEX)")
+    # 1. Expand grid sweep (Cartesian product)
+    grid_combos = [{}]
+    if grid:
+        keys = list(grid.keys())
+        values = list(grid.values())
+        grid_combos = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-    # Solver selection (auto-detected from experiment name if not set)
-    parser.add_argument("--solver", choices=["jacobi", "fmg"], help="Solver type")
+    # 2. Matrix sweep (explicit combinations)
+    # If matrix is empty, use a dummy list with one empty dict
+    matrix_combos = matrix if matrix else [{}]
 
-    # Common params
-    parser.add_argument("--N", type=int, default=64, help="Grid size N³")
-    parser.add_argument("--omega", type=float, default=0.8, help="Relaxation parameter")
-    parser.add_argument("--strategy", choices=["sliced", "cubic"], default="sliced")
-    parser.add_argument("--communicator", choices=["numpy", "custom"], default="custom")
+    # 3. Combine: Cartesian product of (grid x matrix)
+    final_combos = []
+    for g in grid_combos:
+        for m in matrix_combos:
+            # Merge grid and matrix (matrix overrides grid if collision)
+            c = g.copy()
+            c.update(m)
+            final_combos.append(c)
 
-    # Jacobi-specific
-    parser.add_argument("--tol", type=float, default=0.0, help="Convergence tolerance")
-    parser.add_argument("--max-iter", type=int, default=100, help="Max iterations")
-    parser.add_argument("--numba", action="store_true", help="Use Numba kernel")
-
-    # FMG-specific
-    parser.add_argument("--cycles", type=int, default=2, help="FMG cycles")
-    parser.add_argument("--n-smooth", type=int, default=3, help="Smoothing steps")
-
-    # Logging
-    parser.add_argument("--job-name", type=str, default=None)
-    parser.add_argument("--log-dir", type=str, default="logs/lsf")
-    parser.add_argument("--experiment-name", type=str, default=None)
-
-    return parser.parse_args()
-
-
-def detect_solver(experiment_name: str) -> str:
-    """Detect solver type from experiment name."""
-    if experiment_name.startswith("jacobi"):
-        return "jacobi"
-    elif experiment_name.startswith("fmg"):
-        return "fmg"
-    raise ValueError(f"Cannot detect solver from experiment name: {experiment_name}")
-
-
-def resolve_params(args):
-    """Resolve parameters from config or CLI."""
-    if args.runtime_config and args.experiment:
-        cfg = load_runtime_config(args.runtime_config, args.experiment, args.index)
-
-        # Handle numba_threads
-        if "numba_threads" in cfg:
-            os.environ["NUMBA_NUM_THREADS"] = str(cfg.pop("numba_threads"))
-
-        return {
-            "N": cfg.get("N", args.N),
-            "omega": cfg.get("omega", args.omega),
-            "strategy": cfg.get("strategy", args.strategy),
-            "communicator": cfg.get("communicator", args.communicator),
-            "tol": cfg.get("tol", args.tol),
-            "max_iter": cfg.get("max_iter", args.max_iter),
-            "cycles": cfg.get("cycles", args.cycles),
-            "n_smooth": cfg.get("n_smooth", args.n_smooth),
-        }
-    else:
-        return {
-            "N": args.N,
-            "omega": args.omega,
-            "strategy": args.strategy,
-            "communicator": args.communicator,
-            "tol": args.tol,
-            "max_iter": args.max_iter,
-            "cycles": args.cycles,
-            "n_smooth": args.n_smooth,
-        }
+    return final_combos
 
 
 def run_jacobi(params, args, comm, rank, n_ranks):
@@ -150,7 +105,7 @@ def run_jacobi(params, args, comm, rank, n_ranks):
         solver.save_hdf5(output_file)
 
         # MLflow
-        exp_name = args.experiment_name or args.experiment or "Experiment-06-Scaling"
+        exp_name = args.experiment_name or "Experiment-06-Scaling"
         parent_run = f"N{params['N']}"
         run_name = f"jacobi_N{params['N']}_p{n_ranks}_{params['strategy']}"
 
@@ -207,7 +162,7 @@ def run_fmg(params, args, comm, rank, n_ranks):
         solver.save_hdf5(output_file)
 
         # MLflow
-        exp_name = args.experiment_name or args.experiment or "Experiment-06-Scaling-FMG"
+        exp_name = args.experiment_name or "Experiment-06-Scaling-FMG"
         parent_run = f"FMG_N{params['N']}"
         run_name = f"fmg_N{params['N']}_p{n_ranks}_{params['strategy']}"
 
@@ -232,25 +187,69 @@ def run_fmg(params, args, comm, rank, n_ranks):
         print(f"  Wall time: {solver.results.wall_time:.4f}s, {solver.results.mlups:.2f} Mlup/s")
 
 
-# --- Main ---
-args = parse_args()
-params = resolve_params(args)
+@hydra.main(config_path="../../conf", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    OmegaConf.set_struct(cfg, False)  # Allow adding keys from sweep (e.g. ranks)
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    n_ranks = comm.Get_size()
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-n_ranks = comm.Get_size()
+    # 1. Resolve Sweep Parameters
+    if cfg.get("sweep"):
+        sweep_dict = OmegaConf.to_container(cfg.sweep, resolve=True)
+        if sweep_dict.get("grid") or sweep_dict.get("matrix"):
+            idx = int(os.environ.get("LSB_JOBINDEX", "1"))
+            
+            combos = expand_sweep(sweep_dict)
+            
+            if not (1 <= idx <= len(combos)):
+                if rank == 0:
+                    print(f"Error: LSB_JOBINDEX {idx} out of range (1-{len(combos)})")
+                sys.exit(1)
+                
+            selected = combos[idx - 1]
+            
+            # Apply selected parameters to cfg
+            for k, v in selected.items():
+                cfg[k] = v
+            
+            if rank == 0:
+                print(f"Hydra: Selected config {idx}/{len(combos)}: {selected}")
 
-# Detect solver type
-solver_type = args.solver or (detect_solver(args.experiment) if args.experiment else "jacobi")
+    # 2. Construct Args and Params
+    params = {
+        "N": cfg.N,
+        "omega": cfg.omega,
+        "strategy": cfg.strategy,
+        "communicator": cfg.communicator,
+        "tol": cfg.tol,
+        "max_iter": cfg.max_iter,
+        "cycles": cfg.cycles,
+        "n_smooth": cfg.n_smooth,
+    }
 
-if rank == 0 and args.experiment:
-    idx = args.index or int(os.environ.get("LSB_JOBINDEX", "1"))
-    print(f"=== {args.experiment} task {idx} ===")
+    args = Namespace(
+        numba=cfg.use_numba,
+        experiment_name=cfg.experiment_name,
+        job_name=cfg.job_name or os.environ.get("LSB_JOBNAME"),
+        log_dir=cfg.log_dir,
+    )
 
-if solver_type == "jacobi":
-    run_jacobi(params, args, comm, rank, n_ranks)
-else:
-    run_fmg(params, args, comm, rank, n_ranks)
+    # Handle numba threads if present in selected params (passed via cfg or sweep)
+    if "numba_threads" in cfg:
+        os.environ["NUMBA_NUM_THREADS"] = str(cfg.numba_threads)
 
-if n_ranks > 1:
-    comm.Barrier()
+    # 3. Run Solver
+    solver_type = cfg.get("solver", "jacobi")
+    
+    if solver_type == "jacobi":
+        run_jacobi(params, args, comm, rank, n_ranks)
+    elif solver_type == "fmg":
+        run_fmg(params, args, comm, rank, n_ranks)
+    else:
+        if rank == 0:
+            print(f"Unknown solver: {solver_type}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

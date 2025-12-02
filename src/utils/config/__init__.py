@@ -1,35 +1,9 @@
-"""Project configuration and cleanup utilities.
+"""Configuration utilities.
 
-Provides:
-- Repository root detection
-- Project config loading from YAML
-- Cleanup utilities for generated files
+This package contains configuration utilities.
 """
 
-from .project import (
-    get_repo_root,
-    load_project_config,
-    get_config_section,
-)
-from .clean import (
-    clean_all,
-    clean_directories,
-    clean_files,
-    clean_patterns,
-    clean_data_directory,
-    clean_experiment_outputs,
-)
+from .paths import get_repo_root
+from .clean import clean_all
 
-__all__ = [
-    # Project config
-    "get_repo_root",
-    "load_project_config",
-    "get_config_section",
-    # Cleanup
-    "clean_all",
-    "clean_directories",
-    "clean_files",
-    "clean_patterns",
-    "clean_data_directory",
-    "clean_experiment_outputs",
-]
+__all__ = ["get_repo_root", "clean_all"]

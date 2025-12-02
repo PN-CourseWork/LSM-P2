@@ -27,20 +27,36 @@ except ImportError:
     JacobiPoisson = None
 
 
-def setup_mlflow_tracking():
+def setup_mlflow_tracking(mode: str = "databricks"):
     """
-    Configures MLflow tracking via Databricks.
-    Attempts a non-interactive login assuming credentials have been
-    previously configured via 'uv run python setup_mlflow.py'.
+    Configures MLflow tracking.
+
+    Parameters
+    ----------
+    mode : str
+        "databricks" or "local".
     """
-    try:
-        mlflow.login(backend="databricks", interactive=False)
-        mlflow.set_tracking_uri("databricks")
-        print("INFO: Connected to Databricks MLflow tracking.")
-    except Exception as e:
-        raise RuntimeError(
-            "MLflow setup failed. Please run 'uv run python setup_mlflow.py' first."
-        ) from e
+    if mode == "databricks":
+        try:
+            mlflow.login(backend="databricks", interactive=False)
+            mlflow.set_tracking_uri("databricks")
+            print("INFO: Connected to Databricks MLflow tracking.")
+        except Exception as e:
+            raise RuntimeError(
+                "MLflow Databricks setup failed. Ensure credentials are configured."
+            ) from e
+    elif mode == "local":
+        # Use default local file-based backend (./mlruns)
+        # Setting it to None or "" often defaults to ./mlruns, but explicit is better if env var is set differently.
+        # However, the standard way to 'unset' to default is just not setting it, or setting it to a local path.
+        # Let's explicitly set it to the local ./mlruns directory to be safe and clear.
+        mlruns_path = Path.cwd() / "mlruns"
+        mlruns_uri = f"file://{mlruns_path}"
+        mlflow.set_tracking_uri(mlruns_uri)
+        print(f"INFO: Using local file-based MLflow tracking backend: {mlruns_uri}")
+    else:
+        print(f"WARNING: Unknown MLflow mode '{mode}'. Using existing URI: {mlflow.get_tracking_uri()}")
+
 
 def get_mlflow_client() -> mlflow.tracking.MlflowClient:
     """Get an MLflow tracking client."""
@@ -59,16 +75,24 @@ def start_mlflow_run_context(
     Context manager to start a nested MLflow run.
     """
     if mlflow.get_tracking_uri() == "databricks" and not experiment_name.startswith("/"):
+        original_experiment_name = experiment_name
         experiment_name = f"{project_prefix}/{experiment_name}"
+        print(f"DEBUG: Adjusted experiment name for Databricks: {original_experiment_name} -> {experiment_name}")
 
+    print(f"DEBUG: Attempting to set MLflow experiment: {experiment_name}")
     mlflow.set_experiment(experiment_name)
     print(f"INFO: Using MLflow experiment: {experiment_name}")
 
     client = get_mlflow_client()
     exp = mlflow.get_experiment_by_name(experiment_name)
     if exp is None:
-        exp_id = client.create_experiment(experiment_name)
-        exp = client.get_experiment(exp_id)
+        try:
+            exp_id = client.create_experiment(experiment_name)
+            exp = client.get_experiment(exp_id)
+            print(f"DEBUG: Created new MLflow experiment: {experiment_name} with ID {exp_id}")
+        except Exception as e:
+            print(f"ERROR: Failed to create MLflow experiment '{experiment_name}': {e}")
+            raise # Re-raise to ensure failure is visible
 
     parent_runs = client.search_runs(
         experiment_ids=[exp.experiment_id],
@@ -168,63 +192,6 @@ def log_lsf_logs(job_name: Optional[str], log_dir: str = "logs/lsf"):
             print(f"  ✓ Logged LSF log: {log_file.name}")
         # Don't warn if not found - logs may not exist yet during local testing
 
-
-def fetch_project_artifacts(output_dir: Path, force: bool = False):
-    """
-    Dynamically discovers and fetches artifacts from all experiments under the
-    project's configured Databricks directory.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Local directory to download artifacts to
-    force : bool
-        Re-download even if files exist locally (default False)
-    """
-    from utils.config import load_project_config # Lazy import to avoid circular dependency
-
-    mlflow_conf = load_project_config().get("mlflow", {})
-    databricks_dir = mlflow_conf.get("databricks_dir")
-
-    if not databricks_dir:
-        print("ERROR: 'mlflow.databricks_dir' not set in project_config.yaml")
-        return
-
-    print(f"INFO: Searching for all experiments under project path: '{databricks_dir}'...")
-    all_experiments = mlflow.search_experiments()
-
-    # Filter experiments that are part of the project directory on Databricks
-    # Handles both /Shared/ and user-specific paths
-    project_experiments = [
-        exp for exp in all_experiments if databricks_dir in exp.name
-    ]
-
-    if not project_experiments:
-        print("INFO: No project-related experiments found.")
-        return
-
-    print(f"INFO: Found {len(project_experiments)} project experiments.")
-    if not force:
-        print("INFO: Skipping existing files (use --force to re-download)")
-    output_dir = Path(output_dir)
-
-    for exp in project_experiments:
-        # Create a local directory that mirrors the MLflow experiment structure
-        # e.g., /Shared/LSM-PoissonMPI/Experiment-01-Kernels -> data/01-kernels
-        # We need a mapping from experiment name to local dir name
-        local_dir_name = exp.name.split("/")[-1].replace("Experiment-", "").lower()
-        exp_dir = output_dir / local_dir_name
-
-        print(f"\nProcessing Experiment: {exp.name}")
-
-        try:
-            paths = download_artifacts(exp.name, exp_dir, force=force)
-            if paths:
-                print(f"  ✓ Downloaded {len(paths)} files to {exp_dir}")
-            else:
-                print("  - No new artifacts to download.")
-        except Exception as e:
-            print(f"  ✗ Failed to fetch artifacts for experiment '{exp.name}': {e}")
 
 def load_runs(
     experiment: str,

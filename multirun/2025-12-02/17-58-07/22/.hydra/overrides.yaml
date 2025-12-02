@@ -1,0 +1,3 @@
+- N=100
+- kernel=numba
+- threads=4

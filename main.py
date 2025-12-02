@@ -4,14 +4,14 @@
 import argparse
 import sys
 from pathlib import Path
+import os # Added for os.setsid
 
 # Ensure src directory is in python path
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from utils import runners
 from utils import mlflow as mlflow_utils
-from utils.config import get_repo_root, load_project_config, clean_all
-from utils.hpc.scaling import interactive_scaling
+from utils.config import get_repo_root, clean_all
 
 
 def build_docs():
@@ -73,9 +73,7 @@ def main():
     actions.add_argument("--copy-plots", action="store_true", help="Copy plots to report directory")
     actions.add_argument("--clean", action="store_true", help="Clean all generated files and caches")
     actions.add_argument("--setup-mlflow", action="store_true", help="Interactive MLflow setup (login to Databricks)")
-    actions.add_argument("--fetch", action="store_true", help="Fetch artifacts from MLflow (skips existing files)")
-    actions.add_argument("--force", action="store_true", help="Force re-download of existing files (use with --fetch)")
-    actions.add_argument("--hpc", action="store_true", help="Interactive HPC job generator for scaling experiments")
+    actions.add_argument("--mlflow-ui", action="store_true", help="Start MLflow UI and open in browser")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -101,17 +99,39 @@ def main():
     if args.copy_plots:
         runners.copy_to_report()
 
-    if args.fetch:
-        config = load_project_config()
-        mlflow_conf = config.get("mlflow", {})
-        repo_root = get_repo_root()
+    if args.mlflow_ui:
+        import subprocess
+        import webbrowser
+        import time
 
-        mlflow_utils.setup_mlflow_tracking()
-        output_dir = repo_root / mlflow_conf.get("download_dir", "data")
-        mlflow_utils.fetch_project_artifacts(output_dir, force=args.force)
+        print("\nStarting MLflow UI...")
+        try:
+            # Default to standard file-based backend (./mlruns)
+            cmd = ["uv", "run", "mlflow", "ui"]
+            
+            # Start MLflow UI in the background
+            log_file = open("mlflow_ui.log", "w")
+            mlflow_process = subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid # Detach process to run in background
+            )
+            print(f"MLflow UI started in background with PID: {mlflow_process.pid}")
+            print(f"Logs redirected to: mlflow_ui.log")
+            
+            # Give MLflow UI some time to start up
+            time.sleep(3) 
 
-    if args.hpc:
-        interactive_scaling()
+            # Open in browser
+            url = "http://localhost:5000"
+            webbrowser.open_new_tab(url)
+            print(f"Opening MLflow UI in browser: {url}")
+            print("Press Ctrl+C to stop MLflow UI process later if it's still running.")
+        except FileNotFoundError:
+            print("Error: 'uv' command not found. Ensure uv is installed and in PATH.")
+        except Exception as e:
+            print(f"Error starting MLflow UI: {e}")
 
     if args.docs:
         if not build_docs():

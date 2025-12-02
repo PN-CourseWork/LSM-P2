@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import List, Tuple, Optional
 
-from .project import get_repo_root
+from .paths import get_repo_root
 
 
 def _remove_item(path: Path) -> Tuple[bool, Optional[str]]:
@@ -63,6 +63,7 @@ def clean_directories(
             ".pytest_cache",
             ".ruff_cache",
             ".mypy_cache",
+            "mlruns", # Also clean mlruns directory
         ]
 
     cleaned, failed = 0, 0
@@ -98,7 +99,9 @@ def clean_files(
         repo_root = get_repo_root()
 
     if files is None:
-        files = ["docs/source/sg_execution_times.rst"]
+        files = [
+            "docs/source/sg_execution_times.rst",
+        ]
 
     cleaned, failed = 0, 0
     for f in files:
