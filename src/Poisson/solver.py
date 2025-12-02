@@ -46,6 +46,10 @@ class JacobiPoisson(BasePoissonSolver):
         # Create distributed grid (handles decomposition + halo exchange)
         self.grid = DistributedGrid(N, self.comm, strategy=strategy, halo_exchange=communicator)
 
+        # Store local grid info in config
+        self.config.local_N = self.grid.local_shape
+        self.config.halo_size_mb = self.grid.get_halo_size_bytes() / (1024 * 1024)
+
         # Initialize arrays
         self.u1_local = self.grid.allocate()
         self.u2_local = self.grid.allocate()
@@ -71,12 +75,21 @@ class JacobiPoisson(BasePoissonSolver):
         if self.u1_local is None:  # Non-root in sequential mode
             return
 
+        # Time the solve
+        self.comm.Barrier()
+        t0 = MPI.Wtime()
+
         self.u_solution = self._iterate()
+
+        wall_time = MPI.Wtime() - t0
 
         # Aggregate timing data on rank 0
         if self.rank == 0:
             self.results.total_compute_time = sum(self.timeseries.compute_times)
             self.results.total_halo_time = sum(self.timeseries.halo_exchange_times)
+
+        # Compute performance metrics
+        self._post_solve(wall_time)
 
         self._gather_solution(self.u_solution)
 

@@ -1,0 +1,428 @@
+[2025-12-02 20:55:05,218][HYDRA] Launching 20 jobs locally
+[2025-12-02 20:55:05,218][HYDRA] 	#0 : N=32 strategy=sliced communicator=numpy
+[2025-12-02 20:55:05,223][HYDRA] Launching 20 jobs locally
+[2025-12-02 20:55:05,223][HYDRA] 	#0 : N=32 strategy=sliced communicator=numpy
+[2025-12-02 20:55:05,224][HYDRA] Launching 20 jobs locally
+[2025-12-02 20:55:05,224][HYDRA] Launching 20 jobs locally
+[2025-12-02 20:55:05,224][HYDRA] 	#0 : N=32 strategy=sliced communicator=numpy
+[2025-12-02 20:55:05,224][HYDRA] 	#0 : N=32 strategy=sliced communicator=numpy
+[2025-12-02 20:55:05,629][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:55:05,629][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:55:05,629][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:55:05,629][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=32, ranks=4
+Strategy: sliced, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:06,282][HYDRA] 	#1 : N=32 strategy=sliced communicator=custom
+[2025-12-02 20:55:06,282][HYDRA] 	#1 : N=32 strategy=sliced communicator=custom
+[2025-12-02 20:55:06,282][HYDRA] 	#1 : N=32 strategy=sliced communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N32_p4_sliced' (4f5588116e634f92a112dfd03c6fdb07)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 3.169787e-03
+  Wall time: 0.0356s
+  Performance: 378.81 Mlup/s
+[2025-12-02 20:55:07,111][HYDRA] 	#1 : N=32 strategy=sliced communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=32, ranks=4
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:07,178][HYDRA] 	#2 : N=32 strategy=cubic communicator=numpy
+[2025-12-02 20:55:07,178][HYDRA] 	#2 : N=32 strategy=cubic communicator=numpy
+[2025-12-02 20:55:07,178][HYDRA] 	#2 : N=32 strategy=cubic communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N32_p4_sliced' (ecfd04441c464c06862ec39a7cc0fb92)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 3.169787e-03
+  Wall time: 0.0353s
+  Performance: 382.01 Mlup/s
+[2025-12-02 20:55:07,920][HYDRA] 	#2 : N=32 strategy=cubic communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=32, ranks=4
+Strategy: cubic, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:07,985][HYDRA] 	#3 : N=32 strategy=cubic communicator=custom
+[2025-12-02 20:55:07,985][HYDRA] 	#3 : N=32 strategy=cubic communicator=custom
+[2025-12-02 20:55:07,985][HYDRA] 	#3 : N=32 strategy=cubic communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N32_p4_cubic' (5a778eb4fc28475fbb87182a9d946166)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 3.169787e-03
+  Wall time: 0.0360s
+  Performance: 374.96 Mlup/s
+[2025-12-02 20:55:08,740][HYDRA] 	#3 : N=32 strategy=cubic communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=32, ranks=4
+Strategy: cubic, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:08,807][HYDRA] 	#4 : N=48 strategy=sliced communicator=numpy
+[2025-12-02 20:55:08,807][HYDRA] 	#4 : N=48 strategy=sliced communicator=numpy
+[2025-12-02 20:55:08,807][HYDRA] 	#4 : N=48 strategy=sliced communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N32_p4_cubic' (e721f7e954c3495baa4484d89dbdf997)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 3.169787e-03
+  Wall time: 0.0372s
+  Performance: 362.96 Mlup/s
+[2025-12-02 20:55:09,555][HYDRA] 	#4 : N=48 strategy=sliced communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=48, ranks=4
+Strategy: sliced, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:09,664][HYDRA] 	#5 : N=48 strategy=sliced communicator=custom
+[2025-12-02 20:55:09,664][HYDRA] 	#5 : N=48 strategy=sliced communicator=custom
+[2025-12-02 20:55:09,664][HYDRA] 	#5 : N=48 strategy=sliced communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N48_p4_sliced' (612ddff113e347889082ebefdc7cde1c)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.637631e-02
+  Wall time: 0.0796s
+  Performance: 611.73 Mlup/s
+[2025-12-02 20:55:10,421][HYDRA] 	#5 : N=48 strategy=sliced communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=48, ranks=4
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:10,529][HYDRA] 	#6 : N=48 strategy=cubic communicator=numpy
+[2025-12-02 20:55:10,529][HYDRA] 	#6 : N=48 strategy=cubic communicator=numpy
+[2025-12-02 20:55:10,529][HYDRA] 	#6 : N=48 strategy=cubic communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N48_p4_sliced' (2294ce6e79964cbb9bf508d59342e792)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.637631e-02
+  Wall time: 0.0784s
+  Performance: 620.39 Mlup/s
+[2025-12-02 20:55:11,275][HYDRA] 	#6 : N=48 strategy=cubic communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=48, ranks=4
+Strategy: cubic, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:11,404][HYDRA] 	#7 : N=48 strategy=cubic communicator=custom
+[2025-12-02 20:55:11,404][HYDRA] 	#7 : N=48 strategy=cubic communicator=custom
+[2025-12-02 20:55:11,404][HYDRA] 	#7 : N=48 strategy=cubic communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N48_p4_cubic' (d4593aa45025405ab57393d826dc0cc6)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.637631e-02
+  Wall time: 0.0984s
+  Performance: 494.57 Mlup/s
+[2025-12-02 20:55:12,192][HYDRA] 	#7 : N=48 strategy=cubic communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=48, ranks=4
+Strategy: cubic, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:12,316][HYDRA] 	#8 : N=64 strategy=sliced communicator=numpy
+[2025-12-02 20:55:12,316][HYDRA] 	#8 : N=64 strategy=sliced communicator=numpy
+[2025-12-02 20:55:12,316][HYDRA] 	#8 : N=64 strategy=sliced communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N48_p4_cubic' (93e5694f0e5b47cc8030401434a4eddb)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.637631e-02
+  Wall time: 0.0945s
+  Performance: 514.81 Mlup/s
+[2025-12-02 20:55:13,071][HYDRA] 	#8 : N=64 strategy=sliced communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=64, ranks=4
+Strategy: sliced, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:13,289][HYDRA] 	#9 : N=64 strategy=sliced communicator=custom
+[2025-12-02 20:55:13,289][HYDRA] 	#9 : N=64 strategy=sliced communicator=custom
+[2025-12-02 20:55:13,289][HYDRA] 	#9 : N=64 strategy=sliced communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N64_p4_sliced' (46a076b9e92547e69fdd977243c5a866)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 1.357538e-01
+  Wall time: 0.1865s
+  Performance: 638.90 Mlup/s
+[2025-12-02 20:55:14,046][HYDRA] 	#9 : N=64 strategy=sliced communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=64, ranks=4
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:14,268][HYDRA] 	#10 : N=64 strategy=cubic communicator=numpy
+[2025-12-02 20:55:14,268][HYDRA] 	#10 : N=64 strategy=cubic communicator=numpy
+[2025-12-02 20:55:14,268][HYDRA] 	#10 : N=64 strategy=cubic communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N64_p4_sliced' (5a275acc41a94f3b8123820496084ef3)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 1.357538e-01
+  Wall time: 0.1900s
+  Performance: 627.29 Mlup/s
+[2025-12-02 20:55:15,022][HYDRA] 	#10 : N=64 strategy=cubic communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=64, ranks=4
+Strategy: cubic, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:15,268][HYDRA] 	#11 : N=64 strategy=cubic communicator=custom
+[2025-12-02 20:55:15,268][HYDRA] 	#11 : N=64 strategy=cubic communicator=custom
+[2025-12-02 20:55:15,268][HYDRA] 	#11 : N=64 strategy=cubic communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N64_p4_cubic' (75fa3e4af9054d019b8cd0885067f20a)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 1.357538e-01
+  Wall time: 0.2147s
+  Performance: 554.91 Mlup/s
+[2025-12-02 20:55:16,027][HYDRA] 	#11 : N=64 strategy=cubic communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=64, ranks=4
+Strategy: cubic, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:16,254][HYDRA] 	#12 : N=80 strategy=sliced communicator=numpy
+[2025-12-02 20:55:16,254][HYDRA] 	#12 : N=80 strategy=sliced communicator=numpy
+[2025-12-02 20:55:16,254][HYDRA] 	#12 : N=80 strategy=sliced communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N64_p4_cubic' (ebdc191437004fa59292377c060a6d5d)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 1.357538e-01
+  Wall time: 0.1944s
+  Performance: 612.88 Mlup/s
+[2025-12-02 20:55:17,015][HYDRA] 	#12 : N=80 strategy=sliced communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=80, ranks=4
+Strategy: sliced, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:17,443][HYDRA] 	#13 : N=80 strategy=sliced communicator=custom
+[2025-12-02 20:55:17,443][HYDRA] 	#13 : N=80 strategy=sliced communicator=custom
+[2025-12-02 20:55:17,443][HYDRA] 	#13 : N=80 strategy=sliced communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N80_p4_sliced' (de820ee7e24e41d69c03266e178a4241)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.815600e-01
+  Wall time: 0.3953s
+  Performance: 600.24 Mlup/s
+[2025-12-02 20:55:18,241][HYDRA] 	#13 : N=80 strategy=sliced communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=80, ranks=4
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:18,682][HYDRA] 	#14 : N=80 strategy=cubic communicator=numpy
+[2025-12-02 20:55:18,682][HYDRA] 	#14 : N=80 strategy=cubic communicator=numpy
+[2025-12-02 20:55:18,682][HYDRA] 	#14 : N=80 strategy=cubic communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N80_p4_sliced' (3ca35457b97142f5bf341f81356ab537)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.815600e-01
+  Wall time: 0.4084s
+  Performance: 581.04 Mlup/s
+[2025-12-02 20:55:19,451][HYDRA] 	#14 : N=80 strategy=cubic communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=80, ranks=4
+Strategy: cubic, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:19,902][HYDRA] 	#15 : N=80 strategy=cubic communicator=custom
+[2025-12-02 20:55:19,902][HYDRA] 	#15 : N=80 strategy=cubic communicator=custom
+[2025-12-02 20:55:19,902][HYDRA] 	#15 : N=80 strategy=cubic communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N80_p4_cubic' (37adef030e55442ca1f253cf300f8827)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.815600e-01
+  Wall time: 0.4182s
+  Performance: 567.34 Mlup/s
+[2025-12-02 20:55:20,682][HYDRA] 	#15 : N=80 strategy=cubic communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=80, ranks=4
+Strategy: cubic, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:21,141][HYDRA] 	#16 : N=100 strategy=sliced communicator=numpy
+[2025-12-02 20:55:21,141][HYDRA] 	#16 : N=100 strategy=sliced communicator=numpy
+[2025-12-02 20:55:21,141][HYDRA] 	#16 : N=100 strategy=sliced communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N80_p4_cubic' (a856c46c55724a9981d8947075e1d3d6)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 2.815600e-01
+  Wall time: 0.4261s
+  Performance: 556.80 Mlup/s
+[2025-12-02 20:55:21,908][HYDRA] 	#16 : N=100 strategy=sliced communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=100, ranks=4
+Strategy: sliced, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:23,263][HYDRA] 	#17 : N=100 strategy=sliced communicator=custom
+[2025-12-02 20:55:23,263][HYDRA] 	#17 : N=100 strategy=sliced communicator=custom
+[2025-12-02 20:55:23,263][HYDRA] 	#17 : N=100 strategy=sliced communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N100_p4_sliced' (11c8491ad0a540a3b5bb9ee52f2fb545)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 4.464648e-01
+  Wall time: 1.3167s
+  Performance: 357.39 Mlup/s
+[2025-12-02 20:55:24,076][HYDRA] 	#17 : N=100 strategy=sliced communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=100, ranks=4
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:25,483][HYDRA] 	#18 : N=100 strategy=cubic communicator=numpy
+[2025-12-02 20:55:25,483][HYDRA] 	#18 : N=100 strategy=cubic communicator=numpy
+[2025-12-02 20:55:25,483][HYDRA] 	#18 : N=100 strategy=cubic communicator=numpy
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N100_p4_sliced' (a412d70410114040b23f080b41225e24)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 4.464648e-01
+  Wall time: 1.3688s
+  Performance: 343.81 Mlup/s
+[2025-12-02 20:55:26,269][HYDRA] 	#18 : N=100 strategy=cubic communicator=numpy
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=100, ranks=4
+Strategy: cubic, Communicator: numpy
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+[2025-12-02 20:55:27,753][HYDRA] 	#19 : N=100 strategy=cubic communicator=custom
+[2025-12-02 20:55:27,753][HYDRA] 	#19 : N=100 strategy=cubic communicator=custom
+[2025-12-02 20:55:27,753][HYDRA] 	#19 : N=100 strategy=cubic communicator=custom
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N100_p4_cubic' (cb59df456ec7498797e6c9d6f7df9be5)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 4.464648e-01
+  Wall time: 1.4137s
+  Performance: 332.89 Mlup/s
+[2025-12-02 20:55:28,542][HYDRA] 	#19 : N=100 strategy=cubic communicator=custom
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 03-communication
+Solver: jacobi, N=100, ranks=4
+Strategy: cubic, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 03-communication
+INFO: Using MLflow experiment: 03-communication
+INFO: Started MLflow run 'jacobi_N100_p4_cubic' (80c7b96bdc3342e2865ce4dbfe67fdc3)
+  ✓ Logged 1500 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 500
+  L2 error: 4.464648e-01
+  Wall time: 1.4159s
+  Performance: 332.37 Mlup/s

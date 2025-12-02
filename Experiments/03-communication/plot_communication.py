@@ -64,7 +64,7 @@ def main(cfg: DictConfig):
 
     # Extract parameters and metrics from MLflow columns
     df["N"] = df["params.N"].astype(int)
-    df["local_N"] = df["params.local_N"].astype(int)
+    df["local_volume"] = df["params.local_volume"].astype(int)
     df["halo_time_us"] = df["metrics.halo_time_mean_us"].astype(float)
     df["label"] = df["params.label"]
 
@@ -87,7 +87,7 @@ def main(cfg: DictConfig):
 
     sns.lineplot(
         data=df,
-        x="local_N",
+        x="local_volume",
         y="halo_time_us",
         hue="label",
         style="label",
@@ -99,7 +99,7 @@ def main(cfg: DictConfig):
         linewidth=2,
     )
 
-    ax.set_xlabel("Local Subdomain Size (N / nprocs)", fontsize=12)
+    ax.set_xlabel("Local Volume (grid points)", fontsize=12)
     ax.set_ylabel(r"Halo Exchange Time ($\mu$s)", fontsize=12)
     ax.set_title("Halo Exchange Performance: Sliced vs Cubic Decomposition", fontsize=13)
     ax.legend(title="Configuration", fontsize=9, loc="upper left")
@@ -115,9 +115,9 @@ def main(cfg: DictConfig):
     # ------------------
 
     print("\n" + "=" * 70)
-    print("Summary: Mean halo time (us) by local subdomain size")
+    print("Summary: Mean halo time (us) by local volume")
     print("=" * 70)
-    summary = df.groupby(["local_N", "label"])["halo_time_us"].mean()
+    summary = df.groupby(["local_volume", "label"])["halo_time_us"].mean()
     print(summary.unstack().to_string())
 
 

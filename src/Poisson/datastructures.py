@@ -90,6 +90,10 @@ class GlobalParams:
     use_numba: bool = False
     numba_threads: int = 4
 
+    # Local grid info (set after decomposition)
+    local_N: tuple[int, int, int] | None = None  # Local shape (nz, ny, nx)
+    halo_size_mb: float | None = None  # Total halo data per exchange (MB)
+
 
 
 @dataclass
@@ -104,8 +108,9 @@ class GlobalMetrics:
     total_compute_time: float | None = None
     total_halo_time: float | None = None
     total_mpi_comm_time: float | None = None
-    # Performance metric: Million Lattice Updates per Second
-    mlups: float | None = None
+    # Performance metrics
+    mlups: float | None = None  # Million Lattice Updates per Second
+    bandwidth_gb_s: float | None = None  # Memory bandwidth in GB/s
 
 
 # ============================================================================

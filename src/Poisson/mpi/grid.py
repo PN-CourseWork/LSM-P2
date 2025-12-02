@@ -492,6 +492,37 @@ class DistributedGrid:
         """Return slice tuple for interior points."""
         return (slice(1, -1), slice(1, -1), slice(1, -1))
 
+    def get_halo_size_bytes(self) -> int:
+        """Calculate total bytes transferred per halo exchange.
+
+        Returns the total data size for all active neighbor communications
+        (both send and receive), accounting for float64 (8 bytes per element).
+        """
+        nz, ny, nx = self.local_shape
+        bytes_per_element = 8  # float64
+
+        total_bytes = 0
+
+        # Z-faces: ny * nx elements each
+        if self.neighbors['z_lower'] is not None:
+            total_bytes += ny * nx * bytes_per_element * 2  # send + recv
+        if self.neighbors['z_upper'] is not None:
+            total_bytes += ny * nx * bytes_per_element * 2
+
+        # Y-faces: nz * nx elements each
+        if self.neighbors['y_lower'] is not None:
+            total_bytes += nz * nx * bytes_per_element * 2
+        if self.neighbors['y_upper'] is not None:
+            total_bytes += nz * nx * bytes_per_element * 2
+
+        # X-faces: nz * ny elements each
+        if self.neighbors['x_lower'] is not None:
+            total_bytes += nz * ny * bytes_per_element * 2
+        if self.neighbors['x_upper'] is not None:
+            total_bytes += nz * ny * bytes_per_element * 2
+
+        return total_bytes
+
     def get_geometry(self) -> RankGeometry:
         """Return geometry info for this rank."""
         return RankGeometry(

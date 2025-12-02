@@ -1,0 +1,28 @@
+[2025-12-02 20:58:15,546][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,563][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,568][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,568][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,568][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,583][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,588][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:15,603][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 05-multigrid-timings
+Solver: jacobi, N=257, ranks=8
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 05-multigrid-timings
+INFO: Using MLflow experiment: 05-multigrid-timings
+INFO: Started MLflow run 'jacobi_N257_p8_sliced' (3d989e9dda9f4681bcb35ddb1e0b117e)
+  ✓ Logged 4 time-series metrics.
+
+--- JACOBI Complete ---
+  Iterations: 1
+  L2 error: 9.997590e-01
+  Wall time: 0.2027s
+  Performance: 81.80 Mlup/s
+
+--- STDERR ---
+2025/12/02 20:58:16 INFO mlflow.tracking.fluent: Experiment with name '05-multigrid-timings' does not exist. Creating a new experiment.

@@ -115,6 +115,11 @@ class MultigridPoisson(JacobiPoisson):
         self.u2_local = fine_lvl.u_temp
         self.f_local = fine_lvl.f
         self.kernel = fine_lvl.kernel
+        self.grid = fine_lvl.grid  # For base class compatibility
+
+        # Store local grid info in config (from finest level)
+        self.config.local_N = fine_lvl.grid.local_shape
+        self.config.halo_size_mb = fine_lvl.grid.get_halo_size_bytes() / (1024 * 1024)
 
     def _infer_levels(self, N: int) -> int:
         """
@@ -279,11 +284,14 @@ class MultigridPoisson(JacobiPoisson):
             self.results.converged = False
             self.results.iterations = self.config.max_iter
 
-        self.results.wall_time = MPI.Wtime() - t_start_solve
+        wall_time = MPI.Wtime() - t_start_solve
         self.results.total_compute_time = self._time_compute
         self.results.total_halo_time = self._time_halo
         self.results.total_mpi_comm_time = self._time_mpi
-        
+
+        # Compute performance metrics
+        self._post_solve(wall_time)
+
     def _get_global_residual_norm(self, r_array: np.ndarray, lvl: "GridLevel" = None) -> float:
         """Compute global RMS norm of residual.
 
@@ -477,12 +485,15 @@ class MultigridPoisson(JacobiPoisson):
             print(f"[FMG] Done: {post_iters} post V-cycles, final residual={residual:.2e}")
 
         # Finalize metrics
-        self.results.wall_time = MPI.Wtime() - t_start
+        wall_time = MPI.Wtime() - t_start
         self.results.total_compute_time = self._time_compute
         self.results.total_halo_time = self._time_halo
         self.results.total_mpi_comm_time = self._time_mpi
         self.results.converged = residual < self.config.tolerance
         self.results.iterations = cycles * self.levels + post_iters
+
+        # Compute performance metrics
+        self._post_solve(wall_time)
 
         return residual
 

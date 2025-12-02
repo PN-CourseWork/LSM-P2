@@ -63,7 +63,6 @@ def clean_directories(
             ".pytest_cache",
             ".ruff_cache",
             ".mypy_cache",
-            "mlruns", # Also clean mlruns directory
         ]
 
     cleaned, failed = 0, 0
@@ -136,7 +135,7 @@ def clean_patterns(
         repo_root = get_repo_root()
 
     if patterns is None:
-        patterns = ["__pycache__", "*.pyc", ".DS_Store"]
+        patterns = ["__pycache__", "*.pyc", ".DS_Store", "mlruns", "multirun", "output", "outputs"]
 
     cleaned, failed = 0, 0
     for pattern in patterns:

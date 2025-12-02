@@ -133,7 +133,6 @@ def main(cfg: DictConfig) -> None:
     plotter.add_axes()
     plotter.screenshot(fig_dir / "01a_sliced_decomposition.png", transparent_background=True)
     print(f"Saved: {fig_dir / '01a_sliced_decomposition.png'}")
-    plotter.close()
 
     # %%
     # Cubic Decomposition (8 ranks)
@@ -155,7 +154,6 @@ def main(cfg: DictConfig) -> None:
     plotter.add_axes()
     plotter.screenshot(fig_dir / "01b_cubic_decomposition.png", transparent_background=True)
     print(f"Saved: {fig_dir / '01b_cubic_decomposition.png'}")
-    plotter.close()
 
     # %%
     # Cubic Decomposition (18 ranks)
@@ -177,7 +175,6 @@ def main(cfg: DictConfig) -> None:
     plotter.add_axes()
     plotter.screenshot(fig_dir / "01c_cubic_decomposition_18.png", transparent_background=True)
     print(f"Saved: {fig_dir / '01c_cubic_decomposition_18.png'}")
-    plotter.close()
 
 
 if __name__ == "__main__":

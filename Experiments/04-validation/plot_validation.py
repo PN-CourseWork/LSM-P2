@@ -185,7 +185,6 @@ def main(cfg: DictConfig) -> None:
     output_file = fig_dir / "solution_3d.png"
     plotter.screenshot(output_file, transparent_background=True)
     print(f"Saved: {output_file}")
-    plotter.show()
 
 
 if __name__ == "__main__":

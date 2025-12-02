@@ -1,0 +1,28 @@
+[2025-12-02 20:58:34,234][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,235][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,238][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,239][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,246][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,252][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,251][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+[2025-12-02 20:58:34,261][numexpr.utils][INFO] - NumExpr defaulting to 11 threads.
+INFO: Using local file-based MLflow tracking backend: file:///Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-Project_2/mlruns
+
+============================================================
+Experiment: 05-multigrid-fmg
+Solver: fmg, N=129, ranks=8
+Strategy: sliced, Communicator: custom
+============================================================
+DEBUG: Attempting to set MLflow experiment: 05-multigrid-fmg
+INFO: Using MLflow experiment: 05-multigrid-fmg
+INFO: Started MLflow run 'fmg_N129_p8_sliced' (9e0e53c2675e488fb13b4bbd894c80ae)
+  ✓ Logged 1965 time-series metrics.
+
+--- FMG Complete ---
+  Iterations: 5
+  L2 error: 2.463645e-04
+  Wall time: 1.5910s
+  Performance: 6.44 Mlup/s
+
+--- STDERR ---
+2025/12/02 20:58:36 INFO mlflow.tracking.fluent: Experiment with name '05-multigrid-fmg' does not exist. Creating a new experiment.

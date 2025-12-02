@@ -38,6 +38,34 @@ class BasePoissonSolver(ABC):
         """Execute the solver strategy."""
         pass
 
+    def _post_solve(self, wall_time: float) -> None:
+        """Compute performance metrics after solve completes.
+
+        Called by subclasses after their solve() method finishes.
+        Calculates mlups, bandwidth, and stores wall_time.
+
+        Parameters
+        ----------
+        wall_time : float
+            Total wall clock time for the solve in seconds.
+        """
+        if self.rank != 0:
+            return
+
+        self.results.wall_time = wall_time
+
+        # Calculate MLUPS (Million Lattice Updates Per Second)
+        n_interior = (self.config.N - 2) ** 3
+        if self.results.iterations > 0 and wall_time > 0:
+            self.results.mlups = n_interior * self.results.iterations / (wall_time * 1e6)
+
+            # Calculate memory bandwidth (GB/s)
+            # Jacobi: reads 3 arrays (u_old, u_new for BC, f), writes 1 (u_new)
+            # Per grid point: 4 * 8 bytes = 32 bytes
+            bytes_per_point = 32
+            total_bytes = n_interior * self.results.iterations * bytes_per_point
+            self.results.bandwidth_gb_s = total_bytes / (wall_time * 1e9)
+
     def warmup(self, warmup_size: int = 10) -> None:
         """Warmup kernel (trigger Numba JIT)."""
         if self.kernel is not None:

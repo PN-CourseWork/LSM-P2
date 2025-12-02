@@ -223,8 +223,7 @@ def main(cfg: DictConfig):
 
     if df_strong.empty and df_weak.empty:
         print("No data found.")
-        import sys
-        sys.exit(0)
+        return
 
     # Compute metrics
     df_strong_metrics = compute_strong_scaling(df_strong)

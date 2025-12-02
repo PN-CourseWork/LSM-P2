@@ -172,22 +172,11 @@ def _run_solver(cfg: DictConfig, comm):
     # Run Solver
     # ----------
 
-    comm.Barrier()
-    t0 = MPI.Wtime()
-
     if solver_type == "fmg":
         cycles = cfg.get("fmg_cycles", 1)
         solver.fmg_solve(cycles=cycles)
     else:
         solver.solve()
-
-    wall_time = MPI.Wtime() - t0
-
-    if rank == 0:
-        solver.results.wall_time = wall_time
-        n_interior = (N - 2) ** 3
-        if solver.results.iterations > 0:
-            solver.results.mlups = n_interior * solver.results.iterations / (wall_time * 1e6)
 
     solver.compute_l2_error()
 
@@ -198,6 +187,16 @@ def _run_solver(cfg: DictConfig, comm):
     if rank == 0:
         run_name = f"{solver_type}_N{N}_p{n_ranks}_{strategy}"
 
+        # Get local grid shape from solver config (set during grid creation)
+        local_shape = solver.config.local_N
+        # Use local_volume (product of dimensions) - shape-independent scalar
+        import numpy as np
+        local_volume = int(np.prod(local_shape)) if local_shape else (N // n_ranks) ** 3
+
+        # Create label for communication plots (strategy + communicator)
+        comm_type = "contiguous" if strategy == "sliced" else "mixed"
+        label = f"{communicator.title()} ({strategy}, {comm_type})"
+
         with start_mlflow_run_context(
             experiment_name=experiment_name,
             parent_run_name=f"N{N}",
@@ -205,15 +204,31 @@ def _run_solver(cfg: DictConfig, comm):
         ):
             log_parameters({
                 "N": N,
+                "local_volume": local_volume,
+                "halo_size_mb": solver.config.halo_size_mb,
                 "n_ranks": n_ranks,
                 "solver": solver_type,
                 "strategy": strategy,
                 "communicator": communicator,
+                "label": label,
                 "omega": cfg.get("omega"),
                 "max_iter": cfg.get("max_iter"),
                 "tolerance": cfg.get("tolerance"),
             })
+
+            # Log solver results
             log_metrics_dict(asdict(solver.results))
+
+            # Log halo exchange timing statistics for communication analysis
+            if hasattr(solver, "timeseries") and solver.timeseries.halo_exchange_times:
+                import numpy as np
+                halo_times = np.array(solver.timeseries.halo_exchange_times)
+                log_metrics_dict({
+                    "halo_time_mean_us": float(np.mean(halo_times) * 1e6),
+                    "halo_time_std_us": float(np.std(halo_times) * 1e6),
+                    "halo_time_min_us": float(np.min(halo_times) * 1e6),
+                    "halo_time_max_us": float(np.max(halo_times) * 1e6),
+                })
 
             if hasattr(solver, "timeseries"):
                 log_timeseries_metrics(solver.timeseries)
@@ -221,9 +236,11 @@ def _run_solver(cfg: DictConfig, comm):
         print(f"\n--- {solver_type.upper()} Complete ---")
         print(f"  Iterations: {solver.results.iterations}")
         print(f"  L2 error: {solver.results.final_error:.6e}")
-        print(f"  Wall time: {wall_time:.4f}s")
-        if hasattr(solver.results, "mlups") and solver.results.mlups:
+        print(f"  Wall time: {solver.results.wall_time:.4f}s")
+        if solver.results.mlups:
             print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
+        if solver.results.bandwidth_gb_s:
+            print(f"  Bandwidth: {solver.results.bandwidth_gb_s:.2f} GB/s")
 
 
 if __name__ == "__main__":

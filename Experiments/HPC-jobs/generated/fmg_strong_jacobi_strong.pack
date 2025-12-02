@@ -1,7 +1,0 @@
-#!/bin/bash
-# Generated scaling experiment submission
-
-bsub < 1node.lsf
-bsub < 2node.lsf
-bsub < 3node.lsf
-bsub < 4node.lsf
