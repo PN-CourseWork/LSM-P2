@@ -4,6 +4,16 @@ A modular framework for studying parallel performance of 3D Poisson equation
 solvers using MPI domain decomposition. Supports pluggable decomposition
 strategies (sliced, cubic) and communication methods (NumPy arrays, custom
 MPI datatypes).
+
+Solvers
+-------
+Sequential (no MPI):
+- JacobiSolver: Kernel benchmarks and single-process solving
+- FMGSolver: Full Multigrid without MPI
+
+Parallel (MPI):
+- JacobiMPISolver: Jacobi with domain decomposition
+- FMGMPISolver: Full Multigrid with domain decomposition
 """
 
 from pathlib import Path
@@ -17,16 +27,16 @@ from .datastructures import (
     KernelParams,
     KernelMetrics,
     KernelSeries,
+    GridLevel,
 )
 from .kernels import NumPyKernel, NumbaKernel
-from .solver import JacobiPoisson
-from .multigrid import MultigridPoisson
+from .solvers import (
+    JacobiSolver,
+    JacobiMPISolver,
+    FMGSolver,
+    FMGMPISolver,
+)
 from .mpi import (
-    #DomainDecomposition,
-    #RankInfo,
-    #NoDecomposition,
-    #NumpyHaloExchange,
-    #CustomHaloExchange,
     DistributedGrid,
     RankGeometry,
 )
@@ -36,7 +46,6 @@ from .problems import (
     sinusoidal_source_term,
     setup_sinusoidal_problem,
 )
-from .helpers import run_solver
 
 __all__ = [
     # Data structures - Kernel
@@ -49,20 +58,17 @@ __all__ = [
     "LocalParams",
     "LocalFields",
     "LocalSeries",
+    "GridLevel",
     # Kernels
     "NumPyKernel",
     "NumbaKernel",
-    # Solver
-    "JacobiPoisson",
-    "MultigridPoisson",
-    # Decomposition (legacy)
-    "NoDecomposition",
-    "DomainDecomposition",
-    "RankInfo",
-    # Communicators (legacy)
-    "NumpyHaloExchange",
-    "CustomHaloExchange",
-    # Unified grid (multigrid)
+    # Solvers - Sequential
+    "JacobiSolver",
+    "FMGSolver",
+    # Solvers - MPI
+    "JacobiMPISolver",
+    "FMGMPISolver",
+    # Grid
     "DistributedGrid",
     "RankGeometry",
     # Problem setup
@@ -70,8 +76,6 @@ __all__ = [
     "sinusoidal_exact_solution",
     "sinusoidal_source_term",
     "setup_sinusoidal_problem",
-    # Runner
-    "run_solver",
     # Utilities
     "get_project_root",
 ]

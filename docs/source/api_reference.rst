@@ -11,25 +11,98 @@ This page provides comprehensive documentation for the ``Poisson`` package API.
 Overview
 ========
 
-The package provides a unified interface for solving 3D Poisson problems with MPI domain decomposition and multigrid acceleration. The current API centers on the Jacobi solver, multigrid driver, and the shared dataclasses used for IO and diagnostics.
+The package provides a unified interface for solving 3D Poisson problems with MPI domain decomposition and multigrid acceleration. The API provides both sequential and MPI-parallel solvers using a clean inheritance pattern.
+
+Solver Architecture
+===================
+
+The solver hierarchy uses a hook-based design where sequential solvers define the algorithm with no-op hooks, and MPI solvers override only the communication hooks:
+
+.. mermaid::
+
+   classDiagram
+       class BaseSolver {
+           <<abstract>>
+           +N: int
+           +omega: float
+           +max_iter: int
+           +tolerance: float
+           +results: GlobalMetrics
+           +timeseries: LocalSeries
+           +solve()* GlobalMetrics
+           +_compute_metrics()
+       }
+
+       class JacobiSolver {
+           +kernel: NumPyKernel | NumbaKernel
+           +u, u_old, f: ndarray
+           +solve() GlobalMetrics
+           +_get_time() float
+           +_sync_halos() float
+           +_apply_boundary_conditions()
+           +_compute_residual() float
+       }
+
+       class JacobiMPISolver {
+           +grid: DistributedGrid
+           +comm: MPI.Comm
+           +_sync_halos() float
+           +_apply_boundary_conditions()
+           +_compute_residual() float
+       }
+
+       class FMGSolver {
+           +levels: List~GridLevel~
+           +n_levels: int
+           +solve() GlobalMetrics
+           +fmg_solve() GlobalMetrics
+           +_v_cycle() float
+           +_get_time() float
+           +_sync_halos() float
+           +_apply_boundary_conditions()
+           +_residual_norm() float
+       }
+
+       class FMGMPISolver {
+           +comm: MPI.Comm
+           +_sync_halos() float
+           +_apply_boundary_conditions()
+           +_residual_norm() float
+       }
+
+       BaseSolver <|-- JacobiSolver
+       BaseSolver <|-- FMGSolver
+       JacobiSolver <|-- JacobiMPISolver
+       FMGSolver <|-- FMGMPISolver
+
+**Key Design Patterns:**
+
+- **Hook Methods**: Sequential solvers define ``_sync_halos()``, ``_apply_boundary_conditions()``, etc. as no-ops
+- **MPI Overrides**: MPI solvers only override these hooks to add halo exchange and boundary handling
+- **Algorithm Reuse**: ``solve()``, ``fmg_solve()``, and ``_v_cycle()`` are defined once in the sequential solver
 
 Core Solvers
 ============
+
+Sequential Solvers
+------------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   JacobiPoisson
-   MultigridPoisson
+   JacobiSolver
+   FMGSolver
 
-Helper Runners
-==============
+MPI-Parallel Solvers
+--------------------
 
 .. autosummary::
    :toctree: generated
+   :template: class.rst
 
-   run_solver
+   JacobiMPISolver
+   FMGMPISolver
 
 MPI Grid Utilities
 ==================
@@ -82,12 +155,15 @@ Local Data Structures
    LocalParams
    LocalFields
    LocalSeries
+   GridLevel
 
 **LocalParams:** Rank-specific parameters (N_local, local_start, local_end, kernel config)
 
 **LocalFields:** Local domain arrays with halo zones (u1, u2, f)
 
-**LocalSeries:** Per-iteration timing arrays (compute_times, mpi_comm_times, halo_exchange_times, residual_history)
+**LocalSeries:** Per-iteration timing arrays (compute_times, halo_exchange_times, residual_history)
+
+**GridLevel:** One level in the multigrid hierarchy (N, h, u, u_temp, f, r, kernel, grid)
 
 Kernel Configuration
 --------------------

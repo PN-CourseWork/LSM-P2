@@ -2,8 +2,12 @@
 Unified Solver Runner
 =====================
 
-Single runner for all solver-based experiments. Spawns MPI subprocess
-with rank count from Hydra config. Results logged to MLflow.
+Single runner for all solver experiments. Uses sequential solvers for
+single-process runs, spawns MPI for parallel runs.
+
+Solver selection:
+- n_ranks=1: JacobiSolver or FMGSolver (no MPI overhead)
+- n_ranks>1: JacobiMPISolver or FMGMPISolver (with MPI)
 
 Supports LSF job arrays for parallel experiment execution:
 - LSB_DJOB_NUMPROC: allocated cores (determines valid rank counts)
@@ -22,10 +26,6 @@ Usage
     #BSUB -n 48
     uv run python run_solver.py -cn experiment/scaling
 """
-
-# %%
-# Setup
-# -----
 
 import os
 import subprocess
@@ -74,23 +74,15 @@ def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 
 
 @hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
-    """Entry point - spawns MPI if needed, otherwise runs solver."""
-    # Note: NUMBA_NUM_THREADS is set via hydra.job.env_set in config.yaml
+    """Entry point - runs sequential or spawns MPI based on n_ranks."""
 
     # Check if we're in an MPI subprocess (spawned by mpiexec)
-    try:
+    if os.environ.get("MPI_SUBPROCESS"):
         from mpi4py import MPI
-        comm = MPI.COMM_WORLD
-        if comm.Get_size() > 1 or os.environ.get("MPI_SUBPROCESS"):
-            _run_solver(cfg, comm)
-            return
-    except ImportError:
-        pass
+        _run_mpi_solver(cfg, MPI.COMM_WORLD)
+        return
 
-    # %%
     # Job Array Configuration
-    # -----------------------
-
     mpi = cfg.get("mpi", {})
     cores_per_node = mpi.get("cores_per_node", 24)
     alloc_cores = int(os.environ.get("LSB_DJOB_NUMPROC", cores_per_node))
@@ -110,32 +102,34 @@ def main(cfg: DictConfig) -> None:
             return
         run_cfg = configs[job_index - 1]  # LSB_JOBINDEX is 1-based
     else:
-        # Local/single mode: should not happen, but fallback to first
+        # Local/single mode: fallback to first
         print(f"Warning: No LSB_JOBINDEX set, running first config")
         run_cfg = configs[0]
 
     # Override cfg with selected config
     n_ranks = run_cfg["n_ranks"]
-    cfg_override = OmegaConf.create(run_cfg)
-    cfg = OmegaConf.merge(cfg, cfg_override)
+    cfg = OmegaConf.merge(cfg, OmegaConf.create(run_cfg))
 
     print(f"[Job {job_index}/{len(configs)}] n_ranks={n_ranks}, N={run_cfg['N']}, strategy={run_cfg['strategy']}")
 
-    # %%
-    # Spawn MPI Subprocess
-    # --------------------
+    # Sequential vs MPI
+    if n_ranks == 1:
+        _run_sequential_solver(cfg)
+    else:
+        _spawn_mpi(cfg, n_ranks, alloc_cores, cores_per_node, mpi)
 
+
+def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: int, mpi: dict):
+    """Spawn MPI subprocess for parallel execution."""
     script = os.path.abspath(__file__)
 
-    # Set env var to prevent recursive spawning
     env = os.environ.copy()
     env["MPI_SUBPROCESS"] = "1"
 
-    # Build MPI command with optional args
-    cmd = ["mpiexec", "-n", str(n_ranks)]
-    cmd.append("--report-binding")
+    # Build MPI command
+    cmd = ["mpiexec", "-n", str(n_ranks), "--report-binding"]
 
-    # Calculate NPS from allocation
+    # Calculate process mapping from allocation
     if mpi.get("bind_to"):
         n_nodes = alloc_cores // cores_per_node
         ranks_per_node = n_ranks // max(n_nodes, 1)
@@ -145,42 +139,92 @@ def main(cfg: DictConfig) -> None:
         cmd.extend(["--bind-to", str(mpi.bind_to)])
 
     cmd.extend(["uv", "run", "python", script])
-    # Pass the resolved config, not original argv
-    cmd.extend([f"n_ranks={n_ranks}", f"N={run_cfg['N']}", f"strategy={run_cfg['strategy']}"])
+    cmd.extend([f"n_ranks={n_ranks}", f"N={cfg.N}", f"strategy={cfg.strategy}"])
+
     # Keep the config-name from original args
     args = sys.argv[1:]
     for i, arg in enumerate(args):
         if arg.startswith("-c") or arg.startswith("--config"):
             cmd.append(arg)
-            # If flag and value are separate args, also append value
             if "=" not in arg and i + 1 < len(args):
                 cmd.append(args[i + 1])
             break
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
-
     if result.stdout:
         print(result.stdout)
     if result.stderr:
         print(result.stderr, file=sys.stderr)
 
 
-def _run_solver(cfg: DictConfig, comm):
-    """MPI worker - runs solver and logs to MLflow."""
-
-    # %%
-    # Initialize
-    # ----------
-
-    from mpi4py import MPI
-    from Poisson import JacobiPoisson, MultigridPoisson, get_project_root
+def _run_sequential_solver(cfg: DictConfig):
+    """Run sequential solver (no MPI)."""
+    from Poisson.solvers import JacobiSolver, FMGSolver
     from utils.mlflow.io import (
         setup_mlflow_tracking,
         start_mlflow_run_context,
         log_parameters,
         log_metrics_dict,
         log_timeseries_metrics,
-        log_artifact_file,
+    )
+
+    N = cfg.N
+    solver_type = cfg.get("solver", "jacobi")
+    experiment_name = cfg.get("experiment_name", "experiment")
+
+    setup_mlflow_tracking(mode=cfg.mlflow.mode)
+    print(f"\n{'='*60}")
+    print(f"Experiment: {experiment_name}")
+    print(f"Solver: {solver_type} (sequential), N={N}")
+    print(f"{'='*60}")
+
+    # Create solver
+    if solver_type == "jacobi":
+        solver = JacobiSolver(
+            N=N,
+            omega=cfg.get("omega", 0.8),
+            tolerance=cfg.get("tolerance", 1e-6),
+            max_iter=cfg.get("max_iter", 10000),
+            use_numba=cfg.get("use_numba", False),
+            numba_threads=cfg.get("numba_threads", 1),
+        )
+    elif solver_type in ["multigrid", "fmg"]:
+        solver = FMGSolver(
+            N=N,
+            n_smooth=cfg.get("n_smooth", 3),
+            omega=cfg.get("omega", 2/3),
+            tolerance=cfg.get("tolerance", 1e-16),
+            max_iter=cfg.get("max_iter", 100),
+            fmg_post_vcycles=cfg.get("fmg_post_vcycles", 1),
+            use_numba=cfg.get("use_numba", False),
+        )
+    else:
+        print(f"Unknown solver: {solver_type}")
+        sys.exit(1)
+
+    # Warmup and solve
+    solver.warmup()
+    if solver_type == "fmg":
+        solver.fmg_solve()
+    else:
+        solver.solve()
+
+    solver.compute_l2_error()
+
+    # Log to MLflow
+    _log_results(cfg, solver, solver_type, N, n_ranks=1)
+
+
+def _run_mpi_solver(cfg: DictConfig, comm):
+    """Run MPI solver (called within mpiexec subprocess)."""
+    from mpi4py import MPI
+    from Poisson.solvers import JacobiMPISolver, FMGMPISolver
+    from utils.mlflow.io import (
+        setup_mlflow_tracking,
+        start_mlflow_run_context,
+        log_parameters,
+        log_metrics_dict,
+        log_timeseries_metrics,
     )
 
     rank = comm.Get_rank()
@@ -200,12 +244,9 @@ def _run_solver(cfg: DictConfig, comm):
         print(f"Strategy: {strategy}, Communicator: {communicator}")
         print(f"{'='*60}")
 
-    # %%
-    # Create Solver
-    # -------------
-
+    # Create solver
     if solver_type == "jacobi":
-        solver = JacobiPoisson(
+        solver = JacobiMPISolver(
             N=N,
             strategy=strategy,
             communicator=communicator,
@@ -215,93 +256,112 @@ def _run_solver(cfg: DictConfig, comm):
             use_numba=cfg.get("use_numba", False),
         )
     elif solver_type in ["multigrid", "fmg"]:
-        solver = MultigridPoisson(
+        solver = FMGMPISolver(
             N=N,
+            strategy=strategy,
+            communicator=communicator,
             n_smooth=cfg.get("n_smooth", 3),
             omega=cfg.get("omega", 2/3),
-            decomposition_strategy=strategy,
-            communicator=communicator,
             tolerance=cfg.get("tolerance", 1e-16),
             max_iter=cfg.get("max_iter", 100),
-            fmg_post_cycles=cfg.get("fmg_post_vcycles", 1),
+            fmg_post_vcycles=cfg.get("fmg_post_vcycles", 1),
+            use_numba=cfg.get("use_numba", False),
         )
     else:
         if rank == 0:
             print(f"Unknown solver: {solver_type}")
         sys.exit(1)
 
-    # %%
-    # Run Solver
-    # ----------
-
+    # Solve
     if solver_type == "fmg":
-        solver.fmg_solve()  # FMG is 1 cycle by definition
+        solver.fmg_solve()
     else:
         solver.solve()
 
     solver.compute_l2_error()
 
-    # %%
-    # Log to MLflow
-    # -------------
-
+    # Log to MLflow (rank 0 only)
     if rank == 0:
-        run_name = f"{solver_type}_N{N}_p{n_ranks}_{strategy}"
+        _log_results(cfg, solver, solver_type, N, n_ranks, strategy, communicator)
 
-        # Get local grid shape from solver config (set during grid creation)
-        local_shape = solver.config.local_N
-        # Use local_volume (product of dimensions) - shape-independent scalar
-        import numpy as np
-        local_volume = int(np.prod(local_shape)) if local_shape else (N // n_ranks) ** 3
 
-        # Create label for communication plots (strategy + communicator)
+def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicator=None):
+    """Log solver results to MLflow."""
+    import numpy as np
+    from dataclasses import asdict
+    from utils.mlflow.io import (
+        start_mlflow_run_context,
+        log_parameters,
+        log_metrics_dict,
+        log_timeseries_metrics,
+    )
+
+    experiment_name = cfg.get("experiment_name", "experiment")
+    run_name = f"{solver_type}_N{N}_p{n_ranks}"
+    if strategy:
+        run_name += f"_{strategy}"
+
+    # Get local volume info if available
+    local_volume = None
+    halo_size_mb = None
+    if hasattr(solver, "local_shape"):
+        local_volume = int(np.prod(solver.local_shape))
+        halo_size_mb = solver.halo_size_mb
+
+    # Create label for plots
+    if strategy and communicator:
         comm_type = "contiguous" if strategy == "sliced" else "mixed"
         label = f"{communicator.title()} ({strategy}, {comm_type})"
+    else:
+        label = "sequential"
 
-        with start_mlflow_run_context(
-            experiment_name=experiment_name,
-            parent_run_name=f"N{N}",
-            child_run_name=run_name,
-        ):
-            log_parameters({
-                "N": N,
-                "local_volume": local_volume,
-                "halo_size_mb": solver.config.halo_size_mb,
-                "n_ranks": n_ranks,
-                "solver": solver_type,
-                "strategy": strategy,
-                "communicator": communicator,
-                "label": label,
-                "omega": cfg.get("omega"),
-                "max_iter": cfg.get("max_iter"),
-                "tolerance": cfg.get("tolerance"),
+    with start_mlflow_run_context(
+        experiment_name=experiment_name,
+        parent_run_name=f"N{N}",
+        child_run_name=run_name,
+    ):
+        params = {
+            "N": N,
+            "n_ranks": n_ranks,
+            "solver": solver_type,
+            "label": label,
+            "omega": cfg.get("omega"),
+            "max_iter": cfg.get("max_iter"),
+            "tolerance": cfg.get("tolerance"),
+        }
+        if strategy:
+            params["strategy"] = strategy
+            params["communicator"] = communicator
+        if local_volume:
+            params["local_volume"] = local_volume
+            params["halo_size_mb"] = halo_size_mb
+        if cfg.get("use_numba"):
+            params["use_numba"] = True
+            params["numba_threads"] = cfg.get("numba_threads", 1)
+
+        log_parameters(params)
+        log_metrics_dict(asdict(solver.results))
+
+        # Log halo timing stats
+        if solver.timeseries.halo_exchange_times:
+            halo_times = np.array(solver.timeseries.halo_exchange_times)
+            log_metrics_dict({
+                "halo_time_mean_us": float(np.mean(halo_times) * 1e6),
+                "halo_time_std_us": float(np.std(halo_times) * 1e6),
+                "halo_time_min_us": float(np.min(halo_times) * 1e6),
+                "halo_time_max_us": float(np.max(halo_times) * 1e6),
             })
 
-            # Log solver results
-            log_metrics_dict(asdict(solver.results))
+        log_timeseries_metrics(solver.timeseries)
 
-            # Log halo exchange timing statistics for communication analysis
-            if hasattr(solver, "timeseries") and solver.timeseries.halo_exchange_times:
-                import numpy as np
-                halo_times = np.array(solver.timeseries.halo_exchange_times)
-                log_metrics_dict({
-                    "halo_time_mean_us": float(np.mean(halo_times) * 1e6),
-                    "halo_time_std_us": float(np.std(halo_times) * 1e6),
-                    "halo_time_min_us": float(np.min(halo_times) * 1e6),
-                    "halo_time_max_us": float(np.max(halo_times) * 1e6),
-                })
-
-            if hasattr(solver, "timeseries"):
-                log_timeseries_metrics(solver.timeseries)
-
-        print(f"\n--- {solver_type.upper()} Complete ---")
-        print(f"  Iterations: {solver.results.iterations}")
-        print(f"  L2 error: {solver.results.final_error:.6e}")
-        print(f"  Wall time: {solver.results.wall_time:.4f}s")
-        if solver.results.mlups:
-            print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
-        if solver.results.bandwidth_gb_s:
-            print(f"  Bandwidth: {solver.results.bandwidth_gb_s:.2f} GB/s")
+    print(f"\n--- {solver_type.upper()} Complete ---")
+    print(f"  Iterations: {solver.results.iterations}")
+    print(f"  L2 error: {solver.results.final_error:.6e}")
+    print(f"  Wall time: {solver.results.wall_time:.4f}s")
+    if solver.results.mlups:
+        print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
+    if solver.results.bandwidth_gb_s:
+        print(f"  Bandwidth: {solver.results.bandwidth_gb_s:.2f} GB/s")
 
 
 if __name__ == "__main__":

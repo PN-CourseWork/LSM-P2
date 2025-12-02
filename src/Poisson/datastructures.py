@@ -172,3 +172,62 @@ class LocalSeries:
     residual_history: list[float] = field(default_factory=list)
     # For multigrid: track which level each operation is on (0=finest)
     level_indices: list[int] = field(default_factory=list)
+
+
+# ============================================================================
+# Multigrid
+# ============================================================================
+
+
+@dataclass
+class GridLevel:
+    """One level in the multigrid hierarchy.
+
+    Each level has its own grid size, arrays, and smoothing kernel.
+    The grid member is only set for MPI solvers (DistributedGrid).
+    """
+
+    level: int
+    N: int
+    h: float
+    u: np.ndarray
+    u_temp: np.ndarray
+    f: np.ndarray
+    r: np.ndarray
+    kernel: object
+    grid: object = None  # DistributedGrid for MPI, None for sequential
+
+
+# ============================================================================
+# MPI Geometry
+# ============================================================================
+
+
+@dataclass
+class RankGeometry:
+    """Geometry information for a single MPI rank.
+
+    Attributes
+    ----------
+    rank : int
+        MPI rank number.
+    local_shape : tuple[int, int, int]
+        Local domain shape (interior points owned by this rank).
+    halo_shape : tuple[int, int, int]
+        Shape including halo zones (local_shape + 2 in each dimension).
+    global_start : tuple[int, int, int]
+        Global indices of owned region start (inclusive).
+    global_end : tuple[int, int, int]
+        Global indices of owned region end (exclusive).
+    neighbors : dict[str, int | None]
+        Neighbor ranks for each face. Keys: 'x_lower', 'x_upper',
+        'y_lower', 'y_upper', 'z_lower', 'z_upper'.
+        Value is None if at physical boundary.
+    """
+
+    rank: int
+    local_shape: tuple[int, int, int]
+    halo_shape: tuple[int, int, int]
+    global_start: tuple[int, int, int]
+    global_end: tuple[int, int, int]
+    neighbors: dict[str, int | None]
