@@ -18,11 +18,10 @@ class CartesianDecomposition:
         MPI communicator.
     strategy : str
         'sliced' for 1D decomposition along z-axis,
-        'cubic' for 3D decomposition,
-        'auto' to choose based on rank count.
+        'cubic' for 3D decomposition.
     """
 
-    def __init__(self, N: int, comm: MPI.Comm, strategy: str = 'auto'):
+    def __init__(self, N: int, comm: MPI.Comm, strategy: str = 'sliced'):
         self.N = N
         self.comm = comm
         self.rank = comm.Get_rank()
@@ -54,13 +53,8 @@ class CartesianDecomposition:
         elif strategy == 'cubic':
             dims = list(MPI.Compute_dims(self.size, 3))
             return [dims[2], dims[1], dims[0]]
-        elif strategy == 'auto':
-            if self.size == 1:
-                return [1, 1, 1]
-            dims = list(MPI.Compute_dims(self.size, 3))
-            return [dims[2], dims[1], dims[0]]
         else:
-            raise ValueError(f"Unknown strategy: {strategy}")
+            raise ValueError(f"Unknown strategy: {strategy}. Use 'sliced' or 'cubic'.")
 
     def _create_cartesian_topology(self):
         """Create MPI Cartesian communicator."""

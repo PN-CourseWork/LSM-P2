@@ -6,7 +6,6 @@ Submodules:
 - hpc: HPC job generation and submission
 - config: Project configuration and cleanup
 - mlflow: MLflow artifact handling and log uploading
-- cli: Command-line argument parsing
 
 Import examples:
     from utils import plotting     # Auto-applies scientific styles
@@ -21,7 +20,7 @@ import warnings
 # Suppress MLflow FutureWarning about filesystem backend deprecation
 warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow")
 
-from . import plotting, runners, hpc, config, mlflow, cli
+from . import plotting, runners, hpc, config, mlflow
 
 # Re-export common config functions for convenience
 from .config import get_repo_root
@@ -32,6 +31,5 @@ __all__ = [
     "hpc",
     "config",
     "mlflow",
-    "cli",
     "get_repo_root",
 ]

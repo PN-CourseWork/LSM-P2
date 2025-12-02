@@ -24,7 +24,7 @@ hydra:
       NUMBA_NUM_THREADS: "1"
 
 # Solver selection
-solver: jacobi  # jacobi, multigrid, fmg
+solver_type: jacobi  # jacobi, multigrid, fmg
 strategy: sliced
 communicator: custom
 use_numba: false

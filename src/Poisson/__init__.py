@@ -19,10 +19,7 @@ Parallel (MPI):
 from pathlib import Path
 
 from .datastructures import (
-    GlobalParams,
     GlobalMetrics,
-    LocalParams,
-    LocalFields,
     LocalSeries,
     KernelParams,
     KernelMetrics,
@@ -53,10 +50,7 @@ __all__ = [
     "KernelMetrics",
     "KernelSeries",
     # Data structures - Solver
-    "GlobalParams",
     "GlobalMetrics",
-    "LocalParams",
-    "LocalFields",
     "LocalSeries",
     "GridLevel",
     # Kernels

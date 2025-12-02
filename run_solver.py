@@ -40,23 +40,60 @@ from omegaconf import DictConfig, OmegaConf
 def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 24):
     """Generate valid experiment configs for this allocation tier.
 
-    Filters sweep parameters to only include configs that:
-    1. Fit within the allocated cores (n_ranks <= alloc_cores)
-    2. Require this tier (n_ranks > prev_tier, avoiding duplicates)
+    Supports two formats:
+    1. sweep: {n_ranks: [...], N: [...], strategy: [...]} - all combinations
+    2. sweep_groups: {name: {solver_type: x, N: [...]}} - group-specific sweeps
     """
+    prev_tier = alloc_cores - cores_per_node
+
+    # Check for sweep_groups first (new format)
+    sweep_groups = cfg.get("sweep_groups", {})
+    if sweep_groups:
+        configs = []
+        base_n_ranks = cfg.get("n_ranks", 1)
+        base_strategy = cfg.get("strategy", "sliced")
+
+        base_communicator = cfg.get("communicator", "custom")
+
+        for group_name, group_cfg in sweep_groups.items():
+            solver_type = group_cfg.get("solver_type", "jacobi")
+            N_values = list(group_cfg.get("N", [65]))
+            n_ranks_values = list(group_cfg.get("n_ranks", [base_n_ranks]))
+            strategy_values = list(group_cfg.get("strategy", [base_strategy]))
+            communicator_values = list(group_cfg.get("communicator", [base_communicator]))
+
+            # Filter ranks for this allocation tier
+            valid_ranks = [r for r in n_ranks_values if prev_tier < r <= alloc_cores]
+            if not valid_ranks:
+                valid_ranks = [base_n_ranks] if prev_tier < base_n_ranks <= alloc_cores else []
+
+            for n_ranks in valid_ranks:
+                for N in N_values:
+                    for strategy in strategy_values:
+                        for communicator in communicator_values:
+                            configs.append({
+                                "n_ranks": n_ranks,
+                                "N": N,
+                                "strategy": strategy,
+                                "solver_type": solver_type,
+                                "communicator": communicator,
+                            })
+        return configs
+
+    # Fall back to sweep format
     sweep = cfg.get("sweep", {})
     if not sweep:
         # No sweep defined - return single config from cfg
         return [{"n_ranks": cfg.get("n_ranks", 1),
                  "N": cfg.get("N", 64),
-                 "strategy": cfg.get("strategy", "sliced")}]
-
-    prev_tier = alloc_cores - cores_per_node  # Previous allocation tier
+                 "strategy": cfg.get("strategy", "sliced"),
+                 "solver_type": cfg.get("solver_type", "jacobi")}]
 
     # Get sweep parameters with defaults
     rank_values = list(sweep.get("n_ranks", [cfg.get("n_ranks", 1)]))
     N_values = list(sweep.get("N", [cfg.get("N", 64)]))
     strategy_values = list(sweep.get("strategy", [cfg.get("strategy", "sliced")]))
+    solver_values = list(sweep.get("solver_type", [cfg.get("solver_type", "jacobi")]))
 
     # Filter ranks: must fit in allocation AND require this tier
     valid_ranks = [r for r in rank_values if prev_tier < r <= alloc_cores]
@@ -66,8 +103,8 @@ def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 
 
     # Generate all combinations
     configs = []
-    for n_ranks, N, strategy in product(valid_ranks, N_values, strategy_values):
-        configs.append({"n_ranks": n_ranks, "N": N, "strategy": strategy})
+    for n_ranks, N, strategy, solver_type in product(valid_ranks, N_values, strategy_values, solver_values):
+        configs.append({"n_ranks": n_ranks, "N": N, "strategy": strategy, "solver_type": solver_type})
 
     return configs
 
@@ -100,23 +137,24 @@ def main(cfg: DictConfig) -> None:
         if job_index > len(configs):
             print(f"Job index {job_index} > num configs {len(configs)}, exiting")
             return
-        run_cfg = configs[job_index - 1]  # LSB_JOBINDEX is 1-based
+        configs_to_run = [configs[job_index - 1]]  # LSB_JOBINDEX is 1-based
     else:
-        # Local/single mode: fallback to first
-        print(f"Warning: No LSB_JOBINDEX set, running first config")
-        run_cfg = configs[0]
+        # Local mode: run all configs
+        print(f"No LSB_JOBINDEX set, running all {len(configs)} configs")
+        configs_to_run = configs
 
-    # Override cfg with selected config
-    n_ranks = run_cfg["n_ranks"]
-    cfg = OmegaConf.merge(cfg, OmegaConf.create(run_cfg))
+    for i, run_cfg in enumerate(configs_to_run):
+        n_ranks = run_cfg["n_ranks"]
+        merged_cfg = OmegaConf.merge(cfg, OmegaConf.create(run_cfg))
 
-    print(f"[Job {job_index}/{len(configs)}] n_ranks={n_ranks}, N={run_cfg['N']}, strategy={run_cfg['strategy']}")
+        solver = run_cfg.get('solver_type', 'jacobi')
+        print(f"\n[Run {i+1}/{len(configs_to_run)}] {solver}, N={run_cfg['N']}, n_ranks={n_ranks}")
 
-    # Sequential vs MPI
-    if n_ranks == 1:
-        _run_sequential_solver(cfg)
-    else:
-        _spawn_mpi(cfg, n_ranks, alloc_cores, cores_per_node, mpi)
+        # Sequential vs MPI
+        if n_ranks == 1:
+            _run_sequential_solver(merged_cfg)
+        else:
+            _spawn_mpi(merged_cfg, n_ranks, alloc_cores, cores_per_node, mpi)
 
 
 def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: int, mpi: dict):
@@ -139,16 +177,28 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: 
         cmd.extend(["--bind-to", str(mpi.bind_to)])
 
     cmd.extend(["uv", "run", "python", script])
-    cmd.extend([f"n_ranks={n_ranks}", f"N={cfg.N}", f"strategy={cfg.strategy}"])
 
-    # Keep the config-name from original args
-    args = sys.argv[1:]
-    for i, arg in enumerate(args):
-        if arg.startswith("-c") or arg.startswith("--config"):
-            cmd.append(arg)
-            if "=" not in arg and i + 1 < len(args):
-                cmd.append(args[i + 1])
-            break
+    # Pass all relevant config values to subprocess
+    overrides = [
+        f"n_ranks={n_ranks}",
+        f"N={cfg.N}",
+        f"strategy={cfg.strategy}",
+        f"solver_type={cfg.get('solver_type', 'jacobi')}",
+        f"communicator={cfg.get('communicator', 'custom')}",
+        f"omega={cfg.get('omega', 0.8)}",
+        f"max_iter={cfg.get('max_iter', 1000)}",
+        f"tolerance={cfg.get('tolerance', 1e-6)}",
+    ]
+    if cfg.get("experiment_name"):
+        overrides.append(f"experiment_name={cfg.experiment_name}")
+    if cfg.get("use_numba"):
+        overrides.append(f"use_numba={cfg.use_numba}")
+    if cfg.get("n_smooth"):
+        overrides.append(f"n_smooth={cfg.n_smooth}")
+    if cfg.get("fmg_post_vcycles"):
+        overrides.append(f"fmg_post_vcycles={cfg.fmg_post_vcycles}")
+
+    cmd.extend(overrides)
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.stdout:
@@ -169,7 +219,7 @@ def _run_sequential_solver(cfg: DictConfig):
     )
 
     N = cfg.N
-    solver_type = cfg.get("solver", "jacobi")
+    solver_type = cfg.get("solver_type", "jacobi")
     experiment_name = cfg.get("experiment_name", "experiment")
 
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
@@ -231,7 +281,7 @@ def _run_mpi_solver(cfg: DictConfig, comm):
     n_ranks = comm.Get_size()
 
     N = cfg.N
-    solver_type = cfg.get("solver", "jacobi")
+    solver_type = cfg.get("solver_type", "jacobi")
     strategy = cfg.get("strategy", "sliced")
     communicator = cfg.get("communicator", "custom")
     experiment_name = cfg.get("experiment_name", "experiment")
@@ -296,7 +346,7 @@ def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicat
         log_timeseries_metrics,
     )
 
-    experiment_name = cfg.get("experiment_name", "experiment")
+    experiment_name = cfg.get("experiment_name") or "default"
     run_name = f"{solver_type}_N{N}_p{n_ranks}"
     if strategy:
         run_name += f"_{strategy}"

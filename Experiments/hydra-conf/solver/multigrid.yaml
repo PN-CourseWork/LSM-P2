@@ -1,7 +1,6 @@
 # @package _global_
 # Multigrid/FMG solver settings
-# Set solver: fmg to use Full Multigrid mode
-solver: multigrid
+solver_type: fmg
 strategy: sliced
 communicator: custom
 n_smooth: 3

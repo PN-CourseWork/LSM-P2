@@ -131,35 +131,18 @@ Data Structures
 
 .. currentmodule:: Poisson
 
-Global Configuration & Metrics
-------------------------------
+Solver Metrics
+--------------
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
 
-   GlobalParams
    GlobalMetrics
-
-**GlobalParams:** N, omega, tolerance, max_iter, mpi_size, decomposition, communicator, use_numba
-
-**GlobalMetrics:** iterations, converged, final_error, wall_time, timing breakdown
-
-Local Data Structures
----------------------
-
-.. autosummary::
-   :toctree: generated
-   :template: class.rst
-
-   LocalParams
-   LocalFields
    LocalSeries
    GridLevel
 
-**LocalParams:** Rank-specific parameters (N_local, local_start, local_end, kernel config)
-
-**LocalFields:** Local domain arrays with halo zones (u1, u2, f)
+**GlobalMetrics:** iterations, converged, final_error, wall_time, timing breakdown
 
 **LocalSeries:** Per-iteration timing arrays (compute_times, halo_exchange_times, residual_history)
 

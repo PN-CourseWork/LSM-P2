@@ -1,5 +1,5 @@
 # @package _global_
-solver: jacobi
+solver_type: jacobi
 strategy: sliced
 communicator: custom
 use_numba: false

@@ -32,9 +32,8 @@ class DistributedGrid:
     comm : MPI.Comm
         MPI communicator
     strategy : str
-        'sliced' for 1D decomposition along z-axis
+        'sliced' for 1D decomposition along z-axis (default)
         'cubic' for 3D decomposition
-        'auto' to choose based on rank count
     halo_exchange : str
         'numpy' for buffer-based exchange (default)
         'custom' for MPI derived datatypes (zero-copy)
@@ -51,7 +50,7 @@ class DistributedGrid:
         self,
         N: int,
         comm: MPI.Comm = None,
-        strategy: str = 'auto',
+        strategy: str = 'sliced',
         halo_exchange: str = 'numpy'
     ):
         self.N = N
