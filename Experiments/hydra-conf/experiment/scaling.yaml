@@ -11,7 +11,7 @@ mpi:
   bind_to: null
 
 # Fixed solver settings
-max_iter: 100
+max_iter: 2000
 omega: 0.8
 tolerance: 0.0
 communicator: custom
