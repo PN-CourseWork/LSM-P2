@@ -55,7 +55,8 @@ for rep in 1 2 3 4; do
                         communicator=custom \
                         max_iter=$MAX_ITER \
                         hydra/launcher=basic \
-                        mlflow=databricks
+                        mlflow=databricks 2>&1
+                    echo "  Exit code: $?"
                 done
             done
         done
