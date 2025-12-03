@@ -32,24 +32,27 @@ PYTHON_PATH=$(uv run which python)
 mpiexec -n 2 $PYTHON_PATH -c "from mpi4py import MPI; print(f'Hello from rank {MPI.COMM_WORLD.Get_rank()}')" 2>&1
 echo "Exit code: $?"
 
-# Test 1: Single rank jacobi
+# Test 1: Using exact pattern from working scaling.sh (with -m flag)
 echo ""
-echo "=== Test 1: jacobi N=33 ranks=1 ==="
+echo "=== Test 1: jacobi N=129 ranks=1 (with -m) ==="
 uv run python run_solver.py \
     +experiment=weak_scaling_jacobi \
-    solver=jacobi N=33 n_ranks=1 strategy=cubic \
-    communicator=custom max_iter=5 \
-    hydra/launcher=basic mlflow=databricks 2>&1
+    N=129 n_ranks=1 \
+    max_iter=5 \
+    hydra/launcher=basic \
+    mlflow=databricks \
+    -m 2>&1
 echo "Exit code: $?"
 
-# Test 2: Multi rank jacobi
+# Test 2: Without -m flag for comparison
 echo ""
-echo "=== Test 2: jacobi N=65 ranks=8 ==="
+echo "=== Test 2: jacobi N=129 ranks=1 (without -m) ==="
 uv run python run_solver.py \
     +experiment=weak_scaling_jacobi \
-    solver=jacobi N=65 n_ranks=8 strategy=cubic \
-    communicator=custom max_iter=5 \
-    hydra/launcher=basic mlflow=databricks 2>&1
+    N=129 n_ranks=1 \
+    max_iter=5 \
+    hydra/launcher=basic \
+    mlflow=databricks 2>&1
 echo "Exit code: $?"
 
 echo ""

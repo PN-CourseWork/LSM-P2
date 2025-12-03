@@ -5,7 +5,7 @@ experiment_name: weak_scaling_final
 
 # Jacobi solver settings
 solver: jacobi
-max_iter: 250
+max_iter: 100
 omega: 0.8
 tolerance: 0.0
 communicator: custom
@@ -19,4 +19,4 @@ N: 129
 n_ranks: 1
 strategy: cubic
 
-# Weak scaling: N and n_ranks pairs set via command line in job script
+# Weak scaling pairs set via command line (N and n_ranks must match for constant work/rank)
