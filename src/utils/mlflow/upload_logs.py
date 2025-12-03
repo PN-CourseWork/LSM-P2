@@ -13,10 +13,10 @@ Usage:
 
 import argparse
 import shutil
-import time
 from pathlib import Path
 import mlflow
 from utils.mlflow.io import setup_mlflow_tracking
+
 
 def upload_logs(log_dir: Path, dry_run: bool = False):
     """
@@ -61,13 +61,13 @@ def upload_logs(log_dir: Path, dry_run: bool = False):
             # Read Run ID
             with open(runid_file, "r") as f:
                 run_id = f.read().strip()
-            
+
             print(f"  [PROCESSING] {job_name} (Run ID: {run_id})")
 
             if not dry_run:
                 # Verify run exists
                 try:
-                    run = client.get_run(run_id)
+                    client.get_run(run_id)  # Just check if run exists
                 except Exception:
                     print(f"    ! Run {run_id} not found in MLflow. Skipping.")
                     continue
@@ -75,7 +75,7 @@ def upload_logs(log_dir: Path, dry_run: bool = False):
                 # Upload artifacts
                 print(f"    Uploading {out_file.name}...")
                 client.log_artifact(run_id, str(out_file))
-                
+
                 print(f"    Uploading {err_file.name}...")
                 client.log_artifact(run_id, str(err_file))
 
@@ -90,10 +90,15 @@ def upload_logs(log_dir: Path, dry_run: bool = False):
         except Exception as e:
             print(f"    ! ERROR processing {job_name}: {e}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload LSF logs to MLflow")
-    parser.add_argument("--log-dir", type=str, default="logs/lsf", help="Directory to scan")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate without changes")
+    parser.add_argument(
+        "--log-dir", type=str, default="logs/lsf", help="Directory to scan"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Simulate without changes"
+    )
     args = parser.parse_args()
 
     setup_mlflow_tracking()

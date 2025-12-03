@@ -1,6 +1,5 @@
 """Base class for solvers."""
 
-import time
 from abc import ABC, abstractmethod
 
 from ..datastructures import GlobalMetrics, LocalSeries
@@ -38,7 +37,8 @@ class BaseSolver(ABC):
         n_interior = (self.N - 2) ** 3
         if iterations > 0 and wall_time > 0:
             self.results.mlups = n_interior * iterations / (wall_time * 1e6)
-            # 4 arrays * 8 bytes = 32 bytes per point
-            bytes_per_point = 32
+            # 7-point stencil: 6 neighbors + center + f = 8 mem-ops × 8 bytes = 64 bytes
+            # (Course Week 02, p.17: "each lup involves 8 memory operations: 7 loads and 1 store")
+            bytes_per_point = 64
             total_bytes = n_interior * iterations * bytes_per_point
             self.results.bandwidth_gb_s = total_bytes / (wall_time * 1e9)

@@ -1,0 +1,3 @@
+mode: local
+tracking_uri: ./mlruns
+project_prefix: ""

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import numpy as np
-from mpi4py import MPI
 
 
 # ============================================================================
@@ -29,7 +28,6 @@ class KernelParams:
     tolerance: float = 1e-10
     max_iter: int = 100000
     numba_threads: int | None = None  # None for NumPy
-
 
     # Derived values (computed in __post_init__)
     h: float = field(init=False)

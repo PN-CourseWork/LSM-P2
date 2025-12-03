@@ -8,8 +8,6 @@ This module provides helpers for:
 """
 
 import os
-import shutil
-import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -55,7 +53,9 @@ def setup_mlflow_tracking(mode: str = "databricks"):
         mlflow.set_tracking_uri(mlruns_uri)
         print(f"INFO: Using local file-based MLflow tracking backend: {mlruns_uri}")
     else:
-        print(f"WARNING: Unknown MLflow mode '{mode}'. Using existing URI: {mlflow.get_tracking_uri()}")
+        print(
+            f"WARNING: Unknown MLflow mode '{mode}'. Using existing URI: {mlflow.get_tracking_uri()}"
+        )
 
 
 def get_mlflow_client() -> mlflow.tracking.MlflowClient:
@@ -74,10 +74,14 @@ def start_mlflow_run_context(
     """
     Context manager to start a nested MLflow run.
     """
-    if mlflow.get_tracking_uri() == "databricks" and not experiment_name.startswith("/"):
+    if mlflow.get_tracking_uri() == "databricks" and not experiment_name.startswith(
+        "/"
+    ):
         original_experiment_name = experiment_name
         experiment_name = f"{project_prefix}/{experiment_name}"
-        print(f"DEBUG: Adjusted experiment name for Databricks: {original_experiment_name} -> {experiment_name}")
+        print(
+            f"DEBUG: Adjusted experiment name for Databricks: {original_experiment_name} -> {experiment_name}"
+        )
 
     print(f"DEBUG: Attempting to set MLflow experiment: {experiment_name}")
     mlflow.set_experiment(experiment_name)
@@ -89,10 +93,12 @@ def start_mlflow_run_context(
         try:
             exp_id = client.create_experiment(experiment_name)
             exp = client.get_experiment(exp_id)
-            print(f"DEBUG: Created new MLflow experiment: {experiment_name} with ID {exp_id}")
+            print(
+                f"DEBUG: Created new MLflow experiment: {experiment_name} with ID {exp_id}"
+            )
         except Exception as e:
             print(f"ERROR: Failed to create MLflow experiment '{experiment_name}': {e}")
-            raise # Re-raise to ensure failure is visible
+            raise  # Re-raise to ensure failure is visible
 
     parent_runs = client.search_runs(
         experiment_ids=[exp.experiment_id],
@@ -101,12 +107,25 @@ def start_mlflow_run_context(
     )
     parent_run_id = parent_runs[0].info.run_id if parent_runs else None
 
-    with mlflow.start_run(run_id=parent_run_id, run_name=parent_run_name, tags={"is_parent": "true"}) as parent_mlflow_run:
+    with mlflow.start_run(
+        run_id=parent_run_id, run_name=parent_run_name, tags={"is_parent": "true"}
+    ) as _parent_mlflow_run:  # noqa: F841
         with mlflow.start_run(run_name=child_run_name, nested=True) as child_mlflow_run:
-            print(f"INFO: Started MLflow run '{child_mlflow_run.info.run_name}' ({child_mlflow_run.info.run_id})")
+            # Tag run with environment (HPC vs local) for easy filtering
+            env = (
+                "hpc"
+                if os.environ.get("LSB_JOBID") or os.environ.get("SLURM_JOB_ID")
+                else "local"
+            )
+            mlflow.set_tag("environment", env)
+
+            print(
+                f"INFO: Started MLflow run '{child_mlflow_run.info.run_name}' ({child_mlflow_run.info.run_id}) [{env}]"
+            )
             if args and args.job_name:
                 try:
                     from Poisson import get_project_root
+
                     project_root = get_project_root()
                     log_path = project_root / args.log_dir
                     log_path.mkdir(parents=True, exist_ok=True)
@@ -144,12 +163,14 @@ def log_timeseries_metrics(timeseries_data: object):
             for step, value in enumerate(values):
                 try:
                     val = float(value)
-                    metrics_to_log.append(mlflow.entities.Metric(name, val, timestamp, step))
+                    metrics_to_log.append(
+                        mlflow.entities.Metric(name, val, timestamp, step)
+                    )
                 except (ValueError, TypeError):
                     continue
     if metrics_to_log:
         for i in range(0, len(metrics_to_log), 1000):
-            chunk = metrics_to_log[i: i + 1000]
+            chunk = metrics_to_log[i : i + 1000]
             client.log_batch(run_id=run_id, metrics=chunk, synchronous=True)
         print(f"  ✓ Logged {len(metrics_to_log)} time-series metrics.")
 
@@ -179,6 +200,7 @@ def log_lsf_logs(job_name: Optional[str], log_dir: str = "logs/lsf"):
 
     try:
         from Poisson import get_project_root
+
         project_root = get_project_root()
     except ImportError:
         project_root = Path.cwd()
@@ -235,6 +257,7 @@ def load_runs(
         df = df[df["tags.is_parent"] != "true"]
 
     return df
+
 
 def download_artifacts(
     experiment_name: str,

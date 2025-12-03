@@ -1,6 +1,5 @@
 """MPI-parallel Full Multigrid Solver (extends FMGSolver)."""
 
-from typing import List
 
 import numpy as np
 from mpi4py import MPI
@@ -69,8 +68,10 @@ class FMGMPISolver(FMGSolver):
 
         if self.size > 1:
             if self.strategy == "cubic":
-                ranks_per_dim = int(round(self.size ** (1/3)))
-                min_N_for_ranks = max((min_local + 2) * ranks_per_dim, self.min_coarse_size)
+                ranks_per_dim = int(round(self.size ** (1 / 3)))
+                min_N_for_ranks = max(
+                    (min_local + 2) * ranks_per_dim, self.min_coarse_size
+                )
             else:
                 min_N_for_ranks = self.size + 2
         else:
@@ -118,9 +119,7 @@ class FMGMPISolver(FMGSolver):
 
             # Create distributed grid
             grid = DistributedGrid(
-                N, self.comm,
-                strategy=self.strategy,
-                halo_exchange=self.communicator
+                N, self.comm, strategy=self.strategy, halo_exchange=self.communicator
             )
 
             # Allocate arrays via grid
@@ -189,7 +188,8 @@ class FMGMPISolver(FMGSolver):
         if self.rank == 0:
             self.results.final_residual = (
                 self.timeseries.residual_history[-1]
-                if self.timeseries.residual_history else 0.0
+                if self.timeseries.residual_history
+                else 0.0
             )
             self.results.total_compute_time = self._time_compute
             self.results.total_halo_time = self._time_halo

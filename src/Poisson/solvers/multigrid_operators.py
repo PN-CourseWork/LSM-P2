@@ -32,33 +32,50 @@ def restrict(fine: np.ndarray, coarse: np.ndarray):
                 fi, fj, fk = 2 * i, 2 * j, 2 * k
 
                 # Check if full stencil fits
-                if (fi - 1 >= 0 and fi + 1 < nz_f and
-                    fj - 1 >= 0 and fj + 1 < ny_f and
-                    fk - 1 >= 0 and fk + 1 < nx_f):
-
+                if (
+                    fi - 1 >= 0
+                    and fi + 1 < nz_f
+                    and fj - 1 >= 0
+                    and fj + 1 < ny_f
+                    and fk - 1 >= 0
+                    and fk + 1 < nx_f
+                ):
                     # Full weighting 27-point stencil
                     val = 8.0 * fine[fi, fj, fk]
 
                     val += 4.0 * (
-                        fine[fi - 1, fj, fk] + fine[fi + 1, fj, fk] +
-                        fine[fi, fj - 1, fk] + fine[fi, fj + 1, fk] +
-                        fine[fi, fj, fk - 1] + fine[fi, fj, fk + 1]
+                        fine[fi - 1, fj, fk]
+                        + fine[fi + 1, fj, fk]
+                        + fine[fi, fj - 1, fk]
+                        + fine[fi, fj + 1, fk]
+                        + fine[fi, fj, fk - 1]
+                        + fine[fi, fj, fk + 1]
                     )
 
                     val += 2.0 * (
-                        fine[fi - 1, fj - 1, fk] + fine[fi - 1, fj + 1, fk] +
-                        fine[fi + 1, fj - 1, fk] + fine[fi + 1, fj + 1, fk] +
-                        fine[fi - 1, fj, fk - 1] + fine[fi - 1, fj, fk + 1] +
-                        fine[fi + 1, fj, fk - 1] + fine[fi + 1, fj, fk + 1] +
-                        fine[fi, fj - 1, fk - 1] + fine[fi, fj - 1, fk + 1] +
-                        fine[fi, fj + 1, fk - 1] + fine[fi, fj + 1, fk + 1]
+                        fine[fi - 1, fj - 1, fk]
+                        + fine[fi - 1, fj + 1, fk]
+                        + fine[fi + 1, fj - 1, fk]
+                        + fine[fi + 1, fj + 1, fk]
+                        + fine[fi - 1, fj, fk - 1]
+                        + fine[fi - 1, fj, fk + 1]
+                        + fine[fi + 1, fj, fk - 1]
+                        + fine[fi + 1, fj, fk + 1]
+                        + fine[fi, fj - 1, fk - 1]
+                        + fine[fi, fj - 1, fk + 1]
+                        + fine[fi, fj + 1, fk - 1]
+                        + fine[fi, fj + 1, fk + 1]
                     )
 
                     val += 1.0 * (
-                        fine[fi - 1, fj - 1, fk - 1] + fine[fi - 1, fj - 1, fk + 1] +
-                        fine[fi - 1, fj + 1, fk - 1] + fine[fi - 1, fj + 1, fk + 1] +
-                        fine[fi + 1, fj - 1, fk - 1] + fine[fi + 1, fj - 1, fk + 1] +
-                        fine[fi + 1, fj + 1, fk - 1] + fine[fi + 1, fj + 1, fk + 1]
+                        fine[fi - 1, fj - 1, fk - 1]
+                        + fine[fi - 1, fj - 1, fk + 1]
+                        + fine[fi - 1, fj + 1, fk - 1]
+                        + fine[fi - 1, fj + 1, fk + 1]
+                        + fine[fi + 1, fj - 1, fk - 1]
+                        + fine[fi + 1, fj - 1, fk + 1]
+                        + fine[fi + 1, fj + 1, fk - 1]
+                        + fine[fi + 1, fj + 1, fk + 1]
                     )
 
                     coarse[i, j, k] = val / 64.0
@@ -104,22 +121,32 @@ def prolong(coarse: np.ndarray, fine: np.ndarray):
 
                 # Face centers
                 fine[fi + 1, fj + 1, fk] = 0.25 * (
-                    coarse[i, j, k] + coarse[i + 1, j, k] +
-                    coarse[i, j + 1, k] + coarse[i + 1, j + 1, k]
+                    coarse[i, j, k]
+                    + coarse[i + 1, j, k]
+                    + coarse[i, j + 1, k]
+                    + coarse[i + 1, j + 1, k]
                 )
                 fine[fi + 1, fj, fk + 1] = 0.25 * (
-                    coarse[i, j, k] + coarse[i + 1, j, k] +
-                    coarse[i, j, k + 1] + coarse[i + 1, j, k + 1]
+                    coarse[i, j, k]
+                    + coarse[i + 1, j, k]
+                    + coarse[i, j, k + 1]
+                    + coarse[i + 1, j, k + 1]
                 )
                 fine[fi, fj + 1, fk + 1] = 0.25 * (
-                    coarse[i, j, k] + coarse[i, j + 1, k] +
-                    coarse[i, j, k + 1] + coarse[i, j + 1, k + 1]
+                    coarse[i, j, k]
+                    + coarse[i, j + 1, k]
+                    + coarse[i, j, k + 1]
+                    + coarse[i, j + 1, k + 1]
                 )
 
                 # Cell center
                 fine[fi + 1, fj + 1, fk + 1] = 0.125 * (
-                    coarse[i, j, k] + coarse[i + 1, j, k] +
-                    coarse[i, j + 1, k] + coarse[i + 1, j + 1, k] +
-                    coarse[i, j, k + 1] + coarse[i + 1, j, k + 1] +
-                    coarse[i, j + 1, k + 1] + coarse[i + 1, j + 1, k + 1]
+                    coarse[i, j, k]
+                    + coarse[i + 1, j, k]
+                    + coarse[i, j + 1, k]
+                    + coarse[i + 1, j + 1, k]
+                    + coarse[i, j, k + 1]
+                    + coarse[i + 1, j, k + 1]
+                    + coarse[i, j + 1, k + 1]
+                    + coarse[i + 1, j + 1, k + 1]
                 )

@@ -21,7 +21,7 @@ class CartesianDecomposition:
         'cubic' for 3D decomposition.
     """
 
-    def __init__(self, N: int, comm: MPI.Comm, strategy: str = 'sliced'):
+    def __init__(self, N: int, comm: MPI.Comm, strategy: str = "sliced"):
         self.N = N
         self.comm = comm
         self.rank = comm.Get_rank()
@@ -33,24 +33,26 @@ class CartesianDecomposition:
         self.pz, self.py, self.px = self.dims
 
         # Create Cartesian topology
-        self.cart_comm, self._cart_coords, self._proc_coords = \
+        self.cart_comm, self._cart_coords, self._proc_coords = (
             self._create_cartesian_topology()
+        )
 
         # Discover neighbors
         self.neighbors = self._find_neighbors()
 
         # Compute local domain
-        self.local_shape, self.halo_shape, self.global_start, self.global_end = \
+        self.local_shape, self.halo_shape, self.global_start, self.global_end = (
             self._compute_local_domain()
+        )
 
         # Track physical boundaries
         self.is_boundary = self._find_boundaries()
 
     def _compute_dims(self, strategy: str) -> list[int]:
         """Compute processor grid dimensions [pz, py, px]."""
-        if strategy == 'sliced':
+        if strategy == "sliced":
             return [self.size, 1, 1]
-        elif strategy == 'cubic':
+        elif strategy == "cubic":
             dims = list(MPI.Compute_dims(self.size, 3))
             return [dims[2], dims[1], dims[0]]
         else:
@@ -63,9 +65,7 @@ class CartesianDecomposition:
         periods = [False, False, False]
 
         cart_comm = self.comm.Create_cart(
-            dims=cart_dims,
-            periods=periods,
-            reorder=False
+            dims=cart_dims, periods=periods, reorder=False
         )
 
         # Get coordinates: [ix, iy, iz]
@@ -82,18 +82,18 @@ class CartesianDecomposition:
 
         # X direction (cart direction 0)
         x_src, x_dest = self.cart_comm.Shift(0, 1)
-        neighbors['x_lower'] = x_src if x_src >= 0 else None
-        neighbors['x_upper'] = x_dest if x_dest >= 0 else None
+        neighbors["x_lower"] = x_src if x_src >= 0 else None
+        neighbors["x_upper"] = x_dest if x_dest >= 0 else None
 
         # Y direction (cart direction 1)
         y_src, y_dest = self.cart_comm.Shift(1, 1)
-        neighbors['y_lower'] = y_src if y_src >= 0 else None
-        neighbors['y_upper'] = y_dest if y_dest >= 0 else None
+        neighbors["y_lower"] = y_src if y_src >= 0 else None
+        neighbors["y_upper"] = y_dest if y_dest >= 0 else None
 
         # Z direction (cart direction 2)
         z_src, z_dest = self.cart_comm.Shift(2, 1)
-        neighbors['z_lower'] = z_src if z_src >= 0 else None
-        neighbors['z_upper'] = z_dest if z_dest >= 0 else None
+        neighbors["z_lower"] = z_src if z_src >= 0 else None
+        neighbors["z_upper"] = z_dest if z_dest >= 0 else None
 
         return neighbors
 
@@ -134,7 +134,7 @@ class CartesianDecomposition:
         global_end = (
             global_start_z + local_nz,
             global_start_y + local_ny,
-            global_start_x + local_nx
+            global_start_x + local_nx,
         )
 
         return local_shape, halo_shape, global_start, global_end
@@ -143,10 +143,10 @@ class CartesianDecomposition:
         """Determine which faces are physical boundaries."""
         N = self.N
         return {
-            'z_lower': self.global_start[0] == 1,
-            'z_upper': self.global_end[0] == N - 1,
-            'y_lower': self.global_start[1] == 1,
-            'y_upper': self.global_end[1] == N - 1,
-            'x_lower': self.global_start[2] == 1,
-            'x_upper': self.global_end[2] == N - 1,
+            "z_lower": self.global_start[0] == 1,
+            "z_upper": self.global_end[0] == N - 1,
+            "y_lower": self.global_start[1] == 1,
+            "y_upper": self.global_end[1] == N - 1,
+            "x_lower": self.global_start[2] == 1,
+            "x_upper": self.global_end[2] == N - 1,
         }

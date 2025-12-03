@@ -42,7 +42,7 @@ class FMGSolver(BaseSolver):
         n_smooth: int = 3,
         fmg_post_vcycles: int = 1,
         use_numba: bool = False,
-        omega: float = 2/3,
+        omega: float = 2 / 3,
         numba_threads: int = 1,
         **kwargs,
     ):
@@ -177,9 +177,9 @@ class FMGSolver(BaseSolver):
         self._coarse_solve(self.levels[-1])
 
         # Ascend hierarchy
-        for l in reversed(range(self.n_levels - 1)):
-            coarse = self.levels[l + 1]
-            fine = self.levels[l]
+        for level in reversed(range(self.n_levels - 1)):
+            coarse = self.levels[level + 1]
+            fine = self.levels[level]
 
             # Prolong coarse solution as initial guess
             self._sync_halos(coarse.u, coarse)
@@ -196,7 +196,7 @@ class FMGSolver(BaseSolver):
                 self._smooth(fine)
 
             # V-cycle from this level
-            residual = self._v_cycle(l)
+            residual = self._v_cycle(level)
 
         # Post V-cycles with residual tracking
         for _ in range(self.fmg_post_vcycles):
@@ -272,9 +272,12 @@ class FMGSolver(BaseSolver):
 
         u_center = u[1:-1, 1:-1, 1:-1]
         u_neighbors = (
-            u[0:-2, 1:-1, 1:-1] + u[2:, 1:-1, 1:-1] +
-            u[1:-1, 0:-2, 1:-1] + u[1:-1, 2:, 1:-1] +
-            u[1:-1, 1:-1, 0:-2] + u[1:-1, 1:-1, 2:]
+            u[0:-2, 1:-1, 1:-1]
+            + u[2:, 1:-1, 1:-1]
+            + u[1:-1, 0:-2, 1:-1]
+            + u[1:-1, 2:, 1:-1]
+            + u[1:-1, 1:-1, 0:-2]
+            + u[1:-1, 1:-1, 2:]
         )
         laplacian = (u_neighbors - 6.0 * u_center) / h2
         r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian
@@ -303,7 +306,11 @@ class FMGSolver(BaseSolver):
 
     def _finalize(self, wall_time: float):
         """Finalize results."""
-        self.results.final_residual = self.timeseries.residual_history[-1] if self.timeseries.residual_history else 0.0
+        self.results.final_residual = (
+            self.timeseries.residual_history[-1]
+            if self.timeseries.residual_history
+            else 0.0
+        )
         self.results.total_compute_time = self._time_compute
         self.results.total_halo_time = self._time_halo
         self._compute_metrics(wall_time, self.results.iterations)

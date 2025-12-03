@@ -50,8 +50,8 @@ class DistributedGrid:
         self,
         N: int,
         comm: MPI.Comm = None,
-        strategy: str = 'sliced',
-        halo_exchange: str = 'numpy'
+        strategy: str = "sliced",
+        halo_exchange: str = "numpy",
     ):
         self.N = N
         self.comm = comm if comm is not None else MPI.COMM_WORLD
@@ -91,17 +91,17 @@ class DistributedGrid:
 
     def apply_boundary_conditions(self, arr: np.ndarray, value: float = 0.0):
         """Apply Dirichlet boundary conditions at physical boundaries."""
-        if self.is_boundary['z_lower']:
+        if self.is_boundary["z_lower"]:
             arr[0, :, :] = value
-        if self.is_boundary['z_upper']:
+        if self.is_boundary["z_upper"]:
             arr[-1, :, :] = value
-        if self.is_boundary['y_lower']:
+        if self.is_boundary["y_lower"]:
             arr[:, 0, :] = value
-        if self.is_boundary['y_upper']:
+        if self.is_boundary["y_upper"]:
             arr[:, -1, :] = value
-        if self.is_boundary['x_lower']:
+        if self.is_boundary["x_lower"]:
             arr[:, :, 0] = value
-        if self.is_boundary['x_upper']:
+        if self.is_boundary["x_upper"]:
             arr[:, :, -1] = value
 
     def fill_source_term(self, f: np.ndarray):
@@ -121,7 +121,7 @@ class DistributedGrid:
         y_phys = -1.0 + y_global * h
         x_phys = -1.0 + x_global * h
 
-        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing='ij')
+        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing="ij")
 
         f[1:-1, 1:-1, 1:-1] = (
             3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
@@ -144,7 +144,7 @@ class DistributedGrid:
         y_phys = -1.0 + y_global * h
         x_phys = -1.0 + x_global * h
 
-        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing='ij')
+        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing="ij")
 
         u[1:-1, 1:-1, 1:-1] = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
 
@@ -153,7 +153,7 @@ class DistributedGrid:
         u_exact = self.allocate()
         self.compute_exact_solution(u_exact)
 
-        local_sq_error = np.sum((u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1])**2)
+        local_sq_error = np.sum((u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]) ** 2)
         global_sq_error = self.cart_comm.allreduce(local_sq_error, op=MPI.SUM)
 
         return float(np.sqrt(self.h**3 * global_sq_error))
@@ -170,21 +170,21 @@ class DistributedGrid:
         total_bytes = 0
 
         # Z-faces
-        if self.neighbors['z_lower'] is not None:
+        if self.neighbors["z_lower"] is not None:
             total_bytes += ny * nx * bytes_per_element * 2
-        if self.neighbors['z_upper'] is not None:
+        if self.neighbors["z_upper"] is not None:
             total_bytes += ny * nx * bytes_per_element * 2
 
         # Y-faces
-        if self.neighbors['y_lower'] is not None:
+        if self.neighbors["y_lower"] is not None:
             total_bytes += nz * nx * bytes_per_element * 2
-        if self.neighbors['y_upper'] is not None:
+        if self.neighbors["y_upper"] is not None:
             total_bytes += nz * nx * bytes_per_element * 2
 
         # X-faces
-        if self.neighbors['x_lower'] is not None:
+        if self.neighbors["x_lower"] is not None:
             total_bytes += nz * ny * bytes_per_element * 2
-        if self.neighbors['x_upper'] is not None:
+        if self.neighbors["x_upper"] is not None:
             total_bytes += nz * ny * bytes_per_element * 2
 
         return total_bytes
@@ -200,7 +200,7 @@ class DistributedGrid:
             neighbors=self.neighbors.copy(),
         )
 
-    def coarsen(self) -> 'DistributedGrid':
+    def coarsen(self) -> "DistributedGrid":
         """Create a coarsened grid for multigrid.
 
         Returns a new DistributedGrid with N_coarse = (N-1)//2 + 1.
@@ -213,5 +213,5 @@ class DistributedGrid:
             N_coarse,
             self.comm,
             strategy=self.strategy,
-            halo_exchange=self.halo_exchange_type
+            halo_exchange=self.halo_exchange_type,
         )

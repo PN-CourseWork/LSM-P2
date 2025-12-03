@@ -135,7 +135,15 @@ def clean_patterns(
         repo_root = get_repo_root()
 
     if patterns is None:
-        patterns = ["__pycache__", "*.pyc", ".DS_Store", "mlruns", "multirun", "output", "outputs"]
+        patterns = [
+            "__pycache__",
+            "*.pyc",
+            ".DS_Store",
+            "mlruns",
+            "multirun",
+            "output",
+            "outputs",
+        ]
 
     cleaned, failed = 0, 0
     for pattern in patterns:

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+
 def get_repo_root() -> Path:
     """Find the project root directory (where pyproject.toml is).
 

@@ -126,7 +126,10 @@ def _log_results(cfg, solver, n_ranks: int, hw_info: list = None):
             params.update({"use_numba": True, "numba_threads": solver_params.get("numba_threads", 1)})
 
         log_parameters(params)
-        log_metrics_dict(asdict(solver.results))
+        
+        metrics_to_log = asdict(solver.results)
+        
+        log_metrics_dict(metrics_to_log)
 
         if hw_info:
             import pandas as pd
@@ -177,6 +180,16 @@ def _run_sequential(cfg: DictConfig):
     solver.compute_l2_error()
     _log_results(cfg, solver, n_ranks=1)
 
+    # Log artifacts (Hydra config and logs)
+    import mlflow
+    try:
+        hydra_cfg = HydraConfig.get()
+        output_dir = hydra_cfg.runtime.output_dir
+        mlflow.log_artifact(os.path.join(output_dir, ".hydra", "config.yaml"), artifact_path="hydra")
+        mlflow.log_artifact(os.path.join(output_dir, "run_solver.log"), artifact_path="hydra")
+    except Exception as e:
+        log.warning(f"Could not log Hydra artifacts: {e}")
+
 
 def _spawn_mpi(cfg: DictConfig, n_ranks: int):
     """Spawn MPI subprocess with full config dump."""
@@ -212,6 +225,15 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int):
     for line in (result.stderr or "").strip().split("\n"):
         if line:
             log.warning(line) if "error" in line.lower() else log.info(line)
+            
+    # Log artifacts (Hydra config and logs) from the spawner
+    import mlflow
+    try:
+        if mlflow.active_run():
+            mlflow.log_artifact(os.path.join(output_dir, ".hydra", "config.yaml"), artifact_path="hydra")
+            mlflow.log_artifact(os.path.join(output_dir, "run_solver.log"), artifact_path="hydra")
+    except Exception as e:
+        log.warning(f"Could not log Hydra artifacts: {e}")
 
 
 def _run_mpi_solver(cfg: DictConfig, comm):

@@ -37,14 +37,14 @@ class NumpyHaloExchanger(HaloExchanger):
         self._recv_bufs = {}
 
         face_sizes = {
-            'z': ny * nx,
-            'y': nz * nx,
-            'x': nz * ny,
+            "z": ny * nx,
+            "y": nz * nx,
+            "x": nz * ny,
         }
 
-        for axis in ['z', 'y', 'x']:
-            for direction in ['lower', 'upper']:
-                key = f'{axis}_{direction}'
+        for axis in ["z", "y", "x"]:
+            for direction in ["lower", "upper"]:
+                key = f"{axis}_{direction}"
                 if neighbors.get(key) is not None:
                     self._send_bufs[key] = np.empty(face_sizes[axis], dtype=np.float64)
                     self._recv_bufs[key] = np.empty(face_sizes[axis], dtype=np.float64)
@@ -54,56 +54,80 @@ class NumpyHaloExchanger(HaloExchanger):
         nz, ny, nx = self._local_shape
 
         # Z-direction
-        if neighbors['z_lower'] is not None or neighbors['z_upper'] is not None:
-            lo = neighbors['z_lower'] if neighbors['z_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['z_upper'] if neighbors['z_upper'] is not None else MPI.PROC_NULL
+        if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
+            lo = (
+                neighbors["z_lower"]
+                if neighbors["z_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["z_upper"]
+                if neighbors["z_upper"] is not None
+                else MPI.PROC_NULL
+            )
 
             # Send to upper, receive from lower
             send_buf = np.ascontiguousarray(arr[-2, 1:-1, 1:-1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, hi, 0, recv_buf, lo, 0)
-            if neighbors['z_lower'] is not None:
+            if neighbors["z_lower"] is not None:
                 arr[0, 1:-1, 1:-1] = recv_buf.reshape(ny, nx)
 
             # Send to lower, receive from upper
             send_buf = np.ascontiguousarray(arr[1, 1:-1, 1:-1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, lo, 1, recv_buf, hi, 1)
-            if neighbors['z_upper'] is not None:
+            if neighbors["z_upper"] is not None:
                 arr[-1, 1:-1, 1:-1] = recv_buf.reshape(ny, nx)
 
         # Y-direction
-        if neighbors['y_lower'] is not None or neighbors['y_upper'] is not None:
-            lo = neighbors['y_lower'] if neighbors['y_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['y_upper'] if neighbors['y_upper'] is not None else MPI.PROC_NULL
+        if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
+            lo = (
+                neighbors["y_lower"]
+                if neighbors["y_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["y_upper"]
+                if neighbors["y_upper"] is not None
+                else MPI.PROC_NULL
+            )
 
             send_buf = np.ascontiguousarray(arr[1:-1, -2, 1:-1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, hi, 2, recv_buf, lo, 2)
-            if neighbors['y_lower'] is not None:
+            if neighbors["y_lower"] is not None:
                 arr[1:-1, 0, 1:-1] = recv_buf.reshape(nz, nx)
 
             send_buf = np.ascontiguousarray(arr[1:-1, 1, 1:-1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, lo, 3, recv_buf, hi, 3)
-            if neighbors['y_upper'] is not None:
+            if neighbors["y_upper"] is not None:
                 arr[1:-1, -1, 1:-1] = recv_buf.reshape(nz, nx)
 
         # X-direction
-        if neighbors['x_lower'] is not None or neighbors['x_upper'] is not None:
-            lo = neighbors['x_lower'] if neighbors['x_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['x_upper'] if neighbors['x_upper'] is not None else MPI.PROC_NULL
+        if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
+            lo = (
+                neighbors["x_lower"]
+                if neighbors["x_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["x_upper"]
+                if neighbors["x_upper"] is not None
+                else MPI.PROC_NULL
+            )
 
             send_buf = np.ascontiguousarray(arr[1:-1, 1:-1, -2])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, hi, 4, recv_buf, lo, 4)
-            if neighbors['x_lower'] is not None:
+            if neighbors["x_lower"] is not None:
                 arr[1:-1, 1:-1, 0] = recv_buf.reshape(nz, ny)
 
             send_buf = np.ascontiguousarray(arr[1:-1, 1:-1, 1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, lo, 5, recv_buf, hi, 5)
-            if neighbors['x_upper'] is not None:
+            if neighbors["x_upper"] is not None:
                 arr[1:-1, 1:-1, -1] = recv_buf.reshape(nz, ny)
 
 
@@ -131,12 +155,12 @@ class DatatypeHaloExchanger(HaloExchanger):
         # Z-face: ny_int x nx_int contiguous block
         dt = MPI.DOUBLE.Create_vector(ny_int, nx_int, nx)
         dt.Commit()
-        datatypes['z'] = dt
+        datatypes["z"] = dt
 
         # Y-face: nz_int planes, nx_int per plane
         dt = MPI.DOUBLE.Create_vector(nz_int, nx_int, ny * nx)
         dt.Commit()
-        datatypes['y'] = dt
+        datatypes["y"] = dt
 
         # X-face: 2D strided
         row = MPI.DOUBLE.Create_vector(ny_int, 1, nx)
@@ -144,7 +168,7 @@ class DatatypeHaloExchanger(HaloExchanger):
         dt = row.Create_hvector(nz_int, 1, ny * nx * MPI.DOUBLE.Get_size())
         dt.Commit()
         row.Free()
-        datatypes['x'] = dt
+        datatypes["x"] = dt
 
         return datatypes
 
@@ -157,80 +181,98 @@ class DatatypeHaloExchanger(HaloExchanger):
             return z * ny * nx + y * nx + x
 
         # Z-direction
-        if neighbors['z_lower'] is not None or neighbors['z_upper'] is not None:
-            lo = neighbors['z_lower'] if neighbors['z_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['z_upper'] if neighbors['z_upper'] is not None else MPI.PROC_NULL
-            dt = self._datatypes['z']
+        if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
+            lo = (
+                neighbors["z_lower"]
+                if neighbors["z_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["z_upper"]
+                if neighbors["z_upper"] is not None
+                else MPI.PROC_NULL
+            )
+            dt = self._datatypes["z"]
 
             send_off = flat_idx(nz - 2, 1, 1)
             recv_off = flat_idx(0, 1, 1)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], hi, 0,
-                [arr_flat[recv_off:], 1, dt], lo, 0
+                [arr_flat[send_off:], 1, dt], hi, 0, [arr_flat[recv_off:], 1, dt], lo, 0
             )
-            if neighbors['z_lower'] is None:
+            if neighbors["z_lower"] is None:
                 arr[0, 1:-1, 1:-1] = 0.0
 
             send_off = flat_idx(1, 1, 1)
             recv_off = flat_idx(nz - 1, 1, 1)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], lo, 1,
-                [arr_flat[recv_off:], 1, dt], hi, 1
+                [arr_flat[send_off:], 1, dt], lo, 1, [arr_flat[recv_off:], 1, dt], hi, 1
             )
-            if neighbors['z_upper'] is None:
+            if neighbors["z_upper"] is None:
                 arr[-1, 1:-1, 1:-1] = 0.0
 
         # Y-direction
-        if neighbors['y_lower'] is not None or neighbors['y_upper'] is not None:
-            lo = neighbors['y_lower'] if neighbors['y_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['y_upper'] if neighbors['y_upper'] is not None else MPI.PROC_NULL
-            dt = self._datatypes['y']
+        if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
+            lo = (
+                neighbors["y_lower"]
+                if neighbors["y_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["y_upper"]
+                if neighbors["y_upper"] is not None
+                else MPI.PROC_NULL
+            )
+            dt = self._datatypes["y"]
 
             send_off = flat_idx(1, ny - 2, 1)
             recv_off = flat_idx(1, 0, 1)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], hi, 2,
-                [arr_flat[recv_off:], 1, dt], lo, 2
+                [arr_flat[send_off:], 1, dt], hi, 2, [arr_flat[recv_off:], 1, dt], lo, 2
             )
-            if neighbors['y_lower'] is None:
+            if neighbors["y_lower"] is None:
                 arr[1:-1, 0, 1:-1] = 0.0
 
             send_off = flat_idx(1, 1, 1)
             recv_off = flat_idx(1, ny - 1, 1)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], lo, 3,
-                [arr_flat[recv_off:], 1, dt], hi, 3
+                [arr_flat[send_off:], 1, dt], lo, 3, [arr_flat[recv_off:], 1, dt], hi, 3
             )
-            if neighbors['y_upper'] is None:
+            if neighbors["y_upper"] is None:
                 arr[1:-1, -1, 1:-1] = 0.0
 
         # X-direction
-        if neighbors['x_lower'] is not None or neighbors['x_upper'] is not None:
-            lo = neighbors['x_lower'] if neighbors['x_lower'] is not None else MPI.PROC_NULL
-            hi = neighbors['x_upper'] if neighbors['x_upper'] is not None else MPI.PROC_NULL
-            dt = self._datatypes['x']
+        if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
+            lo = (
+                neighbors["x_lower"]
+                if neighbors["x_lower"] is not None
+                else MPI.PROC_NULL
+            )
+            hi = (
+                neighbors["x_upper"]
+                if neighbors["x_upper"] is not None
+                else MPI.PROC_NULL
+            )
+            dt = self._datatypes["x"]
 
             send_off = flat_idx(1, 1, nx - 2)
             recv_off = flat_idx(1, 1, 0)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], hi, 4,
-                [arr_flat[recv_off:], 1, dt], lo, 4
+                [arr_flat[send_off:], 1, dt], hi, 4, [arr_flat[recv_off:], 1, dt], lo, 4
             )
-            if neighbors['x_lower'] is None:
+            if neighbors["x_lower"] is None:
                 arr[1:-1, 1:-1, 0] = 0.0
 
             send_off = flat_idx(1, 1, 1)
             recv_off = flat_idx(1, 1, nx - 1)
             cart_comm.Sendrecv(
-                [arr_flat[send_off:], 1, dt], lo, 5,
-                [arr_flat[recv_off:], 1, dt], hi, 5
+                [arr_flat[send_off:], 1, dt], lo, 5, [arr_flat[recv_off:], 1, dt], hi, 5
             )
-            if neighbors['x_upper'] is None:
+            if neighbors["x_upper"] is None:
                 arr[1:-1, 1:-1, -1] = 0.0
 
     def __del__(self):
         """Free MPI datatypes."""
-        if hasattr(self, '_datatypes'):
+        if hasattr(self, "_datatypes"):
             for dt in self._datatypes.values():
                 if dt != MPI.DATATYPE_NULL:
                     dt.Free()
@@ -250,9 +292,9 @@ def create_halo_exchanger(exchange_type: str) -> HaloExchanger:
     HaloExchanger
         The appropriate exchanger instance.
     """
-    if exchange_type == 'numpy':
+    if exchange_type == "numpy":
         return NumpyHaloExchanger()
-    elif exchange_type == 'custom':
+    elif exchange_type == "custom":
         return DatatypeHaloExchanger()
     else:
         raise ValueError(f"Unknown halo_exchange type: {exchange_type}")

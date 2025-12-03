@@ -1,7 +1,7 @@
 defaults:
-  - problem: poisson
   - machine: local
   - solver: jacobi
+  - mlflow: local
   - override hydra/launcher: basic
   - override hydra/callbacks: mlflow_log
   - _self_
@@ -10,14 +10,24 @@ defaults:
 # Global Configuration
 # ============================================================
 
-# Parallelization
-n_ranks: 1
+# Experiment Identity
+prefix: DEBUG
+name: default
+experiment_name: ${prefix}-${name}
 
-# MLflow logging
-experiment_name: null
+# Problem Size
+N: 64
+
+# Parallelization
+n_ranks: 4
+
+# Hydra Logging
 job_name: null
 log_dir: logs/lsf
 
-mlflow:
-  mode: databricks
-  databricks_project_prefix: "/Shared/LSM-PoissonMPI-v2"
+hydra:
+  run:
+    dir: outputs/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
