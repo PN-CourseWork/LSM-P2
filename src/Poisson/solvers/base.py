@@ -1,5 +1,6 @@
 """Base class for solvers."""
 
+import time
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -31,6 +32,10 @@ class BaseSolver(ABC):
         self.metrics = GlobalMetrics()
         self.timeseries = LocalMetrics()
 
+        # Timing accumulators
+        self._time_compute = 0.0
+        self._time_halo = 0.0
+
     @abstractmethod
     def solve(self) -> GlobalMetrics:
         """Execute the solver. Returns results."""
@@ -58,15 +63,49 @@ class BaseSolver(ABC):
         self.metrics.final_error = l2_error
         return l2_error
 
-    @abstractmethod
     def _get_solution_array(self) -> np.ndarray:
-        """Return the solution array. Override in subclasses."""
+        """Return the solution array."""
+        return self.u
+
+    def _get_time(self) -> float:
+        """Get current time. Override for MPI timing."""
+        return time.perf_counter()
+
+    def _reduce_sum(self, local_sum: float) -> float:
+        """Reduce sum across ranks. Override for MPI."""
+        return local_sum
+
+    def _is_root(self) -> bool:
+        """True if this rank should log metrics. Override for MPI."""
+        return True
+
+    def _sync_halos(self, u: np.ndarray, lvl=None) -> float:
+        """Sync halo regions. No-op for sequential. Override for MPI."""
+        return 0.0
+
+    def _apply_boundary_conditions(self, u: np.ndarray, lvl=None):
+        """Apply boundary conditions. No-op for sequential. Override for MPI."""
         pass
 
     def _compute_l2_norm(self, u: np.ndarray, u_exact: np.ndarray) -> float:
         """Compute L2 norm. Override for MPI allreduce."""
         diff = u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
         return np.sqrt(np.sum(diff**2) * self.h**3)
+
+    def _reset(self):
+        """Reset timers and timeseries."""
+        self._time_compute = 0.0
+        self._time_halo = 0.0
+        self.timeseries.clear()
+
+    def _finalize(self, wall_time: float):
+        """Finalize metrics after solve."""
+        if self._is_root():
+            self.metrics.final_residual = self.timeseries.residual_history[-1]
+            self.metrics.total_compute_time = self._time_compute
+            self.metrics.total_halo_time = self._time_halo
+        self.metrics.observed_numba_threads = self._get_kernel().observed_numba_threads
+        self._compute_metrics(wall_time, self.metrics.iterations)
 
     def _compute_metrics(self, wall_time: float, iterations: int):
         """Compute performance metrics."""

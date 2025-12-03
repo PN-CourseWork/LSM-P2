@@ -170,34 +170,15 @@ class FMGMPISolver(FMGSolver):
         if lvl.grid is not None:
             lvl.grid.apply_boundary_conditions(u)
 
-    def _residual_norm(self, r: np.ndarray, lvl: GridLevel = None) -> float:
-        """Compute global RMS residual norm via allreduce."""
-        interior = r[1:-1, 1:-1, 1:-1]
-        local_sum_sq = np.sum(interior**2)
-        local_pts = float(interior.size)
+    def _reduce_sum(self, local_sum: float) -> float:
+        """Reduce sum via MPI Allreduce."""
+        global_sum = np.zeros(1)
+        self.comm.Allreduce(np.array([local_sum]), global_sum, op=MPI.SUM)
+        return global_sum[0]
 
-        local_data = np.array([local_sum_sq, local_pts])
-        global_data = np.empty(2)
-        self.comm.Allreduce(local_data, global_data, op=MPI.SUM)
-
-        return np.sqrt(global_data[0]) / global_data[1]
-
-    def _finalize(self, wall_time: float):
-        """Finalize metrics (rank 0 only for some metrics)."""
-        if self.rank == 0:
-            self.metrics.final_residual = (
-                self.timeseries.residual_history[-1]
-                if self.timeseries.residual_history
-                else 0.0
-            )
-            self.metrics.total_compute_time = self._time_compute
-            self.metrics.total_halo_time = self._time_halo
-
-        self._compute_metrics(wall_time, self.metrics.iterations)
-
-    def _get_solution_array(self) -> np.ndarray:
-        """Return the solution array (finest level)."""
-        return self.levels[0].u
+    def _is_root(self) -> bool:
+        """Only rank 0 logs metrics."""
+        return self.rank == 0
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution (parallel).

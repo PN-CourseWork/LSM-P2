@@ -1,6 +1,5 @@
 """Full Multigrid (FMG) Solver - Sequential."""
 
-import time
 from typing import List
 
 import numpy as np
@@ -61,10 +60,6 @@ class FMGSolver(BaseSolver):
         self.levels: List[GridLevel] = []
         self._build_hierarchy()
 
-        # Timing accumulators
-        self._time_compute = 0.0
-        self._time_halo = 0.0
-
     def _infer_levels(self, N: int) -> int:
         """Determine number of grid levels."""
         levels = 1
@@ -123,18 +118,6 @@ class FMGSolver(BaseSolver):
         """Return the kernel for warmup (finest level)."""
         return self.levels[0].kernel
 
-    def _get_time(self) -> float:
-        """Get current time. Override for MPI timing."""
-        return time.perf_counter()
-
-    def _sync_halos(self, u, lvl) -> float:
-        """Sync halo regions. No-op for sequential."""
-        return 0.0
-
-    def _apply_boundary_conditions(self, u, lvl):
-        """Apply boundary conditions. No-op for sequential (arrays include boundaries)."""
-        pass
-
     def solve(self) -> GlobalMetrics:
         """Full Multigrid: solve from coarsest to finest."""
         self._reset()
@@ -192,8 +175,8 @@ class FMGSolver(BaseSolver):
         for _ in range(self.n_smooth):
             self._smooth(lvl)
 
-        # Compute residual
-        self._compute_residual(lvl)
+        # Compute algebraic residual
+        self._compute_alg_res(lvl)
 
         # Get residual norm on finest level
         residual = self._residual_norm(lvl.r, lvl) if level == 0 else 0.0
@@ -237,8 +220,8 @@ class FMGSolver(BaseSolver):
         self._time_compute += self._get_time() - t0
         lvl.u, lvl.u_temp = lvl.u_temp, lvl.u
 
-    def _compute_residual(self, lvl: GridLevel):
-        """Compute r = f - Au."""
+    def _compute_alg_res(self, lvl: GridLevel):
+        """Compute algebraic residual r = f - Au."""
         u, f, r = lvl.u, lvl.f, lvl.r
         h2 = lvl.h * lvl.h
 
@@ -265,31 +248,14 @@ class FMGSolver(BaseSolver):
             self._smooth(lvl)
 
     def _residual_norm(self, r: np.ndarray, lvl: GridLevel = None) -> float:
-        """Compute RMS residual norm. Override for MPI allreduce."""
+        """Compute RMS residual norm."""
         interior = r[1:-1, 1:-1, 1:-1]
-        n_pts = interior.size
-        return np.sqrt(np.sum(interior**2)) / n_pts
+        local_sum_sq = np.sum(interior**2)
+        local_pts = float(interior.size)
 
-    def _reset(self):
-        """Reset timers and timeseries."""
-        self._time_compute = 0.0
-        self._time_halo = 0.0
-        self.timeseries.clear()
-
-    def _finalize(self, wall_time: float):
-        """Finalize metrics."""
-        self.metrics.final_residual = (
-            self.timeseries.residual_history[-1]
-            if self.timeseries.residual_history
-            else 0.0
-        )
-        self.metrics.total_compute_time = self._time_compute
-        self.metrics.total_halo_time = self._time_halo
-        # Get observed numba threads from finest level kernel
-        self.metrics.observed_numba_threads = self.levels[
-            0
-        ].kernel.observed_numba_threads
-        self._compute_metrics(wall_time, self.metrics.iterations)
+        global_sum_sq = self._reduce_sum(local_sum_sq)
+        global_pts = self._reduce_sum(local_pts)
+        return np.sqrt(global_sum_sq) / global_pts
 
     def _get_solution_array(self) -> np.ndarray:
         """Return the solution array (finest level)."""

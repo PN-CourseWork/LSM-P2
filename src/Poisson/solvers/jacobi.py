@@ -1,6 +1,5 @@
 """Sequential Jacobi Solver."""
 
-import time
 import numpy as np
 
 from .base import BaseSolver
@@ -56,7 +55,7 @@ class JacobiSolver(BaseSolver):
 
     def solve(self):
         """Run Jacobi iteration."""
-        self._reset_timeseries()
+        self._reset()
 
         n_interior = (self.N - 2) ** 3
         u, u_old = self.u, self.u_old
@@ -65,20 +64,18 @@ class JacobiSolver(BaseSolver):
 
         for i in range(self.max_iter):
             # Sync halos (no-op for sequential)
-            halo_time = self._sync_halos(u_old)
+            t0 = self._get_time()
+            self._sync_halos(u_old)
+            self._time_halo += self._get_time() - t0
 
             # Compute step
             t0 = self._get_time()
             self.kernel.step(u_old, u, self.f)
             self._apply_boundary_conditions(u)
-            compute_time = self._get_time() - t0
+            self._time_compute += self._get_time() - t0
 
-            self.timeseries.compute_times.append(compute_time)
-            if halo_time > 0:
-                self.timeseries.halo_times.append(halo_time)
-
-            # Compute residual
-            residual = self._compute_residual(u, u_old, n_interior)
+            # Compute iterative residual
+            residual = self._compute_iter_res(u, u_old, n_interior)
             self.timeseries.residual_history.append(residual)
 
             if residual < self.tolerance:
@@ -92,42 +89,19 @@ class JacobiSolver(BaseSolver):
             self.metrics.iterations = self.max_iter
             self.metrics.converged = False
 
+        # Save final solution (u_old has it after swap)
+        self.u = u_old
+
         wall_time = self._get_time() - t_start
-        self._finalize(wall_time, u_old)
+        self._finalize(wall_time)
 
         return self.metrics
 
-    def _reset_timeseries(self):
-        """Clear timeseries data."""
-        self.timeseries.clear()
-
-    def _get_time(self) -> float:
-        """Get current time. Override for MPI timing."""
-        return time.perf_counter()
-
-    def _sync_halos(self, u: np.ndarray) -> float:
-        """Sync halo regions. No-op for sequential."""
-        return 0.0
-
-    def _apply_boundary_conditions(self, u: np.ndarray):
-        """Apply boundary conditions. No-op for sequential (zeros already)."""
-        pass
-
-    def _compute_residual(
+    def _compute_iter_res(
         self, u: np.ndarray, u_old: np.ndarray, n_interior: int
     ) -> float:
-        """Compute global residual norm."""
+        """Compute iterative residual ||u - u_old||."""
         diff = u[1:-1, 1:-1, 1:-1] - u_old[1:-1, 1:-1, 1:-1]
-        return np.sqrt(np.sum(diff**2)) / n_interior
-
-    def _finalize(self, wall_time: float, u_solution: np.ndarray):
-        """Finalize metrics after solve."""
-        self.u = u_solution
-        self.metrics.final_residual = self.timeseries.residual_history[-1]
-        self.metrics.total_compute_time = sum(self.timeseries.compute_times)
-        self.metrics.observed_numba_threads = self.kernel.observed_numba_threads
-        self._compute_metrics(wall_time, self.metrics.iterations)
-
-    def _get_solution_array(self) -> np.ndarray:
-        """Return the solution array."""
-        return self.u
+        local_sum = np.sum(diff**2)
+        global_sum = self._reduce_sum(local_sum)
+        return np.sqrt(global_sum) / n_interior

@@ -55,48 +55,28 @@ class JacobiMPISolver(JacobiSolver):
         """Get current time using MPI.Wtime()."""
         return MPI.Wtime()
 
-    def _sync_halos(self, u: np.ndarray) -> float:
+    def _sync_halos(self, u: np.ndarray, lvl=None) -> float:
         """Sync halo regions with neighbors."""
         t0 = MPI.Wtime()
         self.grid.sync_halos(u)
         return MPI.Wtime() - t0
 
-    def _apply_boundary_conditions(self, u: np.ndarray):
+    def _apply_boundary_conditions(self, u: np.ndarray, lvl=None):
         """Apply Dirichlet boundary conditions at physical boundaries."""
         self.grid.apply_boundary_conditions(u)
 
-    def _compute_residual(
-        self, u: np.ndarray, u_old: np.ndarray, n_interior: int
-    ) -> float:
-        """Compute global residual norm via MPI allreduce."""
-        diff = u[1:-1, 1:-1, 1:-1] - u_old[1:-1, 1:-1, 1:-1]
-        local_sum = np.sum(diff**2)
-
+    def _reduce_sum(self, local_sum: float) -> float:
+        """Reduce sum via MPI Allreduce."""
         global_sum = np.zeros(1)
         self.comm.Allreduce(np.array([local_sum]), global_sum, op=MPI.SUM)
+        return global_sum[0]
 
-        return np.sqrt(global_sum[0]) / n_interior
-
-    def _finalize(self, wall_time: float, u_solution: np.ndarray):
-        """Finalize metrics after solve (rank 0 only for some metrics)."""
-        self.u = u_solution
-
-        if self.rank == 0:
-            self.metrics.final_residual = self.timeseries.residual_history[-1]
-            self.metrics.total_compute_time = sum(self.timeseries.compute_times)
-            self.metrics.total_halo_time = sum(self.timeseries.halo_times)
-
-        self._compute_metrics(wall_time, self.metrics.iterations)
-
-    def _get_solution_array(self) -> np.ndarray:
-        """Return the solution array."""
-        return self.u
+    def _is_root(self) -> bool:
+        """Only rank 0 logs metrics."""
+        return self.rank == 0
 
     def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution (parallel).
-
-        Overrides base to use grid's parallel implementation.
-        """
+        """Compute L2 error using grid's parallel implementation."""
         l2_error = self.grid.compute_l2_error(self.u)
         self.metrics.final_error = l2_error
         return l2_error
