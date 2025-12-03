@@ -1,6 +1,6 @@
 #!/bin/bash
 #BSUB -J fmg_weak[1-16]
-#BSUB -q hpc
+#BSUB -q hpcintro
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=4GB]"
