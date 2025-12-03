@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 from mpi4py import MPI
 
-from ..datastructures import LocalParams, RankGeometry
+from ..datastructures import LocalParams
 from .decomposition import CartesianDecomposition
 from .halo import create_halo_exchanger
 
@@ -49,12 +49,12 @@ class DistributedGrid:
     def __init__(
         self,
         N: int,
-        comm: MPI.Comm = None,
+        comm: MPI.Comm = MPI.COMM_WORLD,
         strategy: str = "sliced",
         halo_exchange: str = "numpy",
     ):
         self.N = N
-        self.comm = comm if comm is not None else MPI.COMM_WORLD
+        self.comm = comm
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
         self.strategy = strategy
@@ -107,6 +107,14 @@ class DistributedGrid:
 
     def get_rank_info(self) -> LocalParams:
         """Get topology info for this rank (for MLflow artifact)."""
+        import os
+
+        # Get CPU affinity (cores this rank can run on)
+        try:
+            cpu_ids = sorted(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            cpu_ids = None  # Not available on all platforms (e.g., macOS)
+
         return LocalParams(
             rank=self.rank,
             hostname=MPI.Get_processor_name(),
@@ -115,50 +123,30 @@ class DistributedGrid:
             local_shape=self.local_shape,
             global_start=self.global_start,
             global_end=self.global_end,
+            cpu_ids=cpu_ids,
         )
 
-    def fill_source_term(self, f: np.ndarray):
-        """Fill source term for sinusoidal test problem.
-
-        f = 3pi^2 sin(pi*x) sin(pi*y) sin(pi*z)
-        """
-        h = self.h
+    def _get_physical_coords(self):
+        """Compute physical coordinate meshgrid for local interior."""
         gs = self.global_start
         nz, ny, nx = self.local_shape
 
-        z_global = np.arange(gs[0], gs[0] + nz)
-        y_global = np.arange(gs[1], gs[1] + ny)
-        x_global = np.arange(gs[2], gs[2] + nx)
+        z_phys = -1.0 + np.arange(gs[0], gs[0] + nz) * self.h
+        y_phys = -1.0 + np.arange(gs[1], gs[1] + ny) * self.h
+        x_phys = -1.0 + np.arange(gs[2], gs[2] + nx) * self.h
 
-        z_phys = -1.0 + z_global * h
-        y_phys = -1.0 + y_global * h
-        x_phys = -1.0 + x_global * h
+        return np.meshgrid(z_phys, y_phys, x_phys, indexing="ij")
 
-        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing="ij")
-
+    def fill_source_term(self, f: np.ndarray):
+        """Fill source term: f = 3pi^2 sin(pi*x) sin(pi*y) sin(pi*z)."""
+        Z, Y, X = self._get_physical_coords()
         f[1:-1, 1:-1, 1:-1] = (
             3 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
         )
 
     def compute_exact_solution(self, u: np.ndarray):
-        """Fill exact solution for validation.
-
-        u = sin(pi*x) sin(pi*y) sin(pi*z)
-        """
-        h = self.h
-        gs = self.global_start
-        nz, ny, nx = self.local_shape
-
-        z_global = np.arange(gs[0], gs[0] + nz)
-        y_global = np.arange(gs[1], gs[1] + ny)
-        x_global = np.arange(gs[2], gs[2] + nx)
-
-        z_phys = -1.0 + z_global * h
-        y_phys = -1.0 + y_global * h
-        x_phys = -1.0 + x_global * h
-
-        Z, Y, X = np.meshgrid(z_phys, y_phys, x_phys, indexing="ij")
-
+        """Fill exact solution: u = sin(pi*x) sin(pi*y) sin(pi*z)."""
+        Z, Y, X = self._get_physical_coords()
         u[1:-1, 1:-1, 1:-1] = np.sin(np.pi * X) * np.sin(np.pi * Y) * np.sin(np.pi * Z)
 
     def compute_l2_error(self, u: np.ndarray) -> float:
@@ -174,47 +162,19 @@ class DistributedGrid:
 
         return float(np.sqrt(self.h**3 * global_sq_error[0]))
 
-    def interior_slice(self):
-        """Return slice tuple for interior points."""
-        return (slice(1, -1), slice(1, -1), slice(1, -1))
-
     def get_halo_size_bytes(self) -> int:
         """Calculate total bytes transferred per halo exchange."""
         nz, ny, nx = self.local_shape
-        bytes_per_element = 8  # float64
+        # Face sizes for each axis: z-face=(ny*nx), y-face=(nz*nx), x-face=(nz*ny)
+        face_sizes = [ny * nx, nz * nx, nz * ny]
+        axes = ["z", "y", "x"]
 
-        total_bytes = 0
-
-        # Z-faces
-        if self.neighbors["z_lower"] is not None:
-            total_bytes += ny * nx * bytes_per_element * 2
-        if self.neighbors["z_upper"] is not None:
-            total_bytes += ny * nx * bytes_per_element * 2
-
-        # Y-faces
-        if self.neighbors["y_lower"] is not None:
-            total_bytes += nz * nx * bytes_per_element * 2
-        if self.neighbors["y_upper"] is not None:
-            total_bytes += nz * nx * bytes_per_element * 2
-
-        # X-faces
-        if self.neighbors["x_lower"] is not None:
-            total_bytes += nz * ny * bytes_per_element * 2
-        if self.neighbors["x_upper"] is not None:
-            total_bytes += nz * ny * bytes_per_element * 2
-
-        return total_bytes
-
-    def get_geometry(self) -> RankGeometry:
-        """Return geometry info for this rank."""
-        return RankGeometry(
-            rank=self.rank,
-            local_shape=self.local_shape,
-            halo_shape=self.halo_shape,
-            global_start=self.global_start,
-            global_end=self.global_end,
-            neighbors=self.neighbors.copy(),
-        )
+        total = 0
+        for axis, face_size in zip(axes, face_sizes):
+            for side in ["lower", "upper"]:
+                if self.neighbors.get(f"{axis}_{side}") is not None:
+                    total += face_size * 8 * 2  # float64, send+recv
+        return total
 
     def coarsen(self) -> "DistributedGrid":
         """Create a coarsened grid for multigrid.

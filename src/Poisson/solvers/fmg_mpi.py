@@ -4,12 +4,12 @@ import numpy as np
 from mpi4py import MPI
 
 from .fmg import FMGSolver
+from .mpi_mixin import MPISolverMixin
 from ..datastructures import GridLevel
-from ..kernels import NumPyKernel, NumbaKernel
 from ..mpi.grid import DistributedGrid
 
 
-class FMGMPISolver(FMGSolver):
+class FMGMPISolver(MPISolverMixin, FMGSolver):
     """Parallel Full Multigrid solver with MPI domain decomposition.
 
     Extends FMGSolver with distributed grids and halo exchange.
@@ -23,18 +23,6 @@ class FMGMPISolver(FMGSolver):
         Decomposition: 'sliced' or 'cubic' (default: 'sliced').
     communicator : str
         Halo exchange: 'numpy' or 'custom' (default: 'custom').
-    n_smooth : int
-        Pre/post smoothing iterations (default: 3).
-    fmg_post_vcycles : int
-        V-cycles after FMG phase (default: 1).
-    use_numba : bool
-        Use Numba JIT kernel (default: False).
-    omega : float
-        Relaxation factor (default: 2/3).
-    max_iter : int
-        Maximum V-cycles (default: 100).
-    tolerance : float
-        Convergence tolerance (default: 1e-6).
     """
 
     def __init__(
@@ -45,9 +33,7 @@ class FMGMPISolver(FMGSolver):
         **kwargs,
     ):
         # MPI setup before parent init
-        self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.Get_rank()
-        self.size = self.comm.Get_size()
+        self._init_mpi()
 
         self.strategy = strategy
         self.communicator = communicator
@@ -55,15 +41,9 @@ class FMGMPISolver(FMGSolver):
         # Parent init builds hierarchy (calls _build_hierarchy)
         super().__init__(N, **kwargs)
 
-        # Store config info from finest level
-        fine = self.levels[0]
-        self.local_shape = fine.grid.local_shape
-        self.halo_size_mb = fine.grid.get_halo_size_bytes() / (1024 * 1024)
-
     def _infer_levels(self, N: int) -> int:
         """Determine number of levels considering MPI constraints."""
-        # Minimum local interior for restriction/prolongation
-        min_local = 3
+        min_local = 3  # Minimum local interior for restriction/prolongation
 
         if self.size > 1:
             if self.strategy == "cubic":
@@ -111,8 +91,6 @@ class FMGMPISolver(FMGSolver):
             N_values.append(N_current)
             N_current = (N_current - 1) // 2 + 1
 
-        KernelClass = NumbaKernel if self.use_numba else NumPyKernel
-
         for level, N in enumerate(N_values):
             h = 2.0 / (N - 1)
 
@@ -132,8 +110,6 @@ class FMGMPISolver(FMGSolver):
             grid.apply_boundary_conditions(u)
             grid.apply_boundary_conditions(u_temp)
 
-            kernel = KernelClass(N=N, omega=self.omega)
-
             lvl = GridLevel(
                 level=level,
                 N=N,
@@ -142,18 +118,14 @@ class FMGMPISolver(FMGSolver):
                 u_temp=u_temp,
                 f=f,
                 r=r,
-                kernel=kernel,
+                kernel=None,  # Single kernel at solver level
                 grid=grid,
             )
             self.levels.append(lvl)
 
     # ========================================================================
-    # Hook method overrides for MPI
+    # Hook method overrides for MPI (grid-level specific)
     # ========================================================================
-
-    def _get_time(self) -> float:
-        """Get current time using MPI.Wtime()."""
-        return MPI.Wtime()
 
     def _sync_halos(self, u: np.ndarray, lvl: GridLevel) -> float:
         """Sync halo regions with neighbors."""
@@ -170,21 +142,8 @@ class FMGMPISolver(FMGSolver):
         if lvl.grid is not None:
             lvl.grid.apply_boundary_conditions(u)
 
-    def _reduce_sum(self, local_sum: float) -> float:
-        """Reduce sum via MPI Allreduce."""
-        global_sum = np.zeros(1)
-        self.comm.Allreduce(np.array([local_sum]), global_sum, op=MPI.SUM)
-        return global_sum[0]
-
-    def _is_root(self) -> bool:
-        """Only rank 0 logs metrics."""
-        return self.rank == 0
-
     def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution (parallel).
-
-        Overrides base to use grid's parallel implementation.
-        """
+        """Compute L2 error against analytical solution (parallel)."""
         fine = self.levels[0]
         l2_error = fine.grid.compute_l2_error(fine.u)
         self.metrics.final_error = l2_error

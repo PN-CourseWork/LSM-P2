@@ -40,16 +40,14 @@ def _jacobi_step_numba(
 class NumPyKernel:
     """NumPy-based Jacobi kernel."""
 
-    def __init__(self, N: int, omega: float, specified_numba_threads: int = 1):
-        self.N = N
+    def __init__(self, omega: float, specified_numba_threads: int = 1):
         self.omega = omega
-        self.h = 2.0 / (N - 1)
         self.observed_numba_threads = None  # Not applicable for NumPy
 
-    def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray):
+    def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float):
         """Perform one Jacobi iteration step."""
         c = 1.0 / 6.0
-        h2 = self.h * self.h
+        h2 = h * h
 
         u[1:-1, 1:-1, 1:-1] = (
             self.omega
@@ -74,10 +72,8 @@ class NumPyKernel:
 class NumbaKernel:
     """Numba JIT-compiled Jacobi kernel."""
 
-    def __init__(self, N: int, omega: float, specified_numba_threads: int = 1):
-        self.N = N
+    def __init__(self, omega: float, specified_numba_threads: int = 1):
         self.omega = omega
-        self.h = 2.0 / (N - 1)
 
         # Set requested threads (may be clamped by NUMBA_NUM_THREADS env var)
         if specified_numba_threads is not None:
@@ -86,9 +82,9 @@ class NumbaKernel:
         # Record what Numba actually reports
         self.observed_numba_threads = numba.get_num_threads()
 
-    def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray):
+    def step(self, uold: np.ndarray, u: np.ndarray, f: np.ndarray, h: float):
         """Perform one Jacobi iteration step."""
-        _jacobi_step_numba(uold, u, f, self.h, self.omega)
+        _jacobi_step_numba(uold, u, f, h, self.omega)
 
     def warmup(self, warmup_size: int = 10):
         """Trigger JIT compilation with a small problem."""

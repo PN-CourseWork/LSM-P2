@@ -135,6 +135,8 @@ class LocalParams:
     local_shape: Optional[Tuple[int, int, int]] = None
     global_start: Optional[Tuple[int, int, int]] = None
     global_end: Optional[Tuple[int, int, int]] = None
+    # CPU binding info for socket/node visualization
+    cpu_ids: Optional[List[int]] = None  # Cores this rank can run on
 
 
 @dataclass

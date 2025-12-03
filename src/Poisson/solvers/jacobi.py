@@ -36,22 +36,17 @@ class JacobiSolver(BaseSolver):
         """Initialize the Jacobi kernel."""
         if self.use_numba:
             self.kernel = NumbaKernel(
-                N=self.N,
                 omega=self.omega,
                 specified_numba_threads=self.specified_numba_threads,
             )
         else:
-            self.kernel = NumPyKernel(N=self.N, omega=self.omega)
+            self.kernel = NumPyKernel(omega=self.omega)
 
     def _init_arrays(self):
         """Allocate solution arrays."""
         self.u = np.zeros((self.N, self.N, self.N), dtype=np.float64)
         self.u_old = np.zeros((self.N, self.N, self.N), dtype=np.float64)
         self.f = sinusoidal_source_term(self.N)
-
-    def _get_kernel(self):
-        """Return the kernel for warmup."""
-        return self.kernel
 
     def solve(self):
         """Run Jacobi iteration."""
@@ -60,6 +55,7 @@ class JacobiSolver(BaseSolver):
         n_interior = (self.N - 2) ** 3
         u, u_old = self.u, self.u_old
 
+        self._barrier()  # Sync all ranks before timing
         t_start = self._get_time()
 
         for i in range(self.max_iter):
@@ -70,7 +66,7 @@ class JacobiSolver(BaseSolver):
 
             # Compute step
             t0 = self._get_time()
-            self.kernel.step(u_old, u, self.f)
+            self.kernel.step(u_old, u, self.f, self.h)
             self._apply_boundary_conditions(u)
             self._time_compute += self._get_time() - t0
 

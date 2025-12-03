@@ -43,12 +43,7 @@ class BaseSolver(ABC):
 
     def warmup(self, warmup_size: int = 10):
         """Warmup kernel (trigger Numba JIT if used)."""
-        self._get_kernel().warmup(warmup_size=warmup_size)
-
-    @abstractmethod
-    def _get_kernel(self):
-        """Return the kernel for warmup. Override in subclasses."""
-        pass
+        self.kernel.warmup(warmup_size=warmup_size)
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution.
@@ -169,6 +164,10 @@ class BaseSolver(ABC):
         """Apply boundary conditions. No-op for sequential. Override for MPI."""
         pass
 
+    def _barrier(self):
+        """Synchronize all ranks before timing. No-op for sequential."""
+        pass
+
     def _compute_l2_norm(self, u: np.ndarray, u_exact: np.ndarray) -> float:
         """Compute L2 norm. Override for MPI allreduce."""
         diff = u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
@@ -186,7 +185,7 @@ class BaseSolver(ABC):
             self.metrics.final_residual = self.timeseries.residual_history[-1]
             self.metrics.total_compute_time = self._time_compute
             self.metrics.total_halo_time = self._time_halo
-        self.metrics.observed_numba_threads = self._get_kernel().observed_numba_threads
+        self.metrics.observed_numba_threads = self.kernel.observed_numba_threads
         self._compute_metrics(wall_time, self.metrics.iterations)
 
     def _compute_metrics(self, wall_time: float, iterations: int):

@@ -33,9 +33,7 @@ class CartesianDecomposition:
         self.pz, self.py, self.px = self.dims
 
         # Create Cartesian topology
-        self.cart_comm, self._cart_coords, self._proc_coords = (
-            self._create_cartesian_topology()
-        )
+        self.cart_comm, self._proc_coords = self._create_cartesian_topology()
 
         # Discover neighbors
         self.neighbors = self._find_neighbors()
@@ -68,13 +66,11 @@ class CartesianDecomposition:
             dims=cart_dims, periods=periods, reorder=False
         )
 
-        # Get coordinates: [ix, iy, iz]
+        # Get coordinates [ix, iy, iz] and convert to [iz, iy, ix] for array indexing
         cart_coords = cart_comm.Get_coords(self.rank)
-
-        # Convert to [iz, iy, ix] for array indexing
         proc_coords = (cart_coords[2], cart_coords[1], cart_coords[0])
 
-        return cart_comm, cart_coords, proc_coords
+        return cart_comm, proc_coords
 
     def _find_neighbors(self) -> dict[str, int | None]:
         """Use Cart_shift to find neighbor ranks."""

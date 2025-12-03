@@ -56,6 +56,9 @@ class FMGSolver(BaseSolver):
         # Infer number of levels
         self.n_levels = self._infer_levels(N)
 
+        # Initialize kernel (single kernel for all levels)
+        self._init_kernel()
+
         # Build grid hierarchy
         self.levels: List[GridLevel] = []
         self._build_hierarchy()
@@ -84,6 +87,16 @@ class FMGSolver(BaseSolver):
 
         return levels
 
+    def _init_kernel(self):
+        """Initialize the Jacobi kernel."""
+        if self.use_numba:
+            self.kernel = NumbaKernel(
+                omega=self.omega,
+                specified_numba_threads=self.specified_numba_threads,
+            )
+        else:
+            self.kernel = NumPyKernel(omega=self.omega)
+
     def _build_hierarchy(self):
         """Allocate arrays for all grid levels."""
         N_values = []
@@ -92,15 +105,8 @@ class FMGSolver(BaseSolver):
             N_values.append(N_current)
             N_current = (N_current - 1) // 2 + 1
 
-        KernelClass = NumbaKernel if self.use_numba else NumPyKernel
-
         for level, N in enumerate(N_values):
             h = 2.0 / (N - 1)
-            kernel = KernelClass(
-                N=N,
-                omega=self.omega,
-                specified_numba_threads=self.specified_numba_threads,
-            )
 
             lvl = GridLevel(
                 level=level,
@@ -110,18 +116,15 @@ class FMGSolver(BaseSolver):
                 u_temp=np.zeros((N, N, N), dtype=np.float64),
                 f=sinusoidal_source_term(N),
                 r=np.zeros((N, N, N), dtype=np.float64),
-                kernel=kernel,
+                kernel=None,  # Single kernel at solver level
             )
             self.levels.append(lvl)
-
-    def _get_kernel(self):
-        """Return the kernel for warmup (finest level)."""
-        return self.levels[0].kernel
 
     def solve(self) -> GlobalMetrics:
         """Full Multigrid: solve from coarsest to finest."""
         self._reset()
 
+        self._barrier()  # Sync all ranks before timing
         t_start = self._get_time()
 
         # Clear all solution arrays
@@ -148,11 +151,7 @@ class FMGSolver(BaseSolver):
             fine.u[1:-1, 1:-1, 1:-1] = fine.r[1:-1, 1:-1, 1:-1]
             self._apply_boundary_conditions(fine.u, fine)
 
-            # Smooth
-            for _ in range(self.n_smooth):
-                self._smooth(fine)
-
-            # V-cycle from this level
+            # V-cycle from this level (includes pre-smoothing)
             residual = self._v_cycle(level)
 
         # Post V-cycles with residual tracking
@@ -215,7 +214,7 @@ class FMGSolver(BaseSolver):
         """One Jacobi smoothing step."""
         self._sync_halos(lvl.u, lvl)
         t0 = self._get_time()
-        lvl.kernel.step(lvl.u, lvl.u_temp, lvl.f)
+        self.kernel.step(lvl.u, lvl.u_temp, lvl.f, lvl.h)
         self._apply_boundary_conditions(lvl.u_temp, lvl)
         self._time_compute += self._get_time() - t0
         lvl.u, lvl.u_temp = lvl.u_temp, lvl.u
