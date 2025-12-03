@@ -23,6 +23,9 @@ export NUMBA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export MPI_OPTIONS="--map-by ppr:12:package --bind-to core"
 
+# Suppress PMIX warnings during MPI finalization
+export PMIX_MCA_gds=hash
+
 MAX_ITER=50
 
 # =============================================================================

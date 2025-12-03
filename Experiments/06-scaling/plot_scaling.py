@@ -150,33 +150,17 @@ def main(cfg: DictConfig):
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
     prefix = cfg.mlflow.get("project_prefix", "")
 
-    # Load all scaling data from the main experiments
-    df_jacobi = load_scaling_data("scaling", prefix)
-    df_fmg = load_scaling_data("fmg_scaling", prefix)
+    # Load strong scaling data from multiple experiment names
+    strong_experiments = ["strong_scaling_jacobi", "strong_scaling_fmg", "scaling", "fmg_scaling"]
+    strong_dfs = [load_scaling_data(exp, prefix) for exp in strong_experiments]
+    df_strong = pd.concat([df for df in strong_dfs if not df.empty], ignore_index=True)
+
+    # Load weak scaling data from dedicated experiments
+    weak_experiments = ["weak_scaling_jacobi", "weak_scaling_fmg"]
+    weak_dfs = [load_scaling_data(exp, prefix) for exp in weak_experiments]
+    df_weak = pd.concat([df for df in weak_dfs if not df.empty], ignore_index=True)
 
     print(f"\nLoaded:")
-    print(f"  Jacobi runs: {len(df_jacobi)}")
-    print(f"  FMG runs: {len(df_fmg)}")
-
-    # Combine all data
-    df_all = pd.concat([df_jacobi, df_fmg], ignore_index=True)
-
-    # Weak scaling pairs: (N, n_ranks) with ~127³ points per rank
-    # 129@1, 257@8, 513@64
-    WEAK_SCALING_PAIRS = {(129, 1), (257, 8), (513, 64)}
-
-    # Separate strong and weak scaling based on (N, n_ranks) pattern
-    def is_weak_scaling(row):
-        return (int(row["N"]), int(row["n_ranks"])) in WEAK_SCALING_PAIRS
-
-    if not df_all.empty:
-        df_all["is_weak"] = df_all.apply(is_weak_scaling, axis=1)
-        df_strong = df_all[~df_all["is_weak"]].copy()
-        df_weak = df_all[df_all["is_weak"]].copy()
-    else:
-        df_strong = df_all
-        df_weak = pd.DataFrame()
-
     print(f"  Strong scaling runs: {len(df_strong)}")
     print(f"  Weak scaling runs: {len(df_weak)}")
 
@@ -226,9 +210,12 @@ def main(cfg: DictConfig):
                 ax.plot(P_range_parallel, P_range_parallel, "k--", alpha=0.5, linewidth=1, label="Ideal")
                 ax.set_xscale("log")
                 ax.set_yscale("log")
-                # Set explicit ticks at actual rank values
+                # Set explicit ticks at actual rank values, hide default log ticks
                 ax.set_xticks(P_range_parallel)
+                ax.set_xticks([], minor=True)
                 ax.set_xticklabels([str(p) for p in P_range_parallel], fontsize=8)
+                ax.set_yticks(ax.get_yticks())
+                ax.set_yticks([], minor=True)
                 ax.set_xlim(min(P_range_parallel) * 0.8, max(P_range_parallel) * 1.2)
                 ax.grid(True, alpha=0.3)
             g.set_axis_labels("Number of Ranks", "Speedup S(P)")
@@ -258,8 +245,9 @@ def main(cfg: DictConfig):
             )
             for ax in g.axes.flat:
                 ax.set_xscale("log")
-                # Set explicit ticks at actual rank values
+                # Set explicit ticks at actual rank values, hide default log ticks
                 ax.set_xticks(P_range)
+                ax.set_xticks([], minor=True)
                 ax.set_xticklabels([str(p) for p in P_range], fontsize=8)
                 ax.set_xlim(min(P_range) * 0.8, max(P_range) * 1.2)
                 ax.grid(True, alpha=0.3)
