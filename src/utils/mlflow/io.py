@@ -221,7 +221,7 @@ def load_runs(
     exclude_parent_runs: bool = True,
     project_prefix: str = "/Shared/LSM-PoissonMPI-v3",
 ) -> pd.DataFrame:
-    """Load runs from an MLflow experiment.
+    """Load runs from ALL MLflow experiments matching the name.
 
     Parameters
     ----------
@@ -236,7 +236,20 @@ def load_runs(
     """
     # Apply prefix for Databricks
     if mlflow.get_tracking_uri() == "databricks" and not experiment.startswith("/"):
-        experiment = f"{project_prefix}/{experiment}"
+        full_experiment_name = f"{project_prefix}/{experiment}"
+    else:
+        full_experiment_name = experiment
+
+    # Find ALL experiments matching this name (there can be duplicates)
+    client = get_mlflow_client()
+    all_experiments = client.search_experiments(
+        filter_string=f"name = '{full_experiment_name}'"
+    )
+
+    if not all_experiments:
+        return pd.DataFrame()
+
+    experiment_ids = [exp.experiment_id for exp in all_experiments]
 
     # Build filter string
     filters = []
@@ -245,9 +258,9 @@ def load_runs(
 
     filter_string = " and ".join(filters) if filters else ""
 
-    # Fetch runs
+    # Fetch runs from ALL matching experiments
     df = mlflow.search_runs(
-        experiment_names=[experiment],
+        experiment_ids=experiment_ids,
         filter_string=filter_string,
         order_by=["start_time DESC"],
     )

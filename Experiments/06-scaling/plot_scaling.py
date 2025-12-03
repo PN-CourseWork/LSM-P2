@@ -200,8 +200,9 @@ def main(cfg: DictConfig):
         else:
             print(f"Strong scaling points: {len(df_ss)}")
 
-            # Get unique rank counts for x-axis
+            # Get unique rank counts for x-axis ticks
             P_range = sorted(df_ss["n_ranks"].unique())
+            P_range_parallel = [p for p in P_range if p > 1]
 
             plot_num = 1
 
@@ -221,9 +222,14 @@ def main(cfg: DictConfig):
                 aspect=1.3,
             )
             for ax in g.axes.flat:
-                ax.plot(P_range, P_range, "k--", alpha=0.5, linewidth=1, label="Ideal")
+                # Ideal scaling line (only for parallel ranks)
+                ax.plot(P_range_parallel, P_range_parallel, "k--", alpha=0.5, linewidth=1, label="Ideal")
                 ax.set_xscale("log")
                 ax.set_yscale("log")
+                # Set explicit ticks at actual rank values
+                ax.set_xticks(P_range_parallel)
+                ax.set_xticklabels([str(p) for p in P_range_parallel], fontsize=8)
+                ax.set_xlim(min(P_range_parallel) * 0.8, max(P_range_parallel) * 1.2)
                 ax.grid(True, alpha=0.3)
             g.set_axis_labels("Number of Ranks", "Speedup S(P)")
             g.figure.suptitle("Strong Scaling: Speedup", y=1.02)
@@ -252,6 +258,10 @@ def main(cfg: DictConfig):
             )
             for ax in g.axes.flat:
                 ax.set_xscale("log")
+                # Set explicit ticks at actual rank values
+                ax.set_xticks(P_range)
+                ax.set_xticklabels([str(p) for p in P_range], fontsize=8)
+                ax.set_xlim(min(P_range) * 0.8, max(P_range) * 1.2)
                 ax.grid(True, alpha=0.3)
             g.set_axis_labels("Number of Ranks", "Throughput (MLup/s)")
             g.figure.suptitle("Strong Scaling: Throughput", y=1.02)
