@@ -89,20 +89,21 @@ class DistributedGrid:
         """Exchange halo data with all neighbors."""
         self._halo_exchanger.exchange(arr, self.cart_comm, self.neighbors)
 
+    # Boundary face slices: direction -> array index tuple
+    _BOUNDARY_SLICES = {
+        "z_lower": (0, slice(None), slice(None)),
+        "z_upper": (-1, slice(None), slice(None)),
+        "y_lower": (slice(None), 0, slice(None)),
+        "y_upper": (slice(None), -1, slice(None)),
+        "x_lower": (slice(None), slice(None), 0),
+        "x_upper": (slice(None), slice(None), -1),
+    }
+
     def apply_boundary_conditions(self, arr: np.ndarray, value: float = 0.0):
         """Apply Dirichlet boundary conditions at physical boundaries."""
-        if self.is_boundary["z_lower"]:
-            arr[0, :, :] = value
-        if self.is_boundary["z_upper"]:
-            arr[-1, :, :] = value
-        if self.is_boundary["y_lower"]:
-            arr[:, 0, :] = value
-        if self.is_boundary["y_upper"]:
-            arr[:, -1, :] = value
-        if self.is_boundary["x_lower"]:
-            arr[:, :, 0] = value
-        if self.is_boundary["x_upper"]:
-            arr[:, :, -1] = value
+        for direction, is_bc in self.is_boundary.items():
+            if is_bc:
+                arr[self._BOUNDARY_SLICES[direction]] = value
 
     def fill_source_term(self, f: np.ndarray):
         """Fill source term for sinusoidal test problem.
