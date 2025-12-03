@@ -1,18 +1,18 @@
 #!/bin/bash
-#BSUB -J fmg_strong[1-48]
+#BSUB -J fmg_strong
 #BSUB -q hpcintro
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=4GB]"
-#BSUB -W 0:15
-#BSUB -o logs/lsf/fmg_strong_%J_%I.out
-#BSUB -e logs/lsf/fmg_strong_%J_%I.err
+#BSUB -W 2:00
+#BSUB -o logs/lsf/fmg_strong_%J.out
+#BSUB -e logs/lsf/fmg_strong_%J.err
 
 # =============================================================================
 # FMG Strong Scaling: Pure MPI (1 thread) vs Hybrid (4 threads)
 # 1 thread:  n_ranks=1,4,8,16,32,64 (6 values)
 # 4 threads: n_ranks=1,2,4,6,12,24  (6 values, max 24×4=96 cores)
-# Each × strategy(2) × N(2) = 6 × 2 × 2 = 24 jobs per config = 48 total
+# Each × strategy(2) × N(2) = 6 × 2 × 2 = 24 runs per config = 48 total (Hydra multirun)
 # =============================================================================
 
 module load mpi
@@ -34,4 +34,4 @@ uv run python run_solver.py -cn experiment/fmg_scaling -m \
     strategy=sliced,cubic \
     numba_threads=4
 
-echo "Job $LSB_JOBINDEX completed"
+echo "FMG strong scaling completed"

@@ -138,8 +138,8 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: 
         cmd.append("--report-bindings")
         sockets_per_node = mpi.get("sockets_per_node", 2)
         n_nodes = max(1, alloc_cores // cores_per_node)
-        ranks_per_node = max(1, n_ranks // n_nodes)
-        ranks_per_socket = max(1, ranks_per_node // sockets_per_node)
+        ranks_per_node = max(1, (n_ranks + n_nodes - 1) // n_nodes)  # ceiling div
+        ranks_per_socket = max(1, (ranks_per_node + sockets_per_node - 1) // sockets_per_node)  # ceiling div
         # Map ranks across sockets (packages) for NUMA spreading
         cmd.extend(["--map-by", f"ppr:{ranks_per_socket}:package"])
         cmd.extend(["--bind-to", str(mpi.bind_to)])

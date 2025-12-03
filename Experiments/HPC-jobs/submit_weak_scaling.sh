@@ -1,17 +1,17 @@
 #!/bin/bash
-#BSUB -J weak_scaling[1-8]
+#BSUB -J weak_scaling
 #BSUB -q hpcintro
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=4GB]"
-#BSUB -W 0:15
-#BSUB -o logs/lsf/weak_scaling_%J_%I.out
-#BSUB -e logs/lsf/weak_scaling_%J_%I.err
+#BSUB -W 2:00
+#BSUB -o logs/lsf/weak_scaling_%J.out
+#BSUB -e logs/lsf/weak_scaling_%J.err
 
 # =============================================================================
 # Weak Scaling Experiment: constant local problem size (~257³ per rank)
 # Paired runs: (n_ranks, N) = (1,257), (8,513), (27,769), (64,1025)
-# Each pair × strategy(2) = 4 pairs × 2 = 8 jobs
+# Each pair × strategy(2) = 4 pairs × 2 = 8 runs (Hydra multirun)
 # =============================================================================
 
 module load mpi
@@ -34,4 +34,4 @@ uv run python run_solver.py -cn experiment/weak_scaling -m \
 uv run python run_solver.py -cn experiment/weak_scaling -m \
     mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic
 
-echo "Job $LSB_JOBINDEX completed"
+echo "Weak scaling completed"
