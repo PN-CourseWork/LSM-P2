@@ -15,16 +15,16 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 98
+N: 254
 strategy: sliced
 communicator: custom
 
 # Logarithmic N values compatible with 24 ranks (N-2 divisible by 12 for cubic)
 # Cubic decomposition: 24 = 4×3×2, LCM = 12
-# N: 26 (24+2), 50 (48+2), 98 (96+2), 194 (192+2) -> ~2x growth
+# N = 12k+2: 122 (1.8M), 254 (16M), 506 (129M), 1010 (1B) -> ~2x growth
 hydra:
   sweeper:
     params:
-      N: 26,50,98,194
+      N: 122,254,506,1010
       strategy: sliced,cubic
       communicator: numpy,custom
