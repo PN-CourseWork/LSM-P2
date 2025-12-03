@@ -22,7 +22,15 @@ export PMIX_MCA_gds=hash
 echo "=== DEBUG: Testing weak scaling setup ==="
 echo "PWD: $(pwd)"
 echo "Python: $(which python)"
+echo "venv Python: $(uv run which python)"
 echo "MPI_OPTIONS: $MPI_OPTIONS"
+
+# Test 0: Simple MPI test
+echo ""
+echo "=== Test 0: Simple MPI hello world ==="
+PYTHON_PATH=$(uv run which python)
+mpiexec -n 2 $PYTHON_PATH -c "from mpi4py import MPI; print(f'Hello from rank {MPI.COMM_WORLD.Get_rank()}')" 2>&1
+echo "Exit code: $?"
 
 # Test 1: Single rank jacobi
 echo ""
