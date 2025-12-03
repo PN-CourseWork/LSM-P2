@@ -185,9 +185,7 @@ def log_to_mlflow(params: GlobalParams, solver, rank_topology: Optional[List[Loc
 
 
 if __name__ == "__main__":
-    print(f"[DEBUG] Script started, MPI_WORKER={os.environ.get('MPI_WORKER')}, args={sys.argv}", flush=True)
     if os.environ.get("MPI_WORKER"):
-        print(f"[DEBUG] Worker mode confirmed", flush=True)
         logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
         if len(sys.argv) < 2:
             sys.exit("Error: Worker requires config path argument")
