@@ -154,9 +154,10 @@ class DistributedGrid:
         self.compute_exact_solution(u_exact)
 
         local_sq_error = np.sum((u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]) ** 2)
-        global_sq_error = self.cart_comm.allreduce(local_sq_error, op=MPI.SUM)
+        global_sq_error = np.empty(1)
+        self.cart_comm.Allreduce(np.array([local_sq_error]), global_sq_error, op=MPI.SUM)
 
-        return float(np.sqrt(self.h**3 * global_sq_error))
+        return float(np.sqrt(self.h**3 * global_sq_error[0]))
 
     def interior_slice(self):
         """Return slice tuple for interior points."""
