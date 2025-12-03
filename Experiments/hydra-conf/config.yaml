@@ -1,4 +1,5 @@
 defaults:
+  - override hydra/launcher: basic
   - override hydra/callbacks: mlflow_log
   - _self_
 
