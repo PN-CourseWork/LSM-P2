@@ -12,14 +12,19 @@ max_iter: 500
 omega: 0.8
 tolerance: 1.0e-6
 
-# Override NUMBA_NUM_THREADS to allow thread sweep
+# Default values
+N: 33
+use_numba: false
+numba_threads: 1
+
+# Hydra sweep configuration
+# Run both sweeps to get complete data:
+#   NumPy baseline:  uv run python run_solver.py -cn experiment/kernel -m use_numba=false
+#   Numba variants:  uv run python run_solver.py -cn experiment/kernel -m use_numba=true numba_threads=1,2,4,8
 hydra:
   job:
     env_set:
       NUMBA_NUM_THREADS: "8"
-
-# Default sweep parameters (use --multirun or -m to execute)
-# uv run python run_solver.py -cn experiment/kernel -m
-N: 33
-use_numba: false
-numba_threads: 1
+  sweeper:
+    params:
+      N: 17,33,65,129

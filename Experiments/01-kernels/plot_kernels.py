@@ -39,13 +39,13 @@ def main(cfg: DictConfig):
         print("  uv run python run_solver.py -cn experiment/kernel")
         return
 
-    # Extract parameters
-    df["N"] = df["params.N"].astype(int)
-    df["use_numba"] = df["params.use_numba"].fillna("False").astype(str).str.lower() == "true"
-    df["numba_threads"] = df["params.numba_threads"].fillna(1).astype(int)
-    df["mlups"] = df["metrics.mlups"].astype(float)
-    df["wall_time"] = df["metrics.wall_time"].astype(float)
-    df["iterations"] = df["metrics.iterations"].astype(int)
+    # Extract parameters (handle missing columns)
+    df["N"] = pd.to_numeric(df["params.N"], errors="coerce").astype("Int64")
+    df["use_numba"] = df["params.use_numba"].fillna("False").astype(str).str.lower() == "true" if "params.use_numba" in df.columns else False
+    df["numba_threads"] = pd.to_numeric(df["params.numba_threads"], errors="coerce").fillna(1).astype(int) if "params.numba_threads" in df.columns else 1
+    df["mlups"] = pd.to_numeric(df["metrics.mlups"], errors="coerce")
+    df["wall_time"] = pd.to_numeric(df["metrics.wall_time"], errors="coerce")
+    df["iterations"] = pd.to_numeric(df["metrics.iterations"], errors="coerce").astype("Int64")
 
     # Compute time per iteration
     df["time_per_iter_ms"] = (df["wall_time"] / df["iterations"]) * 1000

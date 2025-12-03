@@ -11,6 +11,7 @@ bsub < Experiments/HPC-jobs/submit_scaling_24.sh
 bsub < Experiments/HPC-jobs/submit_scaling_48.sh
 bsub < Experiments/HPC-jobs/submit_scaling_72.sh
 bsub < Experiments/HPC-jobs/submit_scaling_96.sh
+bsub < Experiments/HPC-jobs/submit_scaling_144.sh
 bsub < Experiments/HPC-jobs/submit_weak_scaling.sh
 bsub < Experiments/HPC-jobs/submit_fmg_strong.sh
 bsub < Experiments/HPC-jobs/submit_fmg_weak.sh

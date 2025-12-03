@@ -56,10 +56,10 @@ def main(cfg: DictConfig) -> None:
         print("  uv run python Experiments/run_experiment.py --config-name=experiment/05-multigrid-fmg")
         return
 
-    # Extract parameters and metrics from MLflow columns
-    df["N"] = df["params.N"].astype(int)
-    df["final_error"] = df["metrics.final_error"].astype(float)
-    df["Decomposition"] = df["params.strategy"].str.capitalize()
+    # Extract parameters and metrics from MLflow columns (handle missing columns)
+    df["N"] = pd.to_numeric(df.get("params.N"), errors="coerce").astype("Int64")
+    df["final_error"] = pd.to_numeric(df.get("metrics.final_error"), errors="coerce")
+    df["Decomposition"] = df.get("params.strategy", pd.Series("sliced", index=df.index)).fillna("sliced").str.capitalize()
 
     print(f"Loaded {len(df)} FMG results")
     print(f"Decompositions: {df['Decomposition'].unique()}")

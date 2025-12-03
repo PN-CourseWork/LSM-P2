@@ -11,8 +11,16 @@ n_ranks: 4
 max_iter: 200
 tolerance: 0.0
 
-# Default values (override with -m for sweep)
-# uv run python run_solver.py -cn experiment/communication -m N=32,48,64,80 strategy=sliced,cubic communicator=numpy,custom
+# Default values
 N: 64
 strategy: sliced
 communicator: custom
+
+# Hydra sweep configuration
+# Run with: uv run python run_solver.py -cn experiment/communication -m
+hydra:
+  sweeper:
+    params:
+      N: 32,48,64,80,96
+      strategy: sliced,cubic
+      communicator: numpy,custom

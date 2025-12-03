@@ -3,35 +3,23 @@
 #BSUB -q hpcintro
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
-#BSUB -R "rusage[mem=4GB]"
+#BSUB -R "rusage[mem=8GB]"
 #BSUB -W 2:00
 #BSUB -o logs/lsf/weak_scaling_%J.out
 #BSUB -e logs/lsf/weak_scaling_%J.err
 
 # =============================================================================
 # Weak Scaling Experiment: constant local problem size (~257³ per rank)
-# Paired runs: (n_ranks, N) = (1,257), (8,513), (27,769), (64,1025)
-# Each pair × strategy(2) = 4 pairs × 2 = 8 runs (Hydra multirun)
+# Paired runs required - strategy sweep defined in config
 # =============================================================================
 
 module load mpi
 cd $LS_SUBCWD
 
 # Weak scaling requires paired (n_ranks, N) - run each pair separately
-# Pair 1: 1 rank, N=257
-uv run python run_solver.py -cn experiment/weak_scaling -m \
-    hydra/launcher=basic mpi.bind_to=core n_ranks=1 N=257 strategy=sliced,cubic
-
-# Pair 2: 8 ranks, N=513
-uv run python run_solver.py -cn experiment/weak_scaling -m \
-    hydra/launcher=basic mpi.bind_to=core n_ranks=8 N=513 strategy=sliced,cubic
-
-# Pair 3: 27 ranks, N=769
-uv run python run_solver.py -cn experiment/weak_scaling -m \
-    hydra/launcher=basic mpi.bind_to=core n_ranks=27 N=769 strategy=sliced,cubic
-
-# Pair 4: 64 ranks, N=1025
-uv run python run_solver.py -cn experiment/weak_scaling -m \
-    hydra/launcher=basic mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic
+uv run python run_solver.py -cn experiment/weak_scaling -m hydra/launcher=basic mpi.bind_to=core n_ranks=1 N=257
+uv run python run_solver.py -cn experiment/weak_scaling -m hydra/launcher=basic mpi.bind_to=core n_ranks=8 N=513
+uv run python run_solver.py -cn experiment/weak_scaling -m hydra/launcher=basic mpi.bind_to=core n_ranks=27 N=769
+uv run python run_solver.py -cn experiment/weak_scaling -m hydra/launcher=basic mpi.bind_to=core n_ranks=64 N=1025
 
 echo "Weak scaling completed"

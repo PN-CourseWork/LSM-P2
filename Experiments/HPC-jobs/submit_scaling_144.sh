@@ -1,22 +1,22 @@
 #!/bin/bash
-#BSUB -J scaling_48
+#BSUB -J scaling_144
 #BSUB -q hpcintro
-#BSUB -n 48
+#BSUB -n 144
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
 #BSUB -W 1:00
-#BSUB -o logs/lsf/scaling_48_%J.out
-#BSUB -e logs/lsf/scaling_48_%J.err
+#BSUB -o logs/lsf/scaling_144_%J.out
+#BSUB -e logs/lsf/scaling_144_%J.err
 
 # =============================================================================
-# Scaling Experiment: 2 nodes (48 cores)
-# Override n_ranks for 2-node configuration
+# Scaling Experiment: 6 nodes (144 cores)
+# Override n_ranks for 6-node configuration
 # =============================================================================
 
 module load mpi
 cd $LS_SUBCWD
 
 uv run python run_solver.py -cn experiment/scaling -m \
-    hydra/launcher=basic mpi.bind_to=core n_ranks=48
+    hydra/launcher=basic mpi.bind_to=core n_ranks=144
 
-echo "Scaling 48 completed"
+echo "Scaling 144 completed"

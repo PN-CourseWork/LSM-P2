@@ -11,14 +11,17 @@ max_iter: 50000
 tolerance: 1.0e-12
 n_ranks: 8
 
-# Default values (override with -m for sweep)
-# Jacobi sweep:
-#   uv run python run_solver.py -cn experiment/validation -m \
-#     solver_type=jacobi N=17,33,65 strategy=cubic,sliced communicator=numpy,custom
-# FMG sweep:
-#   uv run python run_solver.py -cn experiment/validation -m \
-#     solver_type=fmg N=65,129,257 strategy=cubic,sliced communicator=numpy,custom
+# Default values
 solver_type: jacobi
 N: 65
 strategy: sliced
 communicator: custom
+
+# Hydra sweep configuration
+# Jacobi (smaller grids): uv run python run_solver.py -cn experiment/validation -m solver_type=jacobi N=17,33,65
+# FMG (larger grids):     uv run python run_solver.py -cn experiment/validation -m solver_type=fmg N=65,129,257
+hydra:
+  sweeper:
+    params:
+      strategy: sliced,cubic
+      communicator: numpy,custom

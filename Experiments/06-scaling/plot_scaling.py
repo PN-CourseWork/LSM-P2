@@ -65,9 +65,8 @@ def compute_strong_scaling(df: pd.DataFrame, group_cols: list) -> pd.DataFrame:
     results = []
 
     for keys, group in df.groupby(group_cols):
-        # Baseline: smallest rank count (usually 1)
-        min_ranks = group["n_ranks"].min()
-        baseline_rows = group[group["n_ranks"] == min_ranks]
+        # Baseline: always n_ranks=1
+        baseline_rows = group[group["n_ranks"] == 1]
         if baseline_rows.empty:
             continue
         baseline = baseline_rows["wall_time"].mean()
@@ -309,15 +308,21 @@ def main(cfg: DictConfig):
     print("\n--- Decomposition Comparison ---")
     if not df_scaling.empty:
         df_strong_decomp = compute_strong_scaling(df_scaling, ["strategy", "N"])
-        df_strong_decomp["Strategy"] = df_strong_decomp["strategy"].str.title()
-        print(f"Strong scaling points: {len(df_strong_decomp)}")
+        if not df_strong_decomp.empty:
+            df_strong_decomp["Strategy"] = df_strong_decomp["strategy"].str.title()
+            print(f"Strong scaling points: {len(df_strong_decomp)}")
+        else:
+            print("No strong scaling data (missing n_ranks=1 baseline)")
     else:
         df_strong_decomp = pd.DataFrame()
 
     if not df_weak.empty:
         df_weak_decomp = compute_weak_scaling(df_weak, ["strategy"])
-        df_weak_decomp["Strategy"] = df_weak_decomp["strategy"].str.title()
-        print(f"Weak scaling points: {len(df_weak_decomp)}")
+        if not df_weak_decomp.empty:
+            df_weak_decomp["Strategy"] = df_weak_decomp["strategy"].str.title()
+            print(f"Weak scaling points: {len(df_weak_decomp)}")
+        else:
+            print("No weak scaling data (missing n_ranks=1 baseline)")
     else:
         df_weak_decomp = pd.DataFrame()
 

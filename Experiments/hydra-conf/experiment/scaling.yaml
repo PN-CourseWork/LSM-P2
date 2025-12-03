@@ -12,7 +12,7 @@ mpi:
   bind_to: null
 
 # Fixed solver settings
-max_iter: 2000
+max_iter: 400
 omega: 0.8
 tolerance: 0.0
 communicator: custom
@@ -21,7 +21,17 @@ communicator: custom
 use_numba: true
 numba_threads: 1
 
-# Default values (override with -m for sweep)
+# Default values
 N: 257
 n_ranks: 1
 strategy: sliced
+
+# Hydra sweep configuration
+# Run with: uv run python run_solver.py -cn experiment/scaling -m
+# Override n_ranks for different node counts, e.g.: n_ranks=1,2,4,8,12,24
+hydra:
+  sweeper:
+    params:
+      N: 257,513
+      strategy: sliced,cubic
+      n_ranks: 1,2,4,8,12,24,48,72,96,144
