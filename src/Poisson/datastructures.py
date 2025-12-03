@@ -97,6 +97,14 @@ class GlobalMetrics:
     # Numba runtime info (what was actually available)
     observed_numba_threads: Optional[int] = None
 
+    def to_mlflow(self) -> dict:
+        """Convert to MLflow-compatible dict (no None, bools as int)."""
+        return {
+            k: (int(v) if isinstance(v, bool) else v)
+            for k, v in self.__dict__.items()
+            if v is not None
+        }
+
 
 # ============================================================================
 # Local (per-rank)

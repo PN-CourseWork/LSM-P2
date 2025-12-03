@@ -154,13 +154,8 @@ def log_to_mlflow(cfg: DictConfig, solver) -> None:
         }
         mlflow.log_params(params)
 
-        # Metrics: solver results (None values not allowed by MLflow)
-        metrics = {
-            k: (int(v) if isinstance(v, bool) else v)
-            for k, v in solver.metrics.__dict__.items()
-            if v is not None
-        }
-        mlflow.log_metrics(metrics)
+        # Metrics: solver results
+        mlflow.log_metrics(solver.metrics.to_mlflow())
 
         # Timeseries: batch log step-based metrics
         timeseries = [
