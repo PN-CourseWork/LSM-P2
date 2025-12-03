@@ -1,6 +1,5 @@
 """MPI-parallel Full Multigrid Solver (extends FMGSolver)."""
 
-
 import numpy as np
 from mpi4py import MPI
 

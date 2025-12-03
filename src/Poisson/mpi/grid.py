@@ -155,7 +155,9 @@ class DistributedGrid:
 
         local_sq_error = np.sum((u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]) ** 2)
         global_sq_error = np.empty(1)
-        self.cart_comm.Allreduce(np.array([local_sq_error]), global_sq_error, op=MPI.SUM)
+        self.cart_comm.Allreduce(
+            np.array([local_sq_error]), global_sq_error, op=MPI.SUM
+        )
 
         return float(np.sqrt(self.h**3 * global_sq_error[0]))
 
