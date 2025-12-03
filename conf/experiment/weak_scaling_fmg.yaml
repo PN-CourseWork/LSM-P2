@@ -1,7 +1,7 @@
 # @package _global_
 # Weak scaling experiment: FMG solver
 
-experiment_name: weak_scaling_fmg
+experiment_name: weak_scaling_final
 
 # FMG solver settings
 solver: fmg

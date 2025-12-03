@@ -1,7 +1,7 @@
 # @package _global_
 # Weak scaling experiment: Jacobi solver
 
-experiment_name: weak_scaling_jacobi
+experiment_name: weak_scaling_final
 
 # Jacobi solver settings
 solver: jacobi
