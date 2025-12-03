@@ -8,14 +8,14 @@ import numpy as np
 from .base import BaseSolver
 from ..datastructures import GridLevel, GlobalMetrics
 from ..kernels import NumPyKernel, NumbaKernel
-from ..problems import sinusoidal_source_term, sinusoidal_exact_solution
+from ..problems import sinusoidal_source_term
 from .multigrid_operators import restrict, prolong
 
 
 class FMGSolver(BaseSolver):
     """Sequential Full Multigrid solver.
 
-    Implements V-cycle and FMG algorithms without MPI.
+    Implements FMG algorithm without MPI.
     Useful for validation and single-node performance testing.
 
     Parameters
@@ -31,9 +31,9 @@ class FMGSolver(BaseSolver):
     omega : float
         Relaxation factor (default: 2/3).
     max_iter : int
-        Maximum V-cycles (default: 100).
+        Maximum smoothing iterations for coarsest grid solve (default: 1000).
     tolerance : float
-        Convergence tolerance (default: 1e-6).
+        Convergence tolerance for final residual check (default: 1e-6).
     """
 
     def __init__(
@@ -137,33 +137,6 @@ class FMGSolver(BaseSolver):
         pass
 
     def solve(self) -> GlobalMetrics:
-        """Run V-cycles until convergence."""
-        self._reset()
-
-        fine = self.levels[0]
-        t_start = self._get_time()
-
-        # Initial residual
-        self._compute_residual(fine)
-        residual = self._residual_norm(fine.r, fine)
-        self.timeseries.residual_history.append(residual)
-
-        for i in range(self.max_iter):
-            residual = self._v_cycle(0)
-            self.timeseries.residual_history.append(residual)
-
-            if residual < self.tolerance:
-                self.metrics.converged = True
-                self.metrics.iterations = i + 1
-                break
-        else:
-            self.metrics.iterations = self.max_iter
-
-        wall_time = self._get_time() - t_start
-        self._finalize(wall_time)
-        return self.metrics
-
-    def fmg_solve(self) -> GlobalMetrics:
         """Full Multigrid: solve from coarsest to finest."""
         self._reset()
 
@@ -287,9 +260,9 @@ class FMGSolver(BaseSolver):
         # Zero residual at physical boundaries
         self._apply_boundary_conditions(r, lvl)
 
-    def _coarse_solve(self, lvl: GridLevel, max_iters: int = 50):
-        """Solve on coarsest grid."""
-        for _ in range(max_iters):
+    def _coarse_solve(self, lvl: GridLevel):
+        """Solve on coarsest grid using max_iter smoothing iterations."""
+        for _ in range(self.max_iter):
             self._smooth(lvl)
 
     def _residual_norm(self, r: np.ndarray, lvl: GridLevel = None) -> float:
@@ -319,11 +292,6 @@ class FMGSolver(BaseSolver):
         ].kernel.observed_numba_threads
         self._compute_metrics(wall_time, self.metrics.iterations)
 
-    def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution."""
-        fine = self.levels[0]
-        u_exact = sinusoidal_exact_solution(self.N)
-        diff = fine.u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
-        l2_error = np.sqrt(np.sum(diff**2) * self.h**3)
-        self.metrics.final_error = l2_error
-        return l2_error
+    def _get_solution_array(self) -> np.ndarray:
+        """Return the solution array (finest level)."""
+        return self.levels[0].u

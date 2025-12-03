@@ -13,7 +13,7 @@ class FMGMPISolver(FMGSolver):
     """Parallel Full Multigrid solver with MPI domain decomposition.
 
     Extends FMGSolver with distributed grids and halo exchange.
-    The algorithm (solve, fmg_solve, _v_cycle) is inherited from FMGSolver.
+    The algorithm (solve, _v_cycle) is inherited from FMGSolver.
 
     Parameters
     ----------
@@ -195,8 +195,15 @@ class FMGMPISolver(FMGSolver):
 
         self._compute_metrics(wall_time, self.metrics.iterations)
 
+    def _get_solution_array(self) -> np.ndarray:
+        """Return the solution array (finest level)."""
+        return self.levels[0].u
+
     def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution (parallel)."""
+        """Compute L2 error against analytical solution (parallel).
+
+        Overrides base to use grid's parallel implementation.
+        """
         fine = self.levels[0]
         l2_error = fine.grid.compute_l2_error(fine.u)
         self.metrics.final_error = l2_error

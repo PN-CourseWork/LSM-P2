@@ -5,7 +5,7 @@ import numpy as np
 
 from .base import BaseSolver
 from ..kernels import NumPyKernel, NumbaKernel
-from ..problems import sinusoidal_source_term, sinusoidal_exact_solution
+from ..problems import sinusoidal_source_term
 
 
 class JacobiSolver(BaseSolver):
@@ -128,10 +128,6 @@ class JacobiSolver(BaseSolver):
         self.metrics.observed_numba_threads = self.kernel.observed_numba_threads
         self._compute_metrics(wall_time, self.metrics.iterations)
 
-    def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution."""
-        u_exact = sinusoidal_exact_solution(self.N)
-        diff = self.u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
-        l2_error = np.sqrt(np.sum(diff**2) * self.h**3)
-        self.metrics.final_error = l2_error
-        return l2_error
+    def _get_solution_array(self) -> np.ndarray:
+        """Return the solution array."""
+        return self.u

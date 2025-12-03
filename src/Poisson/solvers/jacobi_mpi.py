@@ -88,8 +88,15 @@ class JacobiMPISolver(JacobiSolver):
 
         self._compute_metrics(wall_time, self.metrics.iterations)
 
+    def _get_solution_array(self) -> np.ndarray:
+        """Return the solution array."""
+        return self.u
+
     def compute_l2_error(self) -> float:
-        """Compute L2 error against analytical solution (parallel)."""
+        """Compute L2 error against analytical solution (parallel).
+
+        Overrides base to use grid's parallel implementation.
+        """
         l2_error = self.grid.compute_l2_error(self.u)
         self.metrics.final_error = l2_error
         return l2_error

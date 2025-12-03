@@ -55,7 +55,6 @@ The solver hierarchy uses a hook-based design where sequential solvers define th
            +levels: List~GridLevel~
            +n_levels: int
            +solve() GlobalMetrics
-           +fmg_solve() GlobalMetrics
            +_v_cycle() float
            +_get_time() float
            +_sync_halos() float
@@ -79,7 +78,7 @@ The solver hierarchy uses a hook-based design where sequential solvers define th
 
 - **Hook Methods**: Sequential solvers define ``_sync_halos()``, ``_apply_boundary_conditions()``, etc. as no-ops
 - **MPI Overrides**: MPI solvers only override these hooks to add halo exchange and boundary handling
-- **Algorithm Reuse**: ``solve()``, ``fmg_solve()``, and ``_v_cycle()`` are defined once in the sequential solver
+- **Algorithm Reuse**: ``solve()`` and ``_v_cycle()`` are defined once in the sequential solver
 
 Core Solvers
 ============

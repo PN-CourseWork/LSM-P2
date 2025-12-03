@@ -2,7 +2,10 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 from ..datastructures import GlobalMetrics, LocalMetrics
+from ..problems import sinusoidal_exact_solution
 
 
 class BaseSolver(ABC):
@@ -32,6 +35,29 @@ class BaseSolver(ABC):
     def solve(self) -> GlobalMetrics:
         """Execute the solver. Returns results."""
         pass
+
+    def compute_l2_error(self) -> float:
+        """Compute L2 error against analytical solution.
+
+        Uses hook methods for flexibility:
+        - _get_solution_array(): Returns the solution array
+        - _compute_l2_norm(): Computes norm (handles MPI allreduce if needed)
+        """
+        u = self._get_solution_array()
+        u_exact = sinusoidal_exact_solution(self.N)
+        l2_error = self._compute_l2_norm(u, u_exact)
+        self.metrics.final_error = l2_error
+        return l2_error
+
+    @abstractmethod
+    def _get_solution_array(self) -> np.ndarray:
+        """Return the solution array. Override in subclasses."""
+        pass
+
+    def _compute_l2_norm(self, u: np.ndarray, u_exact: np.ndarray) -> float:
+        """Compute L2 norm. Override for MPI allreduce."""
+        diff = u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
+        return np.sqrt(np.sum(diff**2) * self.h**3)
 
     def _compute_metrics(self, wall_time: float, iterations: int):
         """Compute performance metrics."""

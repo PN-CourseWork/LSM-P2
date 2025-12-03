@@ -89,7 +89,7 @@ def worker(cfg_path: str) -> None:
     # Run solver
     solver = create_solver(params, comm)
     solver.warmup()
-    solver.fmg_solve() if params.solver == "fmg" else solver.solve()
+    solver.solve()
     solver.compute_l2_error()
 
     # Gather rank topology (all ranks participate, result on rank 0)
