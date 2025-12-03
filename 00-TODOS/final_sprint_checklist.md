@@ -57,7 +57,7 @@ These must be done before HPC runs.
   - FMG works with both sliced and cubic decomposition
 
 ### 1.5 MPI Communication Style (Assignment-1 Feedback + mpi4py docs) - CRITICAL
-- [ ] **Use uppercase methods in solve loop (performance-critical)**
+- [x] **Use uppercase methods in solve loop (performance-critical)** ✓
   - **Assignment-1 Feedback:** "your code uses basically only send and recv (lower-case), these have a performance hit as they have to serialize your data. Always prefer titlelized versions"
   - **mpi4py Tutorial:** "You have to use method names starting with an upper-case letter"
 
@@ -72,11 +72,12 @@ These must be done before HPC runs.
   - **In solve loop / hot path:** Always uppercase (NumPy arrays, zero-copy)
   - **Setup / finalize / one-time ops:** Lowercase OK for Python objects (dicts, lists)
 
-- [x] **Verify solve loop uses uppercase** ✓
-  - `jacobi_mpi.py:93` → `Allreduce` in `_compute_residual()` (hot path) ✓
-  - `fmg_mpi.py:183` → `Allreduce` in residual computation (hot path) ✓
+- [x] **Verified solve loop uses uppercase** ✓
+  - `jacobi_mpi.py` → `Allreduce` in `_compute_residual()` (hot path) ✓
+  - `fmg_mpi.py` → `Allreduce` in residual computation (hot path) ✓
   - `halo.py` → `Sendrecv` for halo exchange (hot path) ✓
-  - `grid.py:157` → `allreduce` in `compute_l2_error()` - **OK, only called once at end**
+  - `grid.py` → `Allreduce` in `compute_l2_error()` - **OK, only called once at end**
+  - `run_solver.py` → `gather()` for topology - **OK, only called once at end**
 
 ### 1.6 Non-blocking Request Handles (Generic Feedback)
 - [x] **Verify proper Wait/Test on all request handles** ✓
@@ -305,23 +306,9 @@ Lower priority - do if time permits.
 |-------|----------|-----|
 | **Unix-only code** | `main.py:118` | `preexec_fn=os.setsid` only works on Unix. Add Windows fallback or guard. |
 
-### 5.4 Dataclass Architecture Refactor (HIGH - Architectural) ✅ COMPLETED
+### 5.4 Dataclass Architecture Refactor ✅ COMPLETED
 
-**Problem:** Current dataclasses are confusingly named and overlap:
-- `KernelParams` vs solver params - what's the difference?
-- `KernelMetrics` vs `GlobalMetrics` - redundant
-- Manual dict-building with conditionals in `_log_results()`
-
-**Solution:** Clean 2×2 matrix: **Params vs Metrics** × **Global vs Local**
-
-**STATUS:** Refactored in run_solver.py and datastructures.py:
-- `GlobalParams` dataclass for run configuration ✓
-- `GlobalMetrics` dataclass for aggregated results ✓
-- `LocalMetrics` dataclass for per-iteration timeseries ✓
-- `solver.metrics` instead of `solver.results` ✓
-- Clean MLflow logging with `asdict()` pattern ✓
-- Flattened Hydra config (removed solver groups) ✓
-- Native MLflow batch API for timeseries ✓
+Clean 2×2 matrix: **Params vs Metrics** × **Global vs Local**
 
 ```
                  Params (input/config)         Metrics (output/results)
@@ -335,193 +322,17 @@ Local            LocalParams                   LocalMetrics
                  neighbors, local_shape...     halo_times[]...
 ```
 
-#### Dataclass Definitions
+**Implemented:**
+- [x] `GlobalParams` with `to_mlflow()` method ✓
+- [x] `GlobalMetrics` with `to_mlflow()` method ✓
+- [x] `LocalParams` for rank topology ✓
+- [x] `LocalMetrics` with `to_mlflow_batch()` and `clear()` methods ✓
+- [x] `solver.metrics` and `solver.timeseries` naming ✓
+- [x] Flattened Hydra config matching dataclass ✓
+- [x] Clean `log_to_mlflow()` using `asdict()` pattern ✓
+- [x] Rank topology gathered and logged as JSON artifact ✓
 
-- [ ] **`GlobalParams`** - Run configuration (identical across ranks):
-  ```python
-  @dataclass
-  class GlobalParams:
-      # Problem
-      N: int
-      # Solver
-      solver: str  # "jacobi" | "fmg"
-      omega: float = 0.8
-      tolerance: float = 1e-6
-      max_iter: int = 1000
-      # Parallelization
-      n_ranks: int = 1
-      strategy: str | None = None  # "sliced" | "cubic"
-      communicator: str | None = None  # "numpy" | "custom"
-      # Numba
-      use_numba: bool = False
-      numba_threads: int = 1
-      # Environment (auto-detected)
-      environment: str = "local"  # "local" | "hpc"
-  ```
-
-- [ ] **`LocalParams`** - Rank-specific geometry/topology:
-  ```python
-  @dataclass
-  class LocalParams:
-      rank: int
-      hostname: str
-      cart_coords: tuple[int, int, int] | None = None
-      neighbors: dict[str, int | None] = field(default_factory=dict)
-      local_shape: tuple[int, int, int] | None = None
-      global_start: tuple[int, int, int] | None = None
-      global_end: tuple[int, int, int] | None = None
-  ```
-
-- [ ] **`GlobalMetrics`** - Aggregated results (rank 0):
-  ```python
-  @dataclass
-  class GlobalMetrics:
-      converged: bool = False
-      iterations: int = 0
-      final_error: float | None = None
-      wall_time: float | None = None
-      total_compute_time: float | None = None
-      total_halo_time: float | None = None
-      mlups: float | None = None
-      bandwidth_gb_s: float | None = None
-  ```
-
-- [ ] **`LocalMetrics`** - Per-rank timeseries:
-  ```python
-  @dataclass
-  class LocalMetrics:
-      compute_times: list[float] = field(default_factory=list)
-      halo_times: list[float] = field(default_factory=list)
-      residual_history: list[float] = field(default_factory=list)  # rank 0 only
-  ```
-
-#### Solver Integration
-
-- [ ] **Solver stores all four**:
-  ```python
-  # In solver.__init__()
-  self.global_params = GlobalParams(N=N, solver="jacobi", ...)
-  self.local_params = LocalParams(
-      rank=self.rank,
-      hostname=MPI.Get_processor_name(),
-      neighbors=self.grid.neighbors,
-      local_shape=self.grid.local_shape,
-  )
-  self.global_metrics = GlobalMetrics()
-  self.local_metrics = LocalMetrics()
-  ```
-
-#### MLflow Logging
-
-- [ ] **Clean logging** - no more manual dict building:
-  ```python
-  def _log_to_mlflow(solver, comm):
-      # Global params → MLflow params
-      mlflow.log_params(asdict(solver.global_params))
-
-      # Global metrics → MLflow metrics
-      mlflow.log_metrics(asdict(solver.global_metrics))
-
-      # Gather local data for topology artifact
-      local_data = {
-          "params": asdict(solver.local_params),
-          "metrics": {
-              "compute_time_total": sum(solver.local_metrics.compute_times),
-              "halo_time_total": sum(solver.local_metrics.halo_times),
-          }
-      }
-      all_local = comm.gather(local_data, root=0)
-
-      if solver.global_params.n_ranks > 1 and comm.Get_rank() == 0:
-          # Flatten for DataFrame
-          rows = []
-          for d in all_local:
-              row = d["params"].copy()
-              row.update(d["metrics"])
-              rows.append(row)
-          df = pd.DataFrame(rows)
-          df.to_parquet("rank_topology.parquet")
-          mlflow.log_artifact("rank_topology.parquet")
-  ```
-
-#### Hydra Structured Configs (Seamless Integration)
-
-The key to seamless Hydra ↔ Solver ↔ MLflow integration:
-
-- [ ] **Register `GlobalParams` with Hydra's ConfigStore**:
-  ```python
-  # In datastructures.py or a new configs.py
-  from hydra.core.config_store import ConfigStore
-
-  cs = ConfigStore.instance()
-  cs.store(name="global_params", node=GlobalParams)
-  ```
-
-- [ ] **Update YAML configs to match dataclass**:
-  ```yaml
-  # conf/config.yaml
-  defaults:
-    - _self_
-
-  # These fields now validated against GlobalParams schema
-  N: 100
-  solver: jacobi
-  omega: 0.8
-  tolerance: 1e-6
-  max_iter: 1000
-  n_ranks: 1
-  strategy: null
-  communicator: null
-  use_numba: false
-  numba_threads: 1
-  ```
-
-- [ ] **Convert OmegaConf → dataclass in runner**:
-  ```python
-  from omegaconf import OmegaConf
-
-  @hydra.main(config_path="conf", config_name="config")
-  def main(cfg: DictConfig):
-      # Convert to typed dataclass (with validation!)
-      global_params = OmegaConf.to_object(cfg)  # Returns GlobalParams instance
-
-      # Or if nested config:
-      # global_params = OmegaConf.structured(GlobalParams(**cfg.solver))
-
-      solver = create_solver(global_params)
-      solver.solve()
-  ```
-
-- [ ] **Solver accepts dataclass directly**:
-  ```python
-  class JacobiMPISolver:
-      def __init__(self, params: GlobalParams, comm: MPI.Comm = None):
-          self.global_params = params
-          self.global_metrics = GlobalMetrics()
-          # ... rest of init uses self.global_params.N, etc.
-  ```
-
-**Result: Complete flow with zero manual wrangling**:
-```
-conf/config.yaml
-      ↓ (Hydra loads + validates)
-OmegaConf.to_object(cfg) → GlobalParams
-      ↓ (passed to solver)
-solver.global_params
-      ↓ (logged directly)
-mlflow.log_params(asdict(solver.global_params))
-```
-
-#### Migration
-
-- [ ] **Remove deprecated dataclasses**:
-  - `KernelParams` → absorbed into `GlobalParams`
-  - `KernelMetrics` → absorbed into `GlobalMetrics`
-  - `KernelSeries` → absorbed into `LocalMetrics`
-  - `LocalSeries` → renamed to `LocalMetrics`
-  - `RankGeometry` → absorbed into `LocalParams`
-
-- [ ] **Keep `GridLevel`** (multigrid-specific, still needed)
+See `00-TODOS/solver-interface.md` for full architecture documentation.
 
 ### 5.5 Run Tagging: HPC vs Local (BLOCKING for analysis)
 

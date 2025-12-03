@@ -36,6 +36,15 @@ class BaseSolver(ABC):
         """Execute the solver. Returns results."""
         pass
 
+    def warmup(self, warmup_size: int = 10):
+        """Warmup kernel (trigger Numba JIT if used)."""
+        self._get_kernel().warmup(warmup_size=warmup_size)
+
+    @abstractmethod
+    def _get_kernel(self):
+        """Return the kernel for warmup. Override in subclasses."""
+        pass
+
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution.
 

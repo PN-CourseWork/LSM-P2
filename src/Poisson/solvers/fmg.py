@@ -119,10 +119,9 @@ class FMGSolver(BaseSolver):
             )
             self.levels.append(lvl)
 
-    def warmup(self, warmup_size: int = 10):
-        """Warmup kernels (trigger Numba JIT)."""
-        for lvl in self.levels:
-            lvl.kernel.warmup(warmup_size=warmup_size)
+    def _get_kernel(self):
+        """Return the kernel for warmup (finest level)."""
+        return self.levels[0].kernel
 
     def _get_time(self) -> float:
         """Get current time. Override for MPI timing."""

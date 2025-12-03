@@ -50,9 +50,9 @@ class JacobiSolver(BaseSolver):
         self.u_old = np.zeros((self.N, self.N, self.N), dtype=np.float64)
         self.f = sinusoidal_source_term(self.N)
 
-    def warmup(self, warmup_size: int = 10):
-        """Warmup kernel (trigger Numba JIT)."""
-        self.kernel.warmup(warmup_size=warmup_size)
+    def _get_kernel(self):
+        """Return the kernel for warmup."""
+        return self.kernel
 
     def solve(self):
         """Run Jacobi iteration."""
