@@ -23,9 +23,10 @@ strategy: cubic
 
 # Hydra sweep configuration
 # N values: 2^k+1 for multigrid levels (129³=2.1M, 257³=17M, 513³=135M)
+# Rank counts with good 3D factorizations for cubic decomposition
 hydra:
   sweeper:
     params:
-      N: 129,257,513
+      N: 257,513
       strategy: sliced,cubic
-      n_ranks: 1,2,4,8,12,24
+      n_ranks: 1,2,4,8,16,24,36,48,72,96
