@@ -1,7 +1,7 @@
 # @package _global_
-# FMG scaling experiment: Full Multigrid solver
+# Weak scaling experiment: FMG solver
 
-experiment_name: fmg_scaling
+experiment_name: weak_scaling_fmg
 
 # FMG solver settings
 solver: fmg
@@ -17,14 +17,15 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 257
+N: 129
 n_ranks: 1
 strategy: cubic
 
-# Hydra sweep configuration
-# N values: 2^k+1 for multigrid levels (129³=2.1M, 257³=17M, 513³=135M)
+# Weak scaling configuration:
+# We manually specify valid (N, n_ranks) pairs in the submission script.
+# Strategies (sliced, cubic) are swept via --multirun in the script.
 hydra:
+  mode: MULTIRUN
   sweeper:
     params:
-      N: 129,257,513
       strategy: sliced,cubic

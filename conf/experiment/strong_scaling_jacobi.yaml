@@ -26,3 +26,4 @@ hydra:
     params:
       N: 257,513
       strategy: sliced,cubic
+      n_ranks: 1,2,4,8,12,24,32,48

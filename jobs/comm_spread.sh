@@ -1,39 +1,37 @@
 #!/bin/bash
-#BSUB -J poisson_comm_spread
+#BSUB -J comm_spread
 #BSUB -q hpcintro
+#BSUB -n 48
+#BSUB -R "span[ptile=24]"
+#BSUB -R "rusage[mem=8GB]"
 #BSUB -W 1:00
-#BSUB -M 8GB
-#BSUB -n 24
-#BSUB -R "span[ptile=12]"
-#BSUB -N
-#BSUB -o logs/comm_spread_%J.out
-#BSUB -e logs/comm_spread_%J.err
+#BSUB -o logs/lsf/comm_spread_%J.out
+#BSUB -e logs/lsf/comm_spread_%J.err
 
-# Communication experiment: SPREAD placement
-# 24 ranks across 2 nodes (12 per node) - inter-node communication
+# =============================================================================
+# Communication Experiment: SPREAD binding
+# Ranks spread across nodes/sockets for maximum memory bandwidth
+# =============================================================================
 
+module load mpi
 cd $HOME/LSM-Project_2
-source .venv/bin/activate
+mkdir -p logs/lsf
 
-# Load MPI module
-module load mpi/5.0.8-gcc-13.4.0-binutils-2.44 >& /dev/null
+# Spread: fill sockets evenly across all nodes
+MPIOPT="--map-by ppr:12:socket --bind-to core"
 
-export NUMBA_NUM_THREADS=1
-export OMP_NUM_THREADS=1
-
-mkdir -p logs
-
-NP=24
-
-# Spread: 6 ranks per socket, 12 per node, across 2 nodes
-MOPTS="--map-by ppr:6:package --bind-to core"
-
-echo "=== Communication experiment: SPREAD (24 ranks, 2 nodes) ==="
-mpirun $MOPTS -np $NP uv run python run_solver.py \
+echo "=== Communication: Spread binding, 24 ranks (intra-node) ==="
+mpiexec $MPIOPT -n 24 uv run python run_solver.py \
     +experiment=communication \
-    n_ranks=$NP \
-    mlflow=databricks \
     hydra/launcher=basic \
-    -m
+    n_ranks=24 \
+    experiment_name=comm_spread
 
-echo "Communication (spread) complete"
+echo "=== Communication: Spread binding, 48 ranks (inter-node) ==="
+mpiexec $MPIOPT -n 48 uv run python run_solver.py \
+    +experiment=communication \
+    hydra/launcher=basic \
+    n_ranks=48 \
+    experiment_name=comm_spread
+
+echo "Communication spread completed"

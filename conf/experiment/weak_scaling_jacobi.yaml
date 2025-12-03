@@ -1,7 +1,10 @@
 # @package _global_
 # Weak scaling experiment: constant work per rank
 
-experiment_name: weak_scaling
+# @package _global_
+# Weak scaling experiment: Jacobi solver
+
+experiment_name: weak_scaling_jacobi
 
 # Jacobi solver settings
 solver: jacobi
@@ -19,11 +22,12 @@ N: 129
 n_ranks: 1
 strategy: cubic
 
-# Weak scaling requires PAIRED (n_ranks, N) - not Cartesian product!
-# Constant ~129³ points per rank:
-#   (1, 129), (8, 257), (27, 385), (64, 513)
-# Run each pair via job script, sweeping only strategy
+# Weak scaling configuration:
+# We manually specify valid (N, n_ranks) pairs in the submission script
+# to strictly enforce constant work per rank (e.g., 129@1 -> 257@8).
+# Strategies (sliced, cubic) are swept via --multirun in the script.
 hydra:
+  mode: MULTIRUN
   sweeper:
     params:
       strategy: sliced,cubic
