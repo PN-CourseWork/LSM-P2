@@ -4,7 +4,7 @@
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=4GB]"
-#BSUB -W 02:00:00
+#BSUB -W 2:00
 #BSUB -o logs/lsf/weak_scaling_%J_%I.out
 #BSUB -e logs/lsf/weak_scaling_%J_%I.err
 
