@@ -64,7 +64,14 @@ def main(cfg: DictConfig) -> None:
 
     env = os.environ.copy()
     env["MPI_WORKER"] = "1"
-    subprocess.run(cmd, env=env, timeout=600, check=True)
+    env["PMIX_MCA_gds"] = "hash"  # Suppress PMIX finalization warnings
+    result = subprocess.run(cmd, env=env, timeout=600, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd)
 
 
 # =============================================================================
