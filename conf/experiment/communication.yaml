@@ -1,24 +1,29 @@
 # @package _global_
 # Communication experiment: compare halo exchange strategies
+# Tests compact (1 node) vs spread (2 nodes) placement
 
 experiment_name: communication
 
 # Use Jacobi solver for halo exchange benchmarking
 solver: jacobi
-n_ranks: 4
+n_ranks: 24
 max_iter: 200
 tolerance: 0.0
 
+# Use Numba for consistent performance
+use_numba: true
+specified_numba_threads: 1
+
 # Default values
-N: 65
+N: 98
 strategy: sliced
 communicator: custom
 
-# Hydra sweep configuration
-# Run with: mpiexec -n 4 uv run python run_solver.py +experiment=communication mlflow=databricks -m
+# N values compatible with 24 ranks (N-2 divisible by 12 for cubic)
+# Cubic decomposition: 24 = 4×3×2, LCM = 12
 hydra:
   sweeper:
     params:
-      N: 33,65,97
+      N: 50,98,146
       strategy: sliced,cubic
       communicator: numpy,custom
