@@ -1,39 +1,27 @@
 # @package _global_
-defaults:
-  - /config
-  - /solver: jacobi
-  - _self_
+# Weak scaling experiment: constant work per rank
 
 experiment_name: weak_scaling
-scaling_type: weak
 
-# MPI options (binding enabled via HPC job scripts)
-mpi:
-  bind_to: null
-
-# Fixed solver settings
+# Jacobi solver settings
+solver: jacobi
 max_iter: 400
 omega: 0.8
 tolerance: 0.0
+communicator: custom
 
-# Use Numba with 1 thread for all HPC runs
+# Use Numba with 1 thread for pure MPI scaling
 use_numba: true
-numba_threads: 1
+specified_numba_threads: 1
 
 # Default values
 N: 257
 n_ranks: 1
 strategy: cubic
-communicator: custom
 
-# Hydra sweep configuration
 # Weak scaling requires PAIRED (n_ranks, N) - not Cartesian product!
 # Pairs: (1,257), (8,513), (27,769), (64,1025) - constant ~257³ per rank
-# Run each pair separately:
-#   uv run python run_solver.py -cn experiment/weak_scaling -m n_ranks=1 N=257
-#   uv run python run_solver.py -cn experiment/weak_scaling -m n_ranks=8 N=513
-#   uv run python run_solver.py -cn experiment/weak_scaling -m n_ranks=27 N=769
-#   uv run python run_solver.py -cn experiment/weak_scaling -m n_ranks=64 N=1025
+# Run each pair via job script, sweeping only strategy
 hydra:
   sweeper:
     params:

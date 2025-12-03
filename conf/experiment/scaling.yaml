@@ -1,25 +1,18 @@
 # @package _global_
-defaults:
-  - /config
-  - /solver: jacobi
-  - _self_
+# Strong scaling experiment: Jacobi solver with fixed problem size
 
 experiment_name: scaling
-scaling_type: strong
 
-# MPI options (binding enabled via HPC job scripts)
-mpi:
-  bind_to: null
-
-# Fixed solver settings
+# Jacobi solver settings
+solver: jacobi
 max_iter: 400
 omega: 0.8
 tolerance: 0.0
 communicator: custom
 
-# Use Numba with 1 thread for all HPC runs
+# Use Numba with 1 thread for pure MPI scaling
 use_numba: true
-numba_threads: 1
+specified_numba_threads: 1
 
 # Default values
 N: 257
@@ -27,11 +20,9 @@ n_ranks: 1
 strategy: sliced
 
 # Hydra sweep configuration
-# Run with: uv run python run_solver.py -cn experiment/scaling -m
-# Override n_ranks for different node counts, e.g.: n_ranks=1,2,4,8,12,24
+# Run with: mpiexec -n P uv run python run_solver.py +experiment=scaling mlflow=databricks -m
 hydra:
   sweeper:
     params:
       N: 257,513
       strategy: sliced,cubic
-      n_ranks: 1,2,4,8,12,24,48,72,96,144

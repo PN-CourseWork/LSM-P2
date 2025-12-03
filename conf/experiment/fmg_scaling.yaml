@@ -1,40 +1,29 @@
 # @package _global_
-defaults:
-  - /config
-  - /solver: multigrid
-  - _self_
+# FMG scaling experiment: Full Multigrid solver
 
 experiment_name: fmg_scaling
-scaling_type: strong
-
-# MPI options (binding enabled via HPC job scripts)
-mpi:
-  bind_to: null
 
 # FMG solver settings
-solver_type: fmg
-n_smooth: 3
+solver: fmg
+n_smooth: 5
 omega: 0.6666666666666666
-max_iter: 2
+max_iter: 100
 tolerance: 0.0
-fmg_post_vcycles: 1
+fmg_post_vcycles: 2
+communicator: custom
 
-# Use Numba with 1 thread by default (override for hybrid experiments)
+# Use Numba with 1 thread for pure MPI scaling
 use_numba: true
-numba_threads: 1
+specified_numba_threads: 1
 
 # Default values
 N: 257
 n_ranks: 1
 strategy: cubic
-communicator: custom
 
 # Hydra sweep configuration
-# Strong scaling: uv run python run_solver.py -cn experiment/fmg_scaling -m
-# Hybrid (4 threads): uv run python run_solver.py -cn experiment/fmg_scaling -m numba_threads=4 n_ranks=1,2,4,8,16,24
 hydra:
   sweeper:
     params:
       N: 257,513
       strategy: sliced,cubic
-      n_ranks: 1,4,8,16,32,64,96,144
