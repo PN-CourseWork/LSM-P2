@@ -21,11 +21,4 @@ N: 129
 n_ranks: 1
 strategy: cubic
 
-# Weak scaling configuration:
-# We manually specify valid (N, n_ranks) pairs in the submission script.
-# Strategies (sliced, cubic) are swept via --multirun in the script.
-hydra:
-  mode: MULTIRUN
-  sweeper:
-    params:
-      strategy: sliced,cubic
+# Weak scaling: N and n_ranks pairs set via command line in job script
