@@ -45,15 +45,16 @@ uv run python run_solver.py \
     -m
 
 # =============================================================================
-# Weak Scaling: Constant work per rank (~270K points/rank)
-# Manual (N, n_ranks) pairs since N and ranks are coupled
+# Weak Scaling: ~127³ points per rank (local subdomain size)
+# N = local_size × ranks_per_dim + 2 (for boundaries)
+# 129@1 (127+2), 257@8 (2³ decomp), 513@64 (4³ decomp)
 # =============================================================================
 
 echo "=== Weak Scaling: Jacobi ==="
-for pair in "65,1" "129,8" "193,27" "257,64"; do
+for pair in "129,1" "257,8" "513,64"; do
     N=$(echo $pair | cut -d',' -f1)
     ranks=$(echo $pair | cut -d',' -f2)
-    echo "  N=$N, ranks=$ranks"
+    echo "  N=$N, ranks=$ranks (~127³ per rank)"
     uv run python run_solver.py \
         +experiment=weak_scaling_jacobi \
         N=$N n_ranks=$ranks \
@@ -64,10 +65,10 @@ for pair in "65,1" "129,8" "193,27" "257,64"; do
 done
 
 echo "=== Weak Scaling: FMG ==="
-for pair in "65,1" "129,8" "257,64"; do
+for pair in "129,1" "257,8" "513,64"; do
     N=$(echo $pair | cut -d',' -f1)
     ranks=$(echo $pair | cut -d',' -f2)
-    echo "  N=$N, ranks=$ranks"
+    echo "  N=$N, ranks=$ranks (~127³ per rank)"
     uv run python run_solver.py \
         +experiment=weak_scaling_fmg \
         N=$N n_ranks=$ranks \
