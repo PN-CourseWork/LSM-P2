@@ -19,7 +19,7 @@ mkdir -p logs/lsf
 export NUMBA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 
-MAX_ITER=200
+MAX_ITER=300
 
 echo "=== Sequential Baseline: Jacobi N=257 ==="
 uv run python run_solver.py \

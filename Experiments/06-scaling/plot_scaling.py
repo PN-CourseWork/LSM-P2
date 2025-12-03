@@ -1,13 +1,17 @@
 """
 Scaling Experiment Visualization
 ================================
+
 Strong and weak scaling analysis for Jacobi and FMG solvers.
 
-Plots:
-1. Decomposition comparison (sliced vs cubic) - Strong & Weak scaling
-2. FMG Hybrid (MPI + Numba threads) - Strong & Weak scaling
+Experiments (from v3):
+- scaling: Strong scaling (Jacobi) - N=257,513, ranks=1-96
+- fmg_scaling: Strong scaling (FMG) - N=257,513, ranks=1-96
+- weak_scaling_jacobi: Weak scaling Jacobi - 129@1, 257@8, 513@64
+- weak_scaling_fmg: Weak scaling FMG - 129@1, 257@8, 513@64
 
-Fetches data from MLflow experiments.
+Usage:
+    uv run python Experiments/06-scaling/plot_scaling.py mlflow=databricks
 """
 
 import pandas as pd
@@ -23,350 +27,305 @@ from utils.mlflow.io import setup_mlflow_tracking, load_runs
 from utils import plotting  # Apply scientific style
 
 
-def load_experiment_data(experiment_name: str, project_prefix: str) -> pd.DataFrame:
-    """Load experiment data from MLflow."""
-    df = load_runs(experiment_name, converged_only=False, project_prefix=project_prefix)
+def load_scaling_data(experiment_name: str, prefix: str) -> pd.DataFrame:
+    """Load and process scaling experiment data."""
+    df = load_runs(experiment_name, converged_only=False, project_prefix=prefix)
 
     if df.empty:
         return df
 
-    # Extract parameters (handle missing columns gracefully)
+    # Extract parameters
     df["N"] = pd.to_numeric(df.get("params.N"), errors="coerce").astype("Int64")
     df["n_ranks"] = pd.to_numeric(df.get("params.n_ranks"), errors="coerce").astype("Int64")
-    df["solver"] = df.get("params.solver", pd.Series("jacobi", index=df.index)).fillna("jacobi")
-    df["strategy"] = df.get("params.strategy", pd.Series("sliced", index=df.index)).fillna("sliced")
-    df["communicator"] = df.get("params.communicator", pd.Series("custom", index=df.index)).fillna("custom")
-    df["numba_threads"] = pd.to_numeric(df.get("params.numba_threads"), errors="coerce").fillna(1).astype(int)
+    df["solver"] = df.get("params.solver", "jacobi").fillna("jacobi")
+    df["strategy"] = df.get("params.strategy", "sliced").fillna("sliced")
 
-    # Extract metrics (handle missing columns gracefully)
+    # Extract metrics
     df["wall_time"] = pd.to_numeric(df.get("metrics.wall_time"), errors="coerce")
     df["mlups"] = pd.to_numeric(df.get("metrics.mlups"), errors="coerce")
-    df["iterations"] = pd.to_numeric(df.get("metrics.iterations"), errors="coerce")
+    df["iterations"] = pd.to_numeric(df.get("metrics.iterations"), errors="coerce").astype("Int64")
 
-    # Computed columns
-    df["total_processes"] = df["n_ranks"] * df["numba_threads"]
-    df["Strategy"] = df["strategy"].str.title()  # For legend
+    # Derived metrics
+    df["wall_time_per_iter_ms"] = (df["wall_time"] / df["iterations"]) * 1e3
+    df["total_points"] = df["N"] ** 3
 
-    # Keep latest run per configuration
-    df = df.sort_values("start_time").groupby(
-        ["solver", "N", "n_ranks", "strategy", "communicator", "numba_threads"]
-    ).last().reset_index()
+    # Labels
+    df["Solver"] = df["solver"].str.upper()
+    df["Strategy"] = df["strategy"].str.capitalize()
 
     return df
 
 
-def compute_strong_scaling(df: pd.DataFrame, group_cols: list) -> pd.DataFrame:
-    """Compute strong scaling metrics.
+def compute_strong_scaling(df: pd.DataFrame, baseline_col: str = "n_ranks") -> pd.DataFrame:
+    """Compute strong scaling metrics (speedup and efficiency).
 
     Speedup S(P) = T(1) / T(P)
     Efficiency E(P) = S(P) / P * 100
+
+    Note: For n_ranks=1, strategy doesn't matter (no decomposition).
+    We use a common baseline per (N, solver) for all strategies.
     """
-    df = df.dropna(subset=["wall_time"]).copy()
     results = []
 
-    for keys, group in df.groupby(group_cols):
-        # Baseline: always n_ranks=1
-        baseline_rows = group[group["n_ranks"] == 1]
-        if baseline_rows.empty:
-            continue
-        baseline = baseline_rows["wall_time"].mean()
+    # Get baselines per (N, solver) - strategy irrelevant for sequential
+    baselines = df[df["n_ranks"] == 1].groupby(["N", "solver"])["wall_time"].mean()
 
-        for _, row in group.iterrows():
-            P = int(row["n_ranks"])
-            T_P = float(row["wall_time"])
-            speedup = baseline / T_P
-            results.append({
-                **{col: row[col] for col in group_cols},
-                "n_ranks": P,
-                "total_processes": int(row["total_processes"]),
-                "wall_time": T_P,
-                "speedup": speedup,
-                "efficiency": (speedup / P) * 100,
-                "mlups": row.get("mlups", np.nan),
-            })
+    # Process each run
+    for _, row in df.iterrows():
+        N = int(row["N"])
+        solver = row["solver"]
+        P = int(row["n_ranks"])
+        T_P = float(row["wall_time"])
+
+        # Get baseline for this (N, solver)
+        try:
+            T_1 = baselines.loc[(N, solver)]
+        except KeyError:
+            # No baseline for this configuration
+            continue
+
+        speedup = T_1 / T_P if T_P > 0 else np.nan
+
+        results.append({
+            "N": N,
+            "n_ranks": P,
+            "strategy": row["strategy"],
+            "Strategy": row["strategy"].capitalize() if pd.notna(row["strategy"]) else "Unknown",
+            "solver": solver,
+            "Solver": solver.upper() if pd.notna(solver) else "JACOBI",
+            "wall_time": T_P,
+            "T_1": T_1,
+            "speedup": speedup,
+            "efficiency": (speedup / P) * 100 if P > 0 else np.nan,
+            "mlups": row.get("mlups", np.nan),
+        })
 
     return pd.DataFrame(results)
 
 
-def compute_weak_scaling(df: pd.DataFrame, group_cols: list) -> pd.DataFrame:
-    """Compute weak scaling metrics.
+def compute_weak_scaling(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute weak scaling efficiency.
 
     Efficiency E(P) = T(1) / T(P) * 100
+    (For weak scaling, work per rank is constant, so ideal T(P) = T(1))
     """
-    df = df.dropna(subset=["wall_time"]).copy()
     results = []
 
-    for keys, group in df.groupby(group_cols):
-        # Baseline: P=1
+    # Group by strategy only (N varies with ranks in weak scaling)
+    for strategy, group in df.groupby("strategy"):
+        # Get baseline (n_ranks=1)
         baseline_rows = group[group["n_ranks"] == 1]
         if baseline_rows.empty:
             continue
-        baseline = baseline_rows["wall_time"].mean()
+        T_1 = baseline_rows["wall_time"].mean()
 
         for _, row in group.iterrows():
             P = int(row["n_ranks"])
             T_P = float(row["wall_time"])
+
             results.append({
-                **{col: row[col] for col in group_cols},
                 "N": int(row["N"]),
                 "n_ranks": P,
-                "total_processes": int(row["total_processes"]),
+                "strategy": strategy,
+                "Strategy": strategy.capitalize(),
+                "solver": row["solver"],
+                "Solver": row["solver"].upper() if pd.notna(row["solver"]) else "JACOBI",
                 "wall_time": T_P,
-                "efficiency": (baseline / T_P) * 100,
+                "efficiency": (T_1 / T_P) * 100 if T_P > 0 else np.nan,
                 "mlups": row.get("mlups", np.nan),
             })
 
     return pd.DataFrame(results)
 
 
-def plot_decomposition_scaling(df_strong: pd.DataFrame, df_weak: pd.DataFrame, fig_dir):
-    """Plot decomposition comparison (sliced vs cubic).
-
-    Strong scaling: Speedup & Efficiency vs Ranks, hue=Strategy
-    Weak scaling: Efficiency vs Ranks, hue=Strategy
-    """
-    # Strong scaling
-    if not df_strong.empty:
-        df = df_strong[df_strong["n_ranks"] > 1].copy()
-        if not df.empty:
-            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-            P_range = sorted(df["n_ranks"].unique())
-
-            # Speedup
-            sns.lineplot(data=df, x="n_ranks", y="speedup", hue="Strategy",
-                         style="Strategy", markers=True, dashes=False,
-                         ax=axes[0], markersize=8)
-            axes[0].plot(P_range, P_range, "k--", alpha=0.5, label="Ideal", linewidth=1)
-            axes[0].set(xlabel="Number of Ranks", ylabel="Speedup S(P)",
-                        xscale="log", yscale="log")
-            axes[0].set_xticks(P_range)
-            axes[0].set_xticklabels([str(p) for p in P_range])
-            axes[0].legend(title="Decomposition")
-            axes[0].grid(True, alpha=0.3)
-
-            # Efficiency
-            sns.lineplot(data=df, x="n_ranks", y="efficiency", hue="Strategy",
-                         style="Strategy", markers=True, dashes=False,
-                         ax=axes[1], markersize=8)
-            axes[1].axhline(y=100, color="k", linestyle="--", alpha=0.5, linewidth=1)
-            axes[1].set(xlabel="Number of Ranks", ylabel="Parallel Efficiency (%)",
-                        xscale="log", ylim=(0, 110))
-            axes[1].set_xticks(P_range)
-            axes[1].set_xticklabels([str(p) for p in P_range])
-            axes[1].legend(title="Decomposition")
-            axes[1].grid(True, alpha=0.3)
-
-            N = df["N"].mode().values[0] if "N" in df.columns else "?"
-            fig.suptitle(f"Strong Scaling: Decomposition Comparison (N={N})", fontweight="bold")
-            plt.tight_layout()
-            fig.savefig(fig_dir / "01_strong_scaling_decomposition.pdf", bbox_inches="tight")
-            print(f"Saved: {fig_dir / '01_strong_scaling_decomposition.pdf'}")
-            plt.close()
-
-    # Weak scaling
-    if not df_weak.empty:
-        df = df_weak[df_weak["n_ranks"] > 1].copy()
-        if not df.empty:
-            fig, ax = plt.subplots(figsize=(8, 5))
-            P_range = sorted(df["n_ranks"].unique())
-
-            sns.lineplot(data=df, x="n_ranks", y="efficiency", hue="Strategy",
-                         style="Strategy", markers=True, dashes=False,
-                         ax=ax, markersize=8)
-            ax.axhline(y=100, color="k", linestyle="--", alpha=0.5, linewidth=1, label="Ideal")
-            ax.set(xlabel="Number of Ranks", ylabel="Weak Scaling Efficiency (%)",
-                   xscale="log", ylim=(0, 120))
-            ax.set_xticks(P_range)
-            ax.set_xticklabels([str(p) for p in P_range])
-            ax.legend(title="Decomposition")
-            ax.grid(True, alpha=0.3)
-
-            fig.suptitle("Weak Scaling: Decomposition Comparison", fontweight="bold")
-            plt.tight_layout()
-            fig.savefig(fig_dir / "02_weak_scaling_decomposition.pdf", bbox_inches="tight")
-            print(f"Saved: {fig_dir / '02_weak_scaling_decomposition.pdf'}")
-            plt.close()
-
-
-def plot_fmg_hybrid_scaling(df_strong: pd.DataFrame, df_weak: pd.DataFrame, fig_dir):
-    """Plot FMG hybrid MPI+Numba scaling.
-
-    x-axis: Total Processes (MPI ranks × numba threads)
-    Legend: Numba threads configuration
-    """
-    # Strong scaling
-    if not df_strong.empty:
-        df = df_strong[df_strong["n_ranks"] > 1].copy()
-        df["Config"] = df["numba_threads"].apply(lambda x: f"{x} thread{'s' if x > 1 else ''}")
-        if not df.empty:
-            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-            P_range = sorted(df["total_processes"].unique())
-
-            # Speedup vs total processes
-            sns.lineplot(data=df, x="total_processes", y="speedup", hue="Config",
-                         style="Config", markers=True, dashes=False,
-                         ax=axes[0], markersize=8)
-            axes[0].plot(P_range, P_range, "k--", alpha=0.5, label="Ideal", linewidth=1)
-            axes[0].set(xlabel="Total Processes (ranks × threads)", ylabel="Speedup S(P)",
-                        xscale="log", yscale="log")
-            axes[0].legend(title="Numba Threads")
-            axes[0].grid(True, alpha=0.3)
-
-            # Efficiency
-            sns.lineplot(data=df, x="total_processes", y="efficiency", hue="Config",
-                         style="Config", markers=True, dashes=False,
-                         ax=axes[1], markersize=8)
-            axes[1].axhline(y=100, color="k", linestyle="--", alpha=0.5, linewidth=1)
-            axes[1].set(xlabel="Total Processes (ranks × threads)", ylabel="Parallel Efficiency (%)",
-                        xscale="log", ylim=(0, 110))
-            axes[1].legend(title="Numba Threads")
-            axes[1].grid(True, alpha=0.3)
-
-            fig.suptitle("FMG Strong Scaling: Hybrid MPI + Numba", fontweight="bold")
-            plt.tight_layout()
-            fig.savefig(fig_dir / "03_strong_scaling_fmg_hybrid.pdf", bbox_inches="tight")
-            print(f"Saved: {fig_dir / '03_strong_scaling_fmg_hybrid.pdf'}")
-            plt.close()
-
-    # Weak scaling
-    if not df_weak.empty:
-        df = df_weak[df_weak["n_ranks"] > 1].copy()
-        df["Config"] = df["numba_threads"].apply(lambda x: f"{x} thread{'s' if x > 1 else ''}")
-        if not df.empty:
-            fig, ax = plt.subplots(figsize=(8, 5))
-
-            sns.lineplot(data=df, x="total_processes", y="efficiency", hue="Config",
-                         style="Config", markers=True, dashes=False,
-                         ax=ax, markersize=8)
-            ax.axhline(y=100, color="k", linestyle="--", alpha=0.5, linewidth=1, label="Ideal")
-            ax.set(xlabel="Total Processes (ranks × threads)",
-                   ylabel="Weak Scaling Efficiency (%)",
-                   xscale="log", ylim=(0, 120))
-            ax.legend(title="Numba Threads")
-            ax.grid(True, alpha=0.3)
-
-            fig.suptitle("FMG Weak Scaling: Hybrid MPI + Numba", fontweight="bold")
-            plt.tight_layout()
-            fig.savefig(fig_dir / "04_weak_scaling_fmg_hybrid.pdf", bbox_inches="tight")
-            print(f"Saved: {fig_dir / '04_weak_scaling_fmg_hybrid.pdf'}")
-            plt.close()
-
-
-def plot_mlups_comparison(df: pd.DataFrame, fig_dir):
-    """Plot MLups performance comparison."""
-    if df.empty or "mlups" not in df.columns:
-        return
-
-    df = df.dropna(subset=["mlups"]).copy()
-    if df.empty:
-        return
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-
-    sns.lineplot(data=df, x="n_ranks", y="mlups", hue="Strategy",
-                 style="Strategy", markers=True, dashes=False,
-                 ax=ax, markersize=8)
-    ax.set(xlabel="Number of Ranks", ylabel="Performance (Mlup/s)", xscale="log")
-    ax.legend(title="Decomposition")
-    ax.grid(True, alpha=0.3)
-
-    fig.suptitle("Performance: Decomposition Comparison", fontweight="bold")
-    plt.tight_layout()
-    fig.savefig(fig_dir / "05_mlups_decomposition.pdf", bbox_inches="tight")
-    print(f"Saved: {fig_dir / '05_mlups_decomposition.pdf'}")
-    plt.close()
-
-
-@hydra.main(config_path="../hydra-conf", config_name="experiment/scaling", version_base=None)
+@hydra.main(config_path="../../conf", config_name="config", version_base=None)
 def main(cfg: DictConfig):
-    """Main plotting function."""
+    """Generate scaling plots from MLflow data."""
+
     repo_root = get_project_root()
     fig_dir = repo_root / "figures" / "scaling"
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load data from MLflow
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
-    prefix = cfg.mlflow.databricks_project_prefix
+    prefix = cfg.mlflow.get("project_prefix", "")
 
-    # Load from the three scaling experiments
-    df_scaling = load_experiment_data("scaling", prefix)
-    df_weak = load_experiment_data("weak_scaling", prefix)
-    df_fmg = load_experiment_data("fmg_scaling", prefix)
+    # Load all scaling data from the main experiments
+    df_jacobi = load_scaling_data("scaling", prefix)
+    df_fmg = load_scaling_data("fmg_scaling", prefix)
 
     print(f"\nLoaded:")
-    print(f"  Strong scaling (Jacobi): {len(df_scaling)} runs")
-    print(f"  Weak scaling (Jacobi): {len(df_weak)} runs")
-    print(f"  FMG scaling: {len(df_fmg)} runs")
+    print(f"  Jacobi runs: {len(df_jacobi)}")
+    print(f"  FMG runs: {len(df_fmg)}")
 
-    if df_scaling.empty and df_weak.empty and df_fmg.empty:
+    # Combine all data
+    df_all = pd.concat([df_jacobi, df_fmg], ignore_index=True)
+
+    # Weak scaling pairs: (N, n_ranks) with ~127³ points per rank
+    # 129@1, 257@8, 513@64
+    WEAK_SCALING_PAIRS = {(129, 1), (257, 8), (513, 64)}
+
+    # Separate strong and weak scaling based on (N, n_ranks) pattern
+    def is_weak_scaling(row):
+        return (int(row["N"]), int(row["n_ranks"])) in WEAK_SCALING_PAIRS
+
+    if not df_all.empty:
+        df_all["is_weak"] = df_all.apply(is_weak_scaling, axis=1)
+        df_strong = df_all[~df_all["is_weak"]].copy()
+        df_weak = df_all[df_all["is_weak"]].copy()
+    else:
+        df_strong = df_all
+        df_weak = pd.DataFrame()
+
+    print(f"  Strong scaling runs: {len(df_strong)}")
+    print(f"  Weak scaling runs: {len(df_weak)}")
+
+    if df_strong.empty and df_weak.empty:
         print("\nNo data found. Run experiments first:")
-        print("  ./Experiments/HPC-jobs/submit_all.sh")
+        print("  bsub < jobs/scaling.sh")
+        print("  bsub < jobs/baseline.sh")
         return
 
-    # === Decomposition comparison (Jacobi) ===
-    print("\n--- Decomposition Comparison ---")
-    if not df_scaling.empty:
-        df_strong_decomp = compute_strong_scaling(df_scaling, ["strategy", "N"])
-        if not df_strong_decomp.empty:
-            df_strong_decomp["Strategy"] = df_strong_decomp["strategy"].str.title()
-            print(f"Strong scaling points: {len(df_strong_decomp)}")
-        else:
+    # =========================================================================
+    # Strong Scaling Plots (N as columns, Solver/Strategy as hue/style)
+    # =========================================================================
+
+    if not df_strong.empty:
+        print("\n--- Strong Scaling Analysis ---")
+
+        # Compute scaling metrics
+        df_ss = compute_strong_scaling(df_strong)
+        if df_ss.empty:
             print("No strong scaling data (missing n_ranks=1 baseline)")
-    else:
-        df_strong_decomp = pd.DataFrame()
+        else:
+            print(f"Strong scaling points: {len(df_ss)}")
+
+            # Get unique rank counts for x-axis
+            P_range = sorted(df_ss["n_ranks"].unique())
+
+            plot_num = 1
+
+            # Speedup plot: N as columns, Solver/Strategy as hue/style
+            g = sns.relplot(
+                data=df_ss[df_ss["n_ranks"] > 1],
+                x="n_ranks",
+                y="speedup",
+                hue="Solver",
+                style="Strategy",
+                col="N",
+                kind="line",
+                markers=True,
+                markersize=8,
+                facet_kws={"sharey": False},
+                height=4,
+                aspect=1.3,
+            )
+            for ax in g.axes.flat:
+                ax.plot(P_range, P_range, "k--", alpha=0.5, linewidth=1, label="Ideal")
+                ax.set_xscale("log")
+                ax.set_yscale("log")
+                ax.grid(True, alpha=0.3)
+            g.set_axis_labels("Number of Ranks", "Speedup S(P)")
+            g.figure.suptitle("Strong Scaling: Speedup", y=1.02)
+
+            output_file = fig_dir / f"{plot_num:02d}_strong_speedup.pdf"
+            g.savefig(output_file, bbox_inches="tight")
+            print(f"Saved: {output_file}")
+            plt.close()
+            plot_num += 1
+
+            # Throughput plot: N as columns, Solver/Strategy as hue/style
+            g = sns.relplot(
+                data=df_ss,
+                x="n_ranks",
+                y="mlups",
+                hue="Solver",
+                style="Strategy",
+                col="N",
+                kind="line",
+                markers=True,
+                markersize=8,
+                errorbar=("ci", 95),
+                facet_kws={"sharey": False},
+                height=4,
+                aspect=1.3,
+            )
+            for ax in g.axes.flat:
+                ax.set_xscale("log")
+                ax.grid(True, alpha=0.3)
+            g.set_axis_labels("Number of Ranks", "Throughput (MLup/s)")
+            g.figure.suptitle("Strong Scaling: Throughput", y=1.02)
+
+            output_file = fig_dir / f"{plot_num:02d}_strong_throughput.pdf"
+            g.savefig(output_file, bbox_inches="tight")
+            print(f"Saved: {output_file}")
+            plt.close()
+            plot_num += 1
+
+    # =========================================================================
+    # Weak Scaling Plots (single row, Solver/Strategy as hue/style)
+    # =========================================================================
+
+    # Track plot numbering across strong and weak scaling
+    if 'plot_num' not in dir():
+        plot_num = 1
 
     if not df_weak.empty:
-        df_weak_decomp = compute_weak_scaling(df_weak, ["strategy"])
-        if not df_weak_decomp.empty:
-            df_weak_decomp["Strategy"] = df_weak_decomp["strategy"].str.title()
-            print(f"Weak scaling points: {len(df_weak_decomp)}")
-        else:
+        print("\n--- Weak Scaling Analysis ---")
+
+        # Compute weak scaling metrics
+        df_ws = compute_weak_scaling(df_weak)
+        if df_ws.empty:
             print("No weak scaling data (missing n_ranks=1 baseline)")
-    else:
-        df_weak_decomp = pd.DataFrame()
+        else:
+            print(f"Weak scaling points: {len(df_ws)}")
 
-    plot_decomposition_scaling(df_strong_decomp, df_weak_decomp, fig_dir)
+            # Weak Scaling Throughput (single plot, Solver/Strategy as hue/style)
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.lineplot(
+                data=df_ws,
+                x="n_ranks",
+                y="mlups",
+                hue="Solver",
+                style="Strategy",
+                markers=True,
+                markersize=8,
+                errorbar=("ci", 95),
+                ax=ax,
+            )
+            ax.set_xscale("log")
+            ax.set_xlabel("Number of Ranks")
+            ax.set_ylabel("Throughput (MLup/s)")
+            ax.set_title("Weak Scaling: Throughput (~127³ points/rank)")
+            ax.grid(True, alpha=0.3)
+            ax.legend(title="Config")
 
-    # === FMG Hybrid scaling ===
-    print("\n--- FMG Hybrid Scaling ---")
-    if not df_fmg.empty:
-        # Separate strong (single N) and weak (varying N) data
-        N_counts = df_fmg.groupby("N").size()
-        if len(N_counts) > 0:
-            # For strong scaling, use the most common N
-            N_strong = N_counts.idxmax()
-            df_fmg_strong_data = df_fmg[df_fmg["N"] == N_strong]
-            df_fmg_strong = compute_strong_scaling(df_fmg_strong_data, ["numba_threads", "N"])
-            print(f"FMG strong scaling points (N={N_strong}): {len(df_fmg_strong)}")
+            output_file = fig_dir / f"{plot_num:02d}_weak_throughput.pdf"
+            fig.savefig(output_file, bbox_inches="tight")
+            print(f"Saved: {output_file}")
+            plt.close()
+            plot_num += 1
 
-            # For weak scaling, use all varying N data
-            df_fmg_weak = compute_weak_scaling(df_fmg, ["numba_threads"])
-            print(f"FMG weak scaling points: {len(df_fmg_weak)}")
+    # =========================================================================
+    # Summary
+    # =========================================================================
 
-            plot_fmg_hybrid_scaling(df_fmg_strong, df_fmg_weak, fig_dir)
-
-    # === MLups comparison ===
-    if not df_strong_decomp.empty:
-        plot_mlups_comparison(df_strong_decomp, fig_dir)
-
-    # === Summary ===
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 70)
     print("SCALING SUMMARY")
-    print("=" * 60)
+    print("=" * 70)
 
-    if not df_strong_decomp.empty:
-        print("\nStrong Scaling (Jacobi) - Max Speedup & Min Efficiency:")
-        summary = df_strong_decomp.groupby("Strategy").agg({
+    if not df_strong.empty and 'df_ss' in dir() and not df_ss.empty:
+        print("\nStrong Scaling - Max Speedup by Configuration:")
+        summary = df_ss.groupby(["Solver", "N", "Strategy"]).agg({
             "n_ranks": "max",
             "speedup": "max",
-            "efficiency": ["max", "min"]
+            "efficiency": "min"
         }).round(2)
         print(summary.to_string())
 
-    if not df_weak_decomp.empty:
-        print("\nWeak Scaling (Jacobi) - Efficiency Range:")
-        summary = df_weak_decomp.groupby("Strategy").agg({
+    if not df_weak.empty and 'df_ws' in dir() and not df_ws.empty:
+        print("\nWeak Scaling - Efficiency at Max Ranks:")
+        summary = df_ws.groupby(["Solver", "Strategy"]).agg({
             "n_ranks": "max",
             "efficiency": ["max", "min"]
         }).round(2)
