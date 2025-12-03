@@ -1,6 +1,5 @@
 # @package _global_
 defaults:
-  - /config
   - _self_
 
 experiment_name: validation
