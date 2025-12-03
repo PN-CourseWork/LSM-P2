@@ -10,11 +10,14 @@ Usage:
     uv run python run_solver.py N=129 solver=fmg n_ranks=4
 """
 
+import json
 import logging
 import os
 import subprocess
 import sys
-from dataclasses import fields
+import tempfile
+from dataclasses import asdict, fields
+from typing import List, Optional
 
 import hydra
 import mlflow
@@ -23,7 +26,7 @@ from mlflow.tracking import MlflowClient
 from mpi4py import MPI
 from omegaconf import DictConfig, OmegaConf
 
-from Poisson.datastructures import GlobalParams
+from Poisson.datastructures import GlobalParams, LocalParams
 from Poisson.solvers import FMGMPISolver, FMGSolver, JacobiMPISolver, JacobiSolver
 
 log = logging.getLogger(__name__)
@@ -89,9 +92,12 @@ def worker(cfg_path: str) -> None:
     solver.fmg_solve() if params.solver == "fmg" else solver.solve()
     solver.compute_l2_error()
 
+    # Gather rank topology (all ranks participate, result on rank 0)
+    rank_topology = gather_rank_topology(solver, comm)
+
     # Log results (rank 0 only)
     if rank == 0:
-        log_to_mlflow(params, solver)
+        log_to_mlflow(params, solver, rank_topology)
 
     log.info(
         f"Done: {solver.metrics.iterations} iter, error={solver.metrics.final_error:.2e}, "
@@ -142,7 +148,30 @@ def create_solver(params: GlobalParams, comm):
         return FMGSolver(**common)
 
 
-def log_to_mlflow(params: GlobalParams, solver) -> None:
+def gather_rank_topology(solver, comm) -> Optional[List[LocalParams]]:
+    """Gather rank topology from all MPI ranks.
+
+    Returns list of LocalParams on rank 0, None on other ranks.
+    Returns None for sequential solvers.
+    """
+    rank = comm.Get_rank()
+
+    # Get grid from solver (handle both Jacobi and FMG)
+    grid = getattr(solver, "grid", None)
+    if grid is None and hasattr(solver, "levels") and solver.levels:
+        grid = solver.levels[0].grid
+
+    # Get rank info (None for sequential solvers)
+    rank_info = grid.get_rank_info() if grid else None
+
+    # Gather to rank 0 (only if we have rank info)
+    if rank_info is not None:
+        all_ranks = comm.gather(rank_info, root=0)
+        return all_ranks if rank == 0 else None
+    return None
+
+
+def log_to_mlflow(params: GlobalParams, solver, rank_topology: Optional[List[LocalParams]] = None) -> None:
     """Log solver run to MLflow."""
     with mlflow.start_run(run_name=f"{params.solver}_N{params.N}_p{params.n_ranks}") as run:
         # Params and metrics from dataclasses
@@ -153,6 +182,17 @@ def log_to_mlflow(params: GlobalParams, solver) -> None:
         timeseries = solver.timeseries.to_mlflow_batch()
         if timeseries:
             MlflowClient().log_batch(run_id=run.info.run_id, metrics=timeseries)
+
+        # Rank topology artifact (for networkx visualizations)
+        if rank_topology:
+            topology_data = [asdict(rp) for rp in rank_topology]
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as f:
+                json.dump(topology_data, f, indent=2)
+                temp_path = f.name
+            mlflow.log_artifact(temp_path, artifact_path="topology")
+            os.unlink(temp_path)
 
 
 # =============================================================================

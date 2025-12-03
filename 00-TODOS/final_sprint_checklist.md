@@ -85,43 +85,15 @@ These must be done before HPC runs.
   - This is safe and doesn't require request handle management
 
 ### 1.7 Rank Topology Logging for MLflow (todos.md #3, #15)
-- [ ] **Extend `RankGeometry` or create new dataclass for topology info**
+- [x] **Extend `RankGeometry` or create new dataclass for topology info** ✓
+  - Uses existing `LocalParams` dataclass from `datastructures.py`
+  - Added `get_rank_info()` method to `DistributedGrid` (`grid.py:108-118`)
+  - Returns `LocalParams` with rank, hostname, cart_coords, neighbors, local_shape, global_start/end
 
-  **Already exists** (`datastructures.py:144-170`, `grid.py:192-201`):
-  | Field | Source |
-  |-------|--------|
-  | `rank` | `RankGeometry.rank` |
-  | `local_shape` | `RankGeometry.local_shape` |
-  | `neighbors` | `RankGeometry.neighbors` |
-  | `halo_time_total` | `GlobalMetrics.total_halo_time` |
-
-  **Needs to be added:**
-  | Column | How to get |
-  |--------|------------|
-  | `hostname` | `MPI.Get_processor_name()` |
-  | `cart_coords` | `grid.cart_comm.Get_coords(rank)` |
-  | `socket_id` | Parse `/proc/self/status` for `Cpus_allowed` or use `psutil` |
-  | `cpu_model` | `platform.processor()` or parse `/proc/cpuinfo` |
-  | `halo_time_per_iter` | `total_halo_time / iterations` |
-
-- [ ] **Gather to rank 0 and save as artifact**
-  ```python
-  # In solver finalize (after solve completes)
-  rank_info = {
-      'rank': self.rank,
-      'hostname': MPI.Get_processor_name(),
-      'cart_coords': list(self.grid.cart_comm.Get_coords(self.rank)),
-      'neighbors': self.grid.neighbors,
-      'local_shape': self.grid.local_shape,
-      'halo_time_total': self.results.total_halo_time,
-      'halo_time_per_iter': self.results.total_halo_time / self.results.iterations,
-  }
-  all_rank_info = self.comm.gather(rank_info, root=0)  # Use lowercase gather for dict
-  if self.rank == 0:
-      df = pd.DataFrame(all_rank_info)
-      df.to_parquet("rank_topology.parquet")
-      mlflow.log_artifact("rank_topology.parquet")
-  ```
+- [x] **Gather to rank 0 and save as artifact** ✓
+  - Added `gather_rank_topology()` in `run_solver.py:148-168`
+  - Uses `comm.gather()` to collect `LocalParams` from all ranks
+  - Logs JSON artifact to `topology/` folder in MLflow
 
 - [ ] **Enable networkx visualization later**
   - Neighbor relationships → graph edges
@@ -187,12 +159,14 @@ These must be done before HPC runs.
   - Use rank counts matching socket: 12, 24, 36...
 
 ### 2.3 Rank Placement Logging (todos.md #3, #15)
-- [ ] **Log per-rank info in solver:**
-  - Hostname
-  - Socket ID
-  - CPU model
-  - Neighbor mapping for halo communication
-  - Consider networkx visualization for rank topology
+- [x] **Log per-rank info in solver:** ✓
+  - Hostname ✓ (via `MPI.Get_processor_name()`)
+  - Cart coords ✓ (via `cart_comm.Get_coords()`)
+  - Neighbor mapping ✓ (from `neighbors` dict)
+  - Local shape and global indices ✓
+  - Logged as JSON artifact in `topology/` folder
+- [ ] Consider adding socket_id/cpu_model for HPC runs
+- [ ] Consider networkx visualization for rank topology
 
 ### 2.4 Hybrid Experiments
 - [ ] **Numba threads sweep:** 1, 4, 8 threads

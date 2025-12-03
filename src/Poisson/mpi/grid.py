@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 from mpi4py import MPI
 
-from ..datastructures import RankGeometry
+from ..datastructures import LocalParams, RankGeometry
 from .decomposition import CartesianDecomposition
 from .halo import create_halo_exchanger
 
@@ -104,6 +104,18 @@ class DistributedGrid:
         for direction, is_bc in self.is_boundary.items():
             if is_bc:
                 arr[self._BOUNDARY_SLICES[direction]] = value
+
+    def get_rank_info(self) -> LocalParams:
+        """Get topology info for this rank (for MLflow artifact)."""
+        return LocalParams(
+            rank=self.rank,
+            hostname=MPI.Get_processor_name(),
+            cart_coords=tuple(self.cart_comm.Get_coords(self.rank)),
+            neighbors=self.neighbors.copy(),
+            local_shape=self.local_shape,
+            global_start=self.global_start,
+            global_end=self.global_end,
+        )
 
     def fill_source_term(self, f: np.ndarray):
         """Fill source term for sinusoidal test problem.
