@@ -1,26 +1,29 @@
 # @package _global_
 defaults:
   - /config
-  - /solver: jacobi
+  - /solver: multigrid
   - _self_
 
-experiment_name: scaling
+experiment_name: fmg_scaling
 
 # MPI options (binding enabled via HPC job scripts)
 mpi:
   bind_to: null
 
-# Fixed solver settings
+# FMG solver settings
+solver_type: fmg
+n_smooth: 3
+omega: 0.6666666666666666
 max_iter: 100
-omega: 0.8
 tolerance: 0.0
-communicator: custom
+fmg_post_vcycles: 1
 
-# Use Numba with 1 thread for all HPC runs
+# Use Numba with 1 thread by default (override for hybrid experiments)
 use_numba: true
 numba_threads: 1
 
 # Default values (override with -m for sweep)
 N: 257
 n_ranks: 1
-strategy: sliced
+strategy: cubic
+communicator: custom

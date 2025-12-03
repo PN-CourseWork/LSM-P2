@@ -1,0 +1,14 @@
+# @package _global_
+# MLflow Log Callback - uploads Hydra job log to MLflow artifacts
+#
+# This callback runs after each job and uploads the log file containing
+# all job output (including MPI report-bindings) to MLflow.
+#
+# Usage: Add to defaults in your config:
+#   defaults:
+#     - hydra/callbacks: mlflow_log
+hydra:
+  callbacks:
+    mlflow_log:
+      _target_: utils.hydra.callbacks.MLflowLogCallback
+      artifact_path: logs

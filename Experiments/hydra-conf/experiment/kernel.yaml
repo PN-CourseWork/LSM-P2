@@ -18,8 +18,8 @@ hydra:
     env_set:
       NUMBA_NUM_THREADS: "8"
 
-# Sweep over problem size, numba on/off, and threads
-sweep:
-  N: [33, 65, 97, 129]
-  use_numba: [false, true]
-  numba_threads: [1, 4]
+# Default sweep parameters (use --multirun or -m to execute)
+# uv run python run_solver.py -cn experiment/kernel -m
+N: 33
+use_numba: false
+numba_threads: 1

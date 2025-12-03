@@ -4,7 +4,7 @@ defaults:
   - /solver: jacobi
   - _self_
 
-experiment_name: scaling
+experiment_name: weak_scaling
 
 # MPI options (binding enabled via HPC job scripts)
 mpi:
@@ -14,13 +14,16 @@ mpi:
 max_iter: 100
 omega: 0.8
 tolerance: 0.0
-communicator: custom
 
 # Use Numba with 1 thread for all HPC runs
 use_numba: true
 numba_threads: 1
 
-# Default values (override with -m for sweep)
+# Weak scaling: constant local problem size (~257³ per rank)
+# Pairs: (n_ranks, N) = (1,257), (8,513), (27,769), (64,1025)
+
+# Default values
 N: 257
 n_ranks: 1
-strategy: sliced
+strategy: cubic
+communicator: custom

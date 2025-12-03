@@ -1,17 +1,17 @@
 """
-Unified Solver Runner
-=====================
+Unified Solver Runner (Hydra v2)
+================================
 
-Single runner for all solver experiments. Uses sequential solvers for
-single-process runs, spawns MPI for parallel runs.
+Single runner for all solver experiments using Hydra's native multirun.
 
 Solver selection:
 - n_ranks=1: JacobiSolver or FMGSolver (no MPI overhead)
 - n_ranks>1: JacobiMPISolver or FMGMPISolver (with MPI)
 
-Supports LSF job arrays for parallel experiment execution:
+HPC Job Array Support:
 - LSB_DJOB_NUMPROC: allocated cores (determines valid rank counts)
-- LSB_JOBINDEX: job array index (selects which config to run)
+- LSB_JOBINDEX: selects which multirun config to execute (1-based)
+- Runs are skipped if n_ranks exceeds allocation or doesn't match tier
 
 Usage
 -----
@@ -21,152 +21,106 @@ Usage
     # Single run (local)
     uv run python run_solver.py -cn experiment/validation
 
-    # HPC with job array (each element runs one config)
-    #BSUB -J scaling[1-66]
+    # Multirun sweep (local - runs all sequentially)
+    uv run python run_solver.py -cn experiment/scaling --multirun
+
+    # HPC with job array (each job runs one config)
+    #BSUB -J scaling[1-100]
     #BSUB -n 48
-    uv run python run_solver.py -cn experiment/scaling
+    uv run python run_solver.py -cn experiment/scaling --multirun
 """
 
+import logging
 import os
 import subprocess
 import sys
-from dataclasses import asdict
-from itertools import product
 
 import hydra
+from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
+log = logging.getLogger(__name__)
 
-def _get_sweep_configs(cfg: DictConfig, alloc_cores: int, cores_per_node: int = 24):
-    """Generate valid experiment configs for this allocation tier.
 
-    Supports two formats:
-    1. sweep: {n_ranks: [...], N: [...], strategy: [...]} - all combinations
-    2. sweep_groups: {name: {solver_type: x, N: [...]}} - group-specific sweeps
+def _get_allocation_tier(n_ranks: int, cores_per_node: int = 24) -> int:
+    """Get minimum allocation tier (in cores) needed for n_ranks."""
+    if n_ranks <= 0:
+        return cores_per_node
+    return ((n_ranks - 1) // cores_per_node + 1) * cores_per_node
+
+
+def _should_run(n_ranks: int, alloc_cores: int, cores_per_node: int = 24) -> bool:
+    """Check if this run belongs to the current allocation tier.
+
+    A run belongs to tier T if:
+    - n_ranks <= T (fits in allocation)
+    - n_ranks > T - cores_per_node (requires this tier, not a smaller one)
     """
     prev_tier = alloc_cores - cores_per_node
+    return prev_tier < n_ranks <= alloc_cores
 
-    # Check for sweep_groups first (new format)
-    sweep_groups = cfg.get("sweep_groups", {})
-    if sweep_groups:
-        configs = []
-        base_n_ranks = cfg.get("n_ranks", 1)
-        base_strategy = cfg.get("strategy", "sliced")
 
-        base_communicator = cfg.get("communicator", "custom")
+def _get_multirun_index() -> tuple[int, int]:
+    """Get current multirun index and total from Hydra.
 
-        for group_name, group_cfg in sweep_groups.items():
-            solver_type = group_cfg.get("solver_type", "jacobi")
-            N_values = list(group_cfg.get("N", [65]))
-            n_ranks_values = list(group_cfg.get("n_ranks", [base_n_ranks]))
-            strategy_values = list(group_cfg.get("strategy", [base_strategy]))
-            communicator_values = list(group_cfg.get("communicator", [base_communicator]))
-
-            # Filter ranks for this allocation tier
-            valid_ranks = [r for r in n_ranks_values if prev_tier < r <= alloc_cores]
-            if not valid_ranks:
-                valid_ranks = [base_n_ranks] if prev_tier < base_n_ranks <= alloc_cores else []
-
-            for n_ranks in valid_ranks:
-                for N in N_values:
-                    for strategy in strategy_values:
-                        for communicator in communicator_values:
-                            configs.append({
-                                "n_ranks": n_ranks,
-                                "N": N,
-                                "strategy": strategy,
-                                "solver_type": solver_type,
-                                "communicator": communicator,
-                            })
-        return configs
-
-    # Fall back to sweep format
-    sweep = cfg.get("sweep", {})
-    if not sweep:
-        # No sweep defined - return single config from cfg
-        return [{"n_ranks": cfg.get("n_ranks", 1),
-                 "N": cfg.get("N", 64),
-                 "strategy": cfg.get("strategy", "sliced"),
-                 "solver_type": cfg.get("solver_type", "jacobi"),
-                 "use_numba": cfg.get("use_numba", False),
-                 "numba_threads": cfg.get("numba_threads", 1)}]
-
-    # Get sweep parameters with defaults
-    rank_values = list(sweep.get("n_ranks", [cfg.get("n_ranks", 1)]))
-    N_values = list(sweep.get("N", [cfg.get("N", 64)]))
-    strategy_values = list(sweep.get("strategy", [cfg.get("strategy", "sliced")]))
-    solver_values = list(sweep.get("solver_type", [cfg.get("solver_type", "jacobi")]))
-    use_numba_values = list(sweep.get("use_numba", [cfg.get("use_numba", False)]))
-    numba_threads_values = list(sweep.get("numba_threads", [cfg.get("numba_threads", 1)]))
-
-    # Filter ranks: must fit in allocation AND require this tier
-    valid_ranks = [r for r in rank_values if prev_tier < r <= alloc_cores]
-
-    if not valid_ranks:
-        return []
-
-    # Generate all combinations
-    configs = []
-    for n_ranks, N, strategy, solver_type, use_numba, numba_threads in product(
-        valid_ranks, N_values, strategy_values, solver_values, use_numba_values, numba_threads_values
-    ):
-        # Skip numba_threads variations when not using numba
-        if not use_numba and numba_threads != numba_threads_values[0]:
-            continue
-        configs.append({
-            "n_ranks": n_ranks, "N": N, "strategy": strategy, "solver_type": solver_type,
-            "use_numba": use_numba, "numba_threads": numba_threads
-        })
-
-    return configs
+    Returns (current_idx, total) where current_idx is 0-based.
+    Returns (0, 1) if not in multirun mode.
+    """
+    try:
+        from hydra.core.hydra_config import HydraConfig
+        hc = HydraConfig.get()
+        job = hc.job
+        # job.num is current job number (0-based in multirun)
+        # We need to get total from sweep
+        sweep_dir = hc.sweep.dir if hasattr(hc, 'sweep') else None
+        if sweep_dir:
+            # In multirun mode
+            return job.num, -1  # Total not easily available
+        return 0, 1
+    except Exception:
+        return 0, 1
 
 
 @hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
-    """Entry point - runs sequential or spawns MPI based on n_ranks."""
+    """Entry point - runs sequential or spawns MPI based on n_ranks.
 
-    # Check if we're in an MPI subprocess (spawned by mpiexec)
-    if os.environ.get("MPI_SUBPROCESS"):
-        from mpi4py import MPI
-        _run_mpi_solver(cfg, MPI.COMM_WORLD)
-        return
-
-    # Job Array Configuration
+    In multirun mode, Hydra calls this once per sweep combination.
+    With LSB_JOBINDEX, only the matching run executes.
+    """
+    # HPC configuration
     mpi = cfg.get("mpi", {})
     cores_per_node = mpi.get("cores_per_node", 24)
     alloc_cores = int(os.environ.get("LSB_DJOB_NUMPROC", cores_per_node))
     job_index = int(os.environ.get("LSB_JOBINDEX", 0))
 
-    # Get valid configs for this allocation tier
-    configs = _get_sweep_configs(cfg, alloc_cores, cores_per_node)
+    # Get current multirun index (0-based)
+    multirun_idx, _ = _get_multirun_index()
 
-    if not configs:
-        print(f"No valid configs for allocation={alloc_cores} cores")
+    # In job array mode: only run if this is our job
+    if job_index > 0:
+        # LSB_JOBINDEX is 1-based, multirun_idx is 0-based
+        if multirun_idx != job_index - 1:
+            return  # Not our job, skip silently
+
+    n_ranks = cfg.get("n_ranks", 1)
+
+    # Check if this run fits in our allocation tier
+    if not _should_run(n_ranks, alloc_cores, cores_per_node):
+        tier_needed = _get_allocation_tier(n_ranks, cores_per_node)
+        log.info(f"Skipping: n_ranks={n_ranks} needs {tier_needed} cores, have {alloc_cores}")
         return
 
-    if job_index > 0:
-        # Job array mode: run config at this index
-        if job_index > len(configs):
-            print(f"Job index {job_index} > num configs {len(configs)}, exiting")
-            return
-        configs_to_run = [configs[job_index - 1]]  # LSB_JOBINDEX is 1-based
+    solver_type = cfg.get("solver_type", "jacobi")
+    N = cfg.get("N", 64)
+
+    log.info(f"[Run {multirun_idx}] {solver_type}, N={N}, n_ranks={n_ranks}")
+
+    # Sequential vs MPI
+    if n_ranks == 1:
+        _run_sequential_solver(cfg)
     else:
-        # Local mode: run all configs
-        print(f"No LSB_JOBINDEX set, running all {len(configs)} configs")
-        configs_to_run = configs
-
-    for i, run_cfg in enumerate(configs_to_run):
-        n_ranks = run_cfg["n_ranks"]
-        merged_cfg = OmegaConf.merge(cfg, OmegaConf.create(run_cfg))
-
-        solver = run_cfg.get('solver_type', 'jacobi')
-        print(f"\n[Run {i+1}/{len(configs_to_run)}] {solver}, N={run_cfg['N']}, n_ranks={n_ranks}")
-
-        # Sequential vs MPI
-        if n_ranks == 1:
-            _run_sequential_solver(merged_cfg)
-        else:
-            _spawn_mpi(merged_cfg, n_ranks, alloc_cores, cores_per_node, mpi)
+        _spawn_mpi(cfg, n_ranks, alloc_cores, cores_per_node, mpi)
 
 
 def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: int, mpi: dict):
@@ -177,29 +131,32 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: 
     env["MPI_SUBPROCESS"] = "1"
 
     # Build MPI command
-    cmd = ["mpiexec", "-n", str(n_ranks), "--report-binding"]
+    cmd = ["mpiexec", "-n", str(n_ranks)]
 
-    # Calculate process mapping from allocation
+    # Add binding options if configured
     if mpi.get("bind_to"):
-        n_nodes = alloc_cores // cores_per_node
-        ranks_per_node = n_ranks // max(n_nodes, 1)
-        ranks_per_socket = ranks_per_node // 2  # 2 sockets per node
-        if ranks_per_socket > 0:
-            cmd.extend(["--map-by", f"ppr:{ranks_per_socket}:package"])
+        cmd.append("--report-bindings")
+        sockets_per_node = mpi.get("sockets_per_node", 2)
+        n_nodes = max(1, alloc_cores // cores_per_node)
+        ranks_per_node = max(1, n_ranks // n_nodes)
+        ranks_per_socket = max(1, ranks_per_node // sockets_per_node)
+        # Map ranks across sockets (packages) for NUMA spreading
+        cmd.extend(["--map-by", f"ppr:{ranks_per_socket}:package"])
         cmd.extend(["--bind-to", str(mpi.bind_to)])
 
     cmd.extend(["uv", "run", "python", script])
 
-    # Pass all relevant config values to subprocess
+    # Pass config as command line args (MPI subprocess bypasses Hydra)
     overrides = [
         f"n_ranks={n_ranks}",
         f"N={cfg.N}",
-        f"strategy={cfg.strategy}",
+        f"strategy={cfg.get('strategy', 'sliced')}",
         f"solver_type={cfg.get('solver_type', 'jacobi')}",
         f"communicator={cfg.get('communicator', 'custom')}",
         f"omega={cfg.get('omega', 0.8)}",
         f"max_iter={cfg.get('max_iter', 1000)}",
         f"tolerance={cfg.get('tolerance', 1e-6)}",
+        f"mlflow.mode={cfg.mlflow.mode}",
     ]
     if cfg.get("experiment_name"):
         overrides.append(f"experiment_name={cfg.experiment_name}")
@@ -212,33 +169,38 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: 
 
     cmd.extend(overrides)
 
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    log.debug(f"MPI command: {' '.join(cmd)}")
+
+    # Run MPI subprocess and capture output for logging
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=300)
+
+    # Log output using Python logging so Hydra captures it
     if result.stdout:
-        print(result.stdout)
+        for line in result.stdout.strip().split("\n"):
+            log.info(line)
     if result.stderr:
-        print(result.stderr, file=sys.stderr)
+        for line in result.stderr.strip().split("\n"):
+            # MPI report-bindings goes to stderr, log as info not warning
+            if "binding" in line.lower() or "[" in line:
+                log.info(line)
+            else:
+                log.warning(line)
 
 
 def _run_sequential_solver(cfg: DictConfig):
     """Run sequential solver (no MPI)."""
     from Poisson.solvers import JacobiSolver, FMGSolver
-    from utils.mlflow.io import (
-        setup_mlflow_tracking,
-        start_mlflow_run_context,
-        log_parameters,
-        log_metrics_dict,
-        log_timeseries_metrics,
-    )
+    from utils.mlflow.io import setup_mlflow_tracking
 
     N = cfg.N
     solver_type = cfg.get("solver_type", "jacobi")
     experiment_name = cfg.get("experiment_name", "experiment")
 
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
-    print(f"\n{'='*60}")
-    print(f"Experiment: {experiment_name}")
-    print(f"Solver: {solver_type} (sequential), N={N}")
-    print(f"{'='*60}")
+    log.info("=" * 60)
+    log.info(f"Experiment: {experiment_name}")
+    log.info(f"Solver: {solver_type} (sequential), N={N}")
+    log.info("=" * 60)
 
     # Create solver
     if solver_type == "jacobi":
@@ -261,12 +223,12 @@ def _run_sequential_solver(cfg: DictConfig):
             use_numba=cfg.get("use_numba", False),
         )
     else:
-        print(f"Unknown solver: {solver_type}")
+        log.error(f"Unknown solver: {solver_type}")
         sys.exit(1)
 
     # Warmup and solve
     solver.warmup()
-    if solver_type == "fmg":
+    if solver_type in ["multigrid", "fmg"]:
         solver.fmg_solve()
     else:
         solver.solve()
@@ -277,20 +239,43 @@ def _run_sequential_solver(cfg: DictConfig):
     _log_results(cfg, solver, solver_type, N, n_ranks=1)
 
 
+def _get_hardware_info() -> dict:
+    """Get hardware info for the current process."""
+    import platform
+    import socket
+
+    info = {
+        "hostname": socket.gethostname(),
+        "processor": platform.processor() or "unknown",
+        "platform": platform.platform(),
+    }
+
+    # Try to get CPU info on Linux
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    info["cpu_model"] = line.split(":")[1].strip()
+                    break
+    except (IOError, OSError):
+        pass
+
+    return info
+
+
 def _run_mpi_solver(cfg: DictConfig, comm):
     """Run MPI solver (called within mpiexec subprocess)."""
     from mpi4py import MPI
     from Poisson.solvers import JacobiMPISolver, FMGMPISolver
-    from utils.mlflow.io import (
-        setup_mlflow_tracking,
-        start_mlflow_run_context,
-        log_parameters,
-        log_metrics_dict,
-        log_timeseries_metrics,
-    )
+    from utils.mlflow.io import setup_mlflow_tracking
 
     rank = comm.Get_rank()
     n_ranks = comm.Get_size()
+
+    # Gather hardware info from all ranks
+    hw_info = _get_hardware_info()
+    hw_info["rank"] = rank
+    all_hw_info = comm.gather(hw_info, root=0)
 
     N = cfg.N
     solver_type = cfg.get("solver_type", "jacobi")
@@ -300,11 +285,11 @@ def _run_mpi_solver(cfg: DictConfig, comm):
 
     if rank == 0:
         setup_mlflow_tracking(mode=cfg.mlflow.mode)
-        print(f"\n{'='*60}")
-        print(f"Experiment: {experiment_name}")
-        print(f"Solver: {solver_type}, N={N}, ranks={n_ranks}")
-        print(f"Strategy: {strategy}, Communicator: {communicator}")
-        print(f"{'='*60}")
+        log.info("=" * 60)
+        log.info(f"Experiment: {experiment_name}")
+        log.info(f"Solver: {solver_type}, N={N}, ranks={n_ranks}")
+        log.info(f"Strategy: {strategy}, Communicator: {communicator}")
+        log.info("=" * 60)
 
     # Create solver
     if solver_type == "jacobi":
@@ -331,11 +316,11 @@ def _run_mpi_solver(cfg: DictConfig, comm):
         )
     else:
         if rank == 0:
-            print(f"Unknown solver: {solver_type}")
+            log.error(f"Unknown solver: {solver_type}")
         sys.exit(1)
 
     # Solve
-    if solver_type == "fmg":
+    if solver_type in ["multigrid", "fmg"]:
         solver.fmg_solve()
     else:
         solver.solve()
@@ -344,13 +329,15 @@ def _run_mpi_solver(cfg: DictConfig, comm):
 
     # Log to MLflow (rank 0 only)
     if rank == 0:
-        _log_results(cfg, solver, solver_type, N, n_ranks, strategy, communicator)
+        _log_results(cfg, solver, solver_type, N, n_ranks, strategy, communicator, all_hw_info)
 
 
-def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicator=None):
+def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicator=None, hw_info=None):
     """Log solver results to MLflow."""
     import numpy as np
     from dataclasses import asdict
+    from pathlib import Path
+    import mlflow
     from utils.mlflow.io import (
         start_mlflow_run_context,
         log_parameters,
@@ -404,6 +391,15 @@ def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicat
         log_parameters(params)
         log_metrics_dict(asdict(solver.results))
 
+        # Log hardware info per rank as table
+        if hw_info:
+            import pandas as pd
+            hw_df = pd.DataFrame(hw_info)
+            mlflow.log_table(hw_df, artifact_file="hardware.json")
+            n_nodes = hw_df["hostname"].nunique()
+            log_parameters({"nodes": n_nodes})
+            log.info(f"Logged hardware info: {n_nodes} nodes, {len(hw_info)} ranks")
+
         # Log halo timing stats
         if solver.timeseries.halo_exchange_times:
             halo_times = np.array(solver.timeseries.halo_exchange_times)
@@ -416,15 +412,63 @@ def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicat
 
         log_timeseries_metrics(solver.timeseries)
 
-    print(f"\n--- {solver_type.upper()} Complete ---")
-    print(f"  Iterations: {solver.results.iterations}")
-    print(f"  L2 error: {solver.results.final_error:.6e}")
-    print(f"  Wall time: {solver.results.wall_time:.4f}s")
+        # Log Hydra job log file as artifact (contains MPI report-bindings)
+        try:
+            from hydra.core.hydra_config import HydraConfig
+            hc = HydraConfig.get()
+            output_dir = Path(hc.runtime.output_dir)
+            job_name = hc.job.name
+            log_file = output_dir / f"{job_name}.log"
+            if log_file.exists():
+                mlflow.log_artifact(str(log_file), artifact_path="logs")
+                log.info(f"Uploaded job log to MLflow: {log_file.name}")
+        except Exception as e:
+            log.debug(f"Could not upload job log: {e}")
+
+    log.info(f"--- {solver_type.upper()} Complete ---")
+    log.info(f"  Iterations: {solver.results.iterations}")
+    log.info(f"  L2 error: {solver.results.final_error:.6e}")
+    log.info(f"  Wall time: {solver.results.wall_time:.4f}s")
     if solver.results.mlups:
-        print(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
+        log.info(f"  Performance: {solver.results.mlups:.2f} Mlup/s")
     if solver.results.bandwidth_gb_s:
-        print(f"  Bandwidth: {solver.results.bandwidth_gb_s:.2f} GB/s")
+        log.info(f"  Bandwidth: {solver.results.bandwidth_gb_s:.2f} GB/s")
 
 
 if __name__ == "__main__":
-    main()
+    # Skip Hydra for MPI subprocesses - parse args directly
+    if os.environ.get("MPI_SUBPROCESS"):
+        from mpi4py import MPI
+        from omegaconf import OmegaConf
+
+        # Set up basic logging since we bypass Hydra
+        logging.basicConfig(
+            level=logging.INFO,
+            format="[%(levelname)s] %(message)s",
+        )
+
+        # Parse command line args as key=value pairs
+        cfg_dict = {}
+        for arg in sys.argv[1:]:
+            if "=" in arg and not arg.startswith("-"):
+                key, value = arg.split("=", 1)
+                # Handle nested keys
+                keys = key.split(".")
+                d = cfg_dict
+                for k in keys[:-1]:
+                    d = d.setdefault(k, {})
+                # Try to parse as int/float/bool
+                try:
+                    if value.lower() in ("true", "false"):
+                        d[keys[-1]] = value.lower() == "true"
+                    elif "." in value or "e" in value.lower():
+                        d[keys[-1]] = float(value)
+                    else:
+                        d[keys[-1]] = int(value)
+                except ValueError:
+                    d[keys[-1]] = value
+
+        cfg = OmegaConf.create(cfg_dict)
+        _run_mpi_solver(cfg, MPI.COMM_WORLD)
+    else:
+        main()

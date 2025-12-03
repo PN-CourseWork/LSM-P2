@@ -7,13 +7,12 @@ defaults:
 experiment_name: communication
 
 # Halo exchange benchmark
-N: 64
 n_ranks: 4
 max_iter: 200
 tolerance: 0.0
 
-# Sweep config for run_solver.py
-sweep:
-  N: [32, 48, 64, 80]
-  strategy: [sliced, cubic]
-  communicator: [numpy, custom]
+# Default values (override with -m for sweep)
+# uv run python run_solver.py -cn experiment/communication -m N=32,48,64,80 strategy=sliced,cubic communicator=numpy,custom
+N: 64
+strategy: sliced
+communicator: custom
