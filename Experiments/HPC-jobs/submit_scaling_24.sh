@@ -13,7 +13,7 @@
 # Strong scaling: n_ranks × strategy = 6 × 2 = 12 jobs
 # =============================================================================
 
-module load mpi/4.1.6-gcc-14.2.0-binutils-2.42 || module load openmpi || true
+module load mpi
 cd $LS_SUBCWD
 
 uv run python run_solver.py -cn experiment/scaling -m \

@@ -14,7 +14,7 @@
 # 4 pairs × strategy(2) × numba_threads(2) = 16 jobs
 # =============================================================================
 
-module load mpi/4.1.6-gcc-14.2.0-binutils-2.42 || module load openmpi || true
+module load mpi
 cd $LS_SUBCWD
 
 # Weak scaling requires paired (n_ranks, N)

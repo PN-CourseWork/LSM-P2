@@ -162,6 +162,7 @@ def _spawn_mpi(cfg: DictConfig, n_ranks: int, alloc_cores: int, cores_per_node: 
         overrides.append(f"experiment_name={cfg.experiment_name}")
     if cfg.get("use_numba"):
         overrides.append(f"use_numba={cfg.use_numba}")
+        overrides.append(f"numba_threads={cfg.get('numba_threads', 1)}")
     if cfg.get("n_smooth"):
         overrides.append(f"n_smooth={cfg.n_smooth}")
     if cfg.get("fmg_post_vcycles"):
@@ -301,6 +302,7 @@ def _run_mpi_solver(cfg: DictConfig, comm):
             tolerance=cfg.get("tolerance", 1e-6),
             max_iter=cfg.get("max_iter", 10000),
             use_numba=cfg.get("use_numba", False),
+            numba_threads=cfg.get("numba_threads", 1),
         )
     elif solver_type in ["multigrid", "fmg"]:
         solver = FMGMPISolver(
@@ -313,13 +315,15 @@ def _run_mpi_solver(cfg: DictConfig, comm):
             max_iter=cfg.get("max_iter", 100),
             fmg_post_vcycles=cfg.get("fmg_post_vcycles", 1),
             use_numba=cfg.get("use_numba", False),
+            numba_threads=cfg.get("numba_threads", 1),
         )
     else:
         if rank == 0:
             log.error(f"Unknown solver: {solver_type}")
         sys.exit(1)
 
-    # Solve
+    # Warmup and solve
+    solver.warmup()
     if solver_type in ["multigrid", "fmg"]:
         solver.fmg_solve()
     else:

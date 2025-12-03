@@ -1,7 +1,0 @@
-Experiments/HPC-jobs/submit_scaling_24.sh
-Experiments/HPC-jobs/submit_scaling_48.sh
-Experiments/HPC-jobs/submit_scaling_72.sh
-Experiments/HPC-jobs/submit_scaling_96.sh
-Experiments/HPC-jobs/submit_weak_scaling.sh
-Experiments/HPC-jobs/submit_fmg_strong.sh
-Experiments/HPC-jobs/submit_fmg_weak.sh
