@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J scaling_48[1-4]
+#BSUB -J scaling_48[1-8]
 #BSUB -q hpcintro
 #BSUB -n 48
 #BSUB -R "span[ptile=24]"
@@ -10,7 +10,7 @@
 
 # =============================================================================
 # Scaling Experiment: 2 nodes (48 cores)
-# Strong scaling: n_ranks × strategy = 2 × 2 = 4 jobs
+# Strong scaling: n_ranks × strategy × N = 2 × 2 × 2 = 8 jobs
 # =============================================================================
 
 module load mpi
@@ -19,7 +19,7 @@ cd $LS_SUBCWD
 uv run python run_solver.py -cn experiment/scaling -m \
     mpi.bind_to=core \
     n_ranks=32,48 \
-    N=257 \
+    N=257,513 \
     strategy=sliced,cubic
 
 echo "Job $LSB_JOBINDEX completed"

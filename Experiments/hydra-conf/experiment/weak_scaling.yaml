@@ -5,6 +5,7 @@ defaults:
   - _self_
 
 experiment_name: weak_scaling
+scaling_type: weak
 
 # MPI options (binding enabled via HPC job scripts)
 mpi:

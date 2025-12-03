@@ -424,6 +424,8 @@ def _log_results(cfg, solver, solver_type, N, n_ranks, strategy=None, communicat
         if cfg.get("use_numba"):
             params["use_numba"] = True
             params["numba_threads"] = cfg.get("numba_threads", 1)
+        if cfg.get("scaling_type"):
+            params["scaling_type"] = cfg.get("scaling_type")
 
         log_parameters(params)
         log_metrics_dict(asdict(solver.results))

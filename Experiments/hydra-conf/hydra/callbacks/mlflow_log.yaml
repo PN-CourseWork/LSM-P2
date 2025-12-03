@@ -10,5 +10,5 @@
 hydra:
   callbacks:
     mlflow_log:
-      _target_: src.utils.hydra.callbacks.MLflowLogCallback
+      _target_: utils.hydra.callbacks.MLflowLogCallback
       artifact_path: logs

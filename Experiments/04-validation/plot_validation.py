@@ -66,9 +66,10 @@ def main(cfg: DictConfig) -> None:
 
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
+    prefix = cfg.mlflow.databricks_project_prefix
 
     experiment_name = cfg.get("experiment_name", "validation")
-    df = load_runs(experiment_name, converged_only=False)
+    df = load_runs(experiment_name, converged_only=False, project_prefix=prefix)
 
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")

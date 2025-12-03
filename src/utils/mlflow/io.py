@@ -68,7 +68,7 @@ def start_mlflow_run_context(
     experiment_name: str,
     parent_run_name: str,
     child_run_name: str,
-    project_prefix: str = "/Shared/LSM-PoissonMPI",
+    project_prefix: str = "/Shared/LSM-PoissonMPI-v2",
     args: Optional[argparse.Namespace] = None,
 ):
     """
@@ -197,8 +197,25 @@ def load_runs(
     experiment: str,
     converged_only: bool = True,
     exclude_parent_runs: bool = True,
+    project_prefix: str = "/Shared/LSM-PoissonMPI-v2",
 ) -> pd.DataFrame:
-    """Load runs from an MLflow experiment."""
+    """Load runs from an MLflow experiment.
+
+    Parameters
+    ----------
+    experiment : str
+        Experiment name (will be prefixed for Databricks)
+    converged_only : bool
+        Only include converged runs
+    exclude_parent_runs : bool
+        Exclude parent runs (keep only child/nested runs)
+    project_prefix : str
+        Databricks workspace prefix for experiment names
+    """
+    # Apply prefix for Databricks
+    if mlflow.get_tracking_uri() == "databricks" and not experiment.startswith("/"):
+        experiment = f"{project_prefix}/{experiment}"
+
     # Build filter string
     filters = []
     if converged_only:

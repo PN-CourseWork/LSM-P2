@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J fmg_strong[1-24]
+#BSUB -J fmg_strong[1-48]
 #BSUB -q hpcintro
 #BSUB -n 96
 #BSUB -R "span[ptile=24]"
@@ -12,7 +12,7 @@
 # FMG Strong Scaling: Pure MPI (1 thread) vs Hybrid (4 threads)
 # 1 thread:  n_ranks=1,4,8,16,32,64 (6 values)
 # 4 threads: n_ranks=1,2,4,6,12,24  (6 values, max 24×4=96 cores)
-# Each × strategy(2) = 6 × 2 = 12 jobs per config = 24 total
+# Each × strategy(2) × N(2) = 6 × 2 × 2 = 24 jobs per config = 48 total
 # =============================================================================
 
 module load mpi
@@ -22,7 +22,7 @@ cd $LS_SUBCWD
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
     mpi.bind_to=core \
     n_ranks=1,4,8,16,32,64 \
-    N=257 \
+    N=257,513 \
     strategy=sliced,cubic \
     numba_threads=1
 
@@ -30,7 +30,7 @@ uv run python run_solver.py -cn experiment/fmg_scaling -m \
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
     mpi.bind_to=core \
     n_ranks=1,2,4,6,12,24 \
-    N=257 \
+    N=257,513 \
     strategy=sliced,cubic \
     numba_threads=4
 

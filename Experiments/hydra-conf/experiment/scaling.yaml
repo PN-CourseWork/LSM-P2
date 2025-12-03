@@ -5,6 +5,7 @@ defaults:
   - _self_
 
 experiment_name: scaling
+scaling_type: strong
 
 # MPI options (binding enabled via HPC job scripts)
 mpi:
