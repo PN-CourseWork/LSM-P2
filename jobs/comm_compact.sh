@@ -10,28 +10,31 @@
 
 # =============================================================================
 # Communication Experiment: COMPACT binding
-# Ranks packed together on same socket/node first
+# Ranks packed together on same node first
 # =============================================================================
 
 module load mpi
-cd $HOME/LSM-Project_2
 mkdir -p logs/lsf
 
-# Compact: fill one node before moving to next
+# Compact: fill one node before moving to next (24 per node)
 MPIOPT="--map-by ppr:24:node --bind-to core"
 
 echo "=== Communication: Compact binding, 24 ranks (intra-node) ==="
-mpiexec $MPIOPT -n 24 uv run python run_solver.py \
+mpirun $MPIOPT -n 24 uv run python run_solver.py \
     +experiment=communication \
     hydra/launcher=basic \
     n_ranks=24 \
-    experiment_name=comm_compact
+    experiment_name=comm_compact \
+    mlflow=databricks \
+    -m
 
 echo "=== Communication: Compact binding, 48 ranks (inter-node) ==="
-mpiexec $MPIOPT -n 48 uv run python run_solver.py \
+mpirun $MPIOPT -n 48 uv run python run_solver.py \
     +experiment=communication \
     hydra/launcher=basic \
     n_ranks=48 \
-    experiment_name=comm_compact
+    experiment_name=comm_compact \
+    mlflow=databricks \
+    -m
 
 echo "Communication compact completed"
