@@ -63,6 +63,22 @@ class BaseSolver(ABC):
         self.metrics.final_error = l2_error
         return l2_error
 
+    def post_solve(self):
+        """Compute all error metrics after solve.
+
+        Call this after solve() to populate:
+        - metrics.final_error (L2 error vs analytical)
+        - metrics.final_alg_error (algebraic residual norm)
+        - rank_topology (for MPI solvers)
+        """
+        self.compute_l2_error()
+        self.compute_alg_residual()
+        self.rank_topology = self._gather_topology()
+
+    def _gather_topology(self):
+        """Gather rank topology. Override for MPI solvers."""
+        return None
+
     def _get_solution_array(self) -> np.ndarray:
         """Return the solution array."""
         return self.u
@@ -71,32 +87,43 @@ class BaseSolver(ABC):
         """Return the source term array."""
         return self.f
 
-    def _compute_alg_residual(
-        self, u: np.ndarray, f: np.ndarray, h: float, r: np.ndarray = None
-    ) -> np.ndarray:
-        """Compute algebraic residual r = f - Au (interior only).
+    def compute_alg_residual(
+        self,
+        u: np.ndarray = None,
+        f: np.ndarray = None,
+        h: float = None,
+        r: np.ndarray = None,
+    ) -> float:
+        """Compute algebraic residual r = f - Au and return RMS norm.
 
         Parameters
         ----------
-        u : array
-            Solution array.
-        f : array
-            Source term array.
-        h : float
-            Grid spacing.
+        u : array, optional
+            Solution array. If None, uses _get_solution_array().
+        f : array, optional
+            Source term. If None, uses _get_source_array().
+        h : float, optional
+            Grid spacing. If None, uses self.h.
         r : array, optional
-            Output array. If None, allocates new array.
+            Output array for residual. If None, allocates temporary array.
 
         Returns
         -------
-        r : array
-            Residual array with interior values filled.
+        float
+            RMS norm of the algebraic residual.
 
         Note: Caller is responsible for halo sync before and BC after if needed.
         """
+        if u is None:
+            u = self._get_solution_array()
+        if f is None:
+            f = self._get_source_array()
+        if h is None:
+            h = self.h
         if r is None:
             r = np.zeros_like(u)
 
+        # Compute r = f - Au (interior only)
         h2 = h * h
         u_center = u[1:-1, 1:-1, 1:-1]
         u_neighbors = (
@@ -109,17 +136,8 @@ class BaseSolver(ABC):
         )
         laplacian = (u_neighbors - 6.0 * u_center) / h2
         r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian
-        return r
 
-    def compute_alg_error(self) -> float:
-        """Compute algebraic residual norm ||f - Au||.
-
-        Returns RMS norm of the algebraic residual.
-        """
-        u = self._get_solution_array()
-        f = self._get_source_array()
-        r = self._compute_alg_residual(u, f, self.h)
-
+        # Compute RMS norm
         interior = r[1:-1, 1:-1, 1:-1]
         local_sum_sq = np.sum(interior**2)
         local_pts = float(interior.size)
@@ -127,9 +145,9 @@ class BaseSolver(ABC):
         global_sum_sq = self._reduce_sum(local_sum_sq)
         global_pts = self._reduce_sum(local_pts)
 
-        alg_error = np.sqrt(global_sum_sq) / global_pts
-        self.metrics.final_alg_error = alg_error
-        return alg_error
+        alg_residual = np.sqrt(global_sum_sq) / global_pts
+        self.metrics.final_alg_error = alg_residual
+        return alg_residual
 
     def _get_time(self) -> float:
         """Get current time. Override for MPI timing."""

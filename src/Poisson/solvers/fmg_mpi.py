@@ -189,3 +189,10 @@ class FMGMPISolver(FMGSolver):
         l2_error = fine.grid.compute_l2_error(fine.u)
         self.metrics.final_error = l2_error
         return l2_error
+
+    def _gather_topology(self):
+        """Gather rank topology from all MPI ranks."""
+        fine = self.levels[0]
+        rank_info = fine.grid.get_rank_info()
+        all_ranks = self.comm.gather(rank_info, root=0)
+        return all_ranks if self.rank == 0 else None

@@ -223,7 +223,7 @@ class FMGSolver(BaseSolver):
     def _compute_alg_res(self, lvl: GridLevel):
         """Compute algebraic residual r = f - Au for a grid level."""
         self._sync_halos(lvl.u, lvl)
-        self._compute_alg_residual(lvl.u, lvl.f, lvl.h, lvl.r)
+        self.compute_alg_residual(lvl.u, lvl.f, lvl.h, lvl.r)
         self._apply_boundary_conditions(lvl.r, lvl)
 
     def _coarse_solve(self, lvl: GridLevel):

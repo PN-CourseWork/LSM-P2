@@ -80,3 +80,9 @@ class JacobiMPISolver(JacobiSolver):
         l2_error = self.grid.compute_l2_error(self.u)
         self.metrics.final_error = l2_error
         return l2_error
+
+    def _gather_topology(self):
+        """Gather rank topology from all MPI ranks."""
+        rank_info = self.grid.get_rank_info()
+        all_ranks = self.comm.gather(rank_info, root=0)
+        return all_ranks if self.rank == 0 else None
