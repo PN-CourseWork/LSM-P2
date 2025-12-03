@@ -1,0 +1,10 @@
+# @package solver
+name: jacobi
+strategy: sliced
+communicator: custom
+params:
+  omega: 0.8
+  max_iter: 1000
+  tolerance: 1.0e-6
+  use_numba: false
+  numba_threads: 1

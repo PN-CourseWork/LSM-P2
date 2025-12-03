@@ -43,6 +43,7 @@ class FMGSolver(BaseSolver):
         fmg_post_vcycles: int = 1,
         use_numba: bool = False,
         omega: float = 2/3,
+        numba_threads: int = 1,
         **kwargs,
     ):
         super().__init__(N, omega=omega, **kwargs)
@@ -50,6 +51,7 @@ class FMGSolver(BaseSolver):
         self.n_smooth = n_smooth
         self.fmg_post_vcycles = fmg_post_vcycles
         self.use_numba = use_numba
+        self.numba_threads = numba_threads
         self.min_coarse_size = 3
 
         # Infer number of levels
@@ -99,7 +101,9 @@ class FMGSolver(BaseSolver):
 
         for level, N in enumerate(N_values):
             h = 2.0 / (N - 1)
-            kernel = KernelClass(N=N, omega=self.omega)
+            kernel = KernelClass(
+                N=N, omega=self.omega, numba_threads=self.numba_threads
+            )
 
             lvl = GridLevel(
                 level=level,

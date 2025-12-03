@@ -1,0 +1,12 @@
+# @package solver
+name: fmg
+strategy: sliced
+communicator: custom
+params:
+  n_smooth: 3
+  fmg_post_vcycles: 1
+  omega: 0.6666666666666666
+  max_iter: 1000
+  tolerance: 1.0e-6
+  use_numba: false
+  numba_threads: 1

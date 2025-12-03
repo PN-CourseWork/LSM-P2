@@ -1,0 +1,21 @@
+#!/bin/bash
+#BSUB -q hpcintro
+#BSUB -W 00:20
+#BSUB -n 48
+#BSUB -J spread
+#BSUB -o Experiments/03-communication/output/spread_%J.out
+#BSUB -e Experiments/03-communication/output/spread_%J.err
+#BSUB -R 'rusage[mem=4GB]'
+#BSUB -R 'span[ptile=24]'
+
+module purge
+module load mpi
+uv sync
+
+NP=24
+NPS=6
+
+MOPTS="--report-binding --map-by ppr:$NPS:package --bind-to core"
+MOPTS="--map-by ppr:$NPS:package --bind-to core"
+
+mpiexec $MOPTS -n $NP uv run python Experiments/03-communication/compute_communication.py
