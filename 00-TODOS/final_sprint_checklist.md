@@ -17,10 +17,10 @@ These must be done before HPC runs.
   - Now: `bytes_per_point = 64` (8 mem-ops × 8 bytes)
 
 ### 1.2 Wall Time Verification (todos.md #17)
-- [ ] **Verify timing methodology**
+- [x] **Verify timing methodology** ✓
   - Using `MPI.Wtime()` ✓ (correct for MPI apps)
   - **Course Week 03 (p.7-8):** Be specific about what timing includes/excludes
-  - Ensure timing: excludes init, measures only solve iterations
+  - Timing excludes init, measures only solve iterations ✓
   - Document in report what is/isn't timed
 
 - [ ] **Verify timing breakdown sums to wall time**
@@ -40,16 +40,16 @@ These must be done before HPC runs.
   - Document breakdown in report (e.g., "90% compute, 7% halo, 3% other")
 
 ### 1.3 Numba Thread Control (todos.md #29)
-- [ ] **Set `NUMBA_NUM_THREADS` explicitly**
+- [x] **Set `NUMBA_NUM_THREADS` explicitly** ✓
   - **Assignment-1 Feedback:** "from the report it is not clear how many threads you are using"
   - "if you introduce another threading/parallel scheme, it is vital to understand the implications"
-  - Add: `os.environ["NUMBA_NUM_THREADS"] = str(n_threads)` before numba imports
+  - Add: `os.environ["NUMBA_NUM_THREADS"] = str(n_threads)` before numba imports ✓
   - Document in report: MPI ranks × Numba threads ≤ allocated cores
 
-- [ ] **Ensure Numba warmup before timing**
+- [x] **Ensure Numba warmup before timing** ✓
   - JIT compilation happens on first call - must not be included in timing
-  - Call `solver.warmup()` or run a dummy iteration before `t_start = MPI.Wtime()`
-  - Verify warmup is called in all experiment runners
+  - `solver.warmup()` called before solve in run_solver.py ✓
+  - Warmup is called in all experiment runners ✓
 
 ### 1.4 FMG Decomposition (GH #33)
 - [x] **Test FMG with cubic decomposition** ✓
@@ -331,7 +331,7 @@ Lower priority - do if time permits.
 |-------|----------|-----|
 | **Unix-only code** | `main.py:118` | `preexec_fn=os.setsid` only works on Unix. Add Windows fallback or guard. |
 
-### 5.4 Dataclass Architecture Refactor (HIGH - Architectural)
+### 5.4 Dataclass Architecture Refactor (HIGH - Architectural) ✅ COMPLETED
 
 **Problem:** Current dataclasses are confusingly named and overlap:
 - `KernelParams` vs solver params - what's the difference?
@@ -339,6 +339,15 @@ Lower priority - do if time permits.
 - Manual dict-building with conditionals in `_log_results()`
 
 **Solution:** Clean 2×2 matrix: **Params vs Metrics** × **Global vs Local**
+
+**STATUS:** Refactored in run_solver.py and datastructures.py:
+- `GlobalParams` dataclass for run configuration ✓
+- `GlobalMetrics` dataclass for aggregated results ✓
+- `LocalMetrics` dataclass for per-iteration timeseries ✓
+- `solver.metrics` instead of `solver.results` ✓
+- Clean MLflow logging with `asdict()` pattern ✓
+- Flattened Hydra config (removed solver groups) ✓
+- Native MLflow batch API for timeseries ✓
 
 ```
                  Params (input/config)         Metrics (output/results)

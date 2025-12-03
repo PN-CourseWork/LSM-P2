@@ -8,9 +8,9 @@
 *All code changes must be done before submitting HPC jobs*
 
 ### 1.1 Timing & Metrics Verification
-- [ ] Verify `bytes_per_point = 64` in `base.py` (already done ✓)
-- [ ] Verify timing uses `MPI.Wtime()`
-- [ ] Verify timing excludes initialization, measures only solve loop
+- [x] Verify `bytes_per_point = 64` in `base.py` ✓
+- [x] Verify timing uses `MPI.Wtime()` ✓
+- [x] Verify timing excludes initialization, measures only solve loop ✓
 - [ ] Add timing breakdown verification test:
   ```python
   # After solve, check: compute_time + halo_time ≈ wall_time
@@ -19,9 +19,9 @@
   ```
 
 ### 1.2 Numba Configuration
-- [ ] Verify `NUMBA_NUM_THREADS` set explicitly before numba imports
-- [ ] Verify warmup is called before timing starts in all runners
-- [ ] Add warmup call if missing:
+- [x] Verify `NUMBA_NUM_THREADS` set explicitly before numba imports ✓
+- [x] Verify warmup is called before timing starts in all runners ✓
+- [x] Add warmup call if missing: ✓ (run_solver.py calls solver.warmup())
   ```python
   solver.warmup()  # Trigger JIT compilation
   comm.Barrier()   # Sync all ranks
@@ -29,11 +29,11 @@
   ```
 
 ### 1.3 MPI Communication Verification
-- [ ] Verify solve loop uses uppercase MPI methods:
+- [x] Verify solve loop uses uppercase MPI methods: ✓
   - `halo.py`: `Sendrecv` ✓
   - `jacobi_mpi.py`: `Allreduce` ✓
   - `fmg_mpi.py`: `Allreduce` ✓
-- [ ] Verify `comm.gather()` (lowercase) only used for post-solve Python dicts
+- [x] Verify `comm.gather()` (lowercase) only used for post-solve Python dicts ✓
 
 ### 1.4 Rank Topology Logging
 - [ ] Add hostname to rank info: `MPI.Get_processor_name()`
@@ -66,16 +66,17 @@
   ```
 
 ### 1.6 Code Quality (Quick fixes only)
-- [ ] Run `uv run ruff format src/`
-- [ ] Run `uv run ruff check src/ --fix`
-- [ ] Fix any remaining lint errors
+- [x] Run `uv run ruff format src/` ✓
+- [x] Run `uv run ruff check src/ --fix` ✓
+- [x] Fix any remaining lint errors ✓
 
 ### 1.7 Local Verification
-- [ ] Test sequential: `uv run python run_solver.py N=100 n_ranks=1`
-- [ ] Test MPI: `mpiexec -n 4 uv run python run_solver.py N=100`
-- [ ] Test FMG: `mpiexec -n 8 uv run python run_solver.py solver=fmg N=65`
-- [ ] Verify MLUPS output is reasonable
-- [ ] Verify MLflow logging works
+- [x] Test sequential: `uv run python run_solver.py N=100 n_ranks=1` ✓
+- [x] Test MPI: `mpiexec -n 4 uv run python run_solver.py N=100` ✓
+- [x] Test FMG: `mpiexec -n 8 uv run python run_solver.py solver=fmg N=65` ✓
+- [x] Verify MLUPS output is reasonable ✓
+- [x] Verify MLflow logging works ✓
+- [x] Run convergence tests (verify_convergence.py) - All pass with ~2nd order accuracy ✓
 
 ---
 

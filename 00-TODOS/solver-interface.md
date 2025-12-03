@@ -554,24 +554,25 @@ def run_mpi_solver(params: GlobalParams, comm: MPI.Comm):
 
 ## Migration Checklist
 
-### Dataclasses to Remove
-- [ ] `KernelParams` → absorbed into `GlobalParams`
-- [ ] `KernelMetrics` → absorbed into `GlobalMetrics`
-- [ ] `KernelSeries` → absorbed into `LocalMetrics`
-- [ ] `LocalSeries` → renamed to `LocalMetrics`
-- [ ] `RankGeometry` → absorbed into `LocalParams`
+### Dataclasses - STATUS: ✅ COMPLETED
+- [x] `GlobalParams` - run configuration dataclass ✓
+- [x] `GlobalMetrics` - aggregated results dataclass ✓
+- [x] `LocalMetrics` - per-iteration timeseries dataclass ✓
+- [x] `solver.metrics` instead of `solver.results` ✓
 
 ### Dataclasses to Keep
-- [ ] `GridLevel` (multigrid-specific)
+- [x] `GridLevel` (multigrid-specific) ✓
 
-### Files to Update
-- [ ] `src/Poisson/datastructures.py` - new dataclass definitions
-- [ ] `src/Poisson/solvers/base.py` - accept `GlobalParams`
-- [ ] `src/Poisson/solvers/jacobi.py` - use new interface
-- [ ] `src/Poisson/solvers/fmg.py` - use new interface
-- [ ] `run_solver.py` - use `OmegaConf.to_object()`
-- [ ] `conf/config.yaml` - flatten to match `GlobalParams`
-- [ ] `src/utils/mlflow/io.py` - new `log_to_mlflow()` function
+### Files Updated - STATUS: ✅ COMPLETED
+- [x] `src/Poisson/datastructures.py` - new dataclass definitions ✓
+- [x] `src/Poisson/solvers/base.py` - uses `GlobalMetrics` and `LocalMetrics` ✓
+- [x] `src/Poisson/solvers/jacobi.py` - uses `solver.metrics` ✓
+- [x] `src/Poisson/solvers/fmg.py` - uses `solver.metrics` ✓
+- [x] `src/Poisson/solvers/jacobi_mpi.py` - uses `solver.metrics` ✓
+- [x] `src/Poisson/solvers/fmg_mpi.py` - uses `solver.metrics` ✓
+- [x] `run_solver.py` - Orchestrator/Worker architecture with native MLflow ✓
+- [x] `conf/config.yaml` - flattened to match `GlobalParams` ✓
+- [x] `log_to_mlflow()` in run_solver.py - uses `asdict()` pattern ✓
 
 ---
 
