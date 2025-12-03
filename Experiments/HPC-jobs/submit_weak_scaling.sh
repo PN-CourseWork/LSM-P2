@@ -20,18 +20,18 @@ cd $LS_SUBCWD
 # Weak scaling requires paired (n_ranks, N) - run each pair separately
 # Pair 1: 1 rank, N=257
 uv run python run_solver.py -cn experiment/weak_scaling -m \
-    mpi.bind_to=core n_ranks=1 N=257 strategy=sliced,cubic
+    hydra/launcher=basic mpi.bind_to=core n_ranks=1 N=257 strategy=sliced,cubic
 
 # Pair 2: 8 ranks, N=513
 uv run python run_solver.py -cn experiment/weak_scaling -m \
-    mpi.bind_to=core n_ranks=8 N=513 strategy=sliced,cubic
+    hydra/launcher=basic mpi.bind_to=core n_ranks=8 N=513 strategy=sliced,cubic
 
 # Pair 3: 27 ranks, N=769
 uv run python run_solver.py -cn experiment/weak_scaling -m \
-    mpi.bind_to=core n_ranks=27 N=769 strategy=sliced,cubic
+    hydra/launcher=basic mpi.bind_to=core n_ranks=27 N=769 strategy=sliced,cubic
 
 # Pair 4: 64 ranks, N=1025
 uv run python run_solver.py -cn experiment/weak_scaling -m \
-    mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic
+    hydra/launcher=basic mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic
 
 echo "Weak scaling completed"

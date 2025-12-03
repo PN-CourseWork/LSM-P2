@@ -17,6 +17,7 @@ module load mpi
 cd $LS_SUBCWD
 
 uv run python run_solver.py -cn experiment/scaling -m \
+    hydra/launcher=basic \
     mpi.bind_to=core \
     n_ranks=32,48 \
     N=257,513 \

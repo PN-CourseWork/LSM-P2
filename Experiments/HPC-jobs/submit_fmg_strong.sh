@@ -20,6 +20,7 @@ cd $LS_SUBCWD
 
 # Pure MPI: 1 Numba thread, scale up ranks
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
+    hydra/launcher=basic \
     mpi.bind_to=core \
     n_ranks=1,4,8,16,32,64 \
     N=257,513 \
@@ -28,6 +29,7 @@ uv run python run_solver.py -cn experiment/fmg_scaling -m \
 
 # Hybrid: 4 Numba threads, fewer ranks to avoid oversubscription
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
+    hydra/launcher=basic \
     mpi.bind_to=core \
     n_ranks=1,2,4,6,12,24 \
     N=257,513 \

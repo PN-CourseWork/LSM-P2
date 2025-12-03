@@ -19,15 +19,15 @@ cd $LS_SUBCWD
 
 # Weak scaling requires paired (n_ranks, N)
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
-    mpi.bind_to=core n_ranks=1 N=257 strategy=sliced,cubic numba_threads=1,8
+    hydra/launcher=basic mpi.bind_to=core n_ranks=1 N=257 strategy=sliced,cubic numba_threads=1,8
 
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
-    mpi.bind_to=core n_ranks=8 N=513 strategy=sliced,cubic numba_threads=1,8
+    hydra/launcher=basic mpi.bind_to=core n_ranks=8 N=513 strategy=sliced,cubic numba_threads=1,8
 
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
-    mpi.bind_to=core n_ranks=27 N=769 strategy=sliced,cubic numba_threads=1,8
+    hydra/launcher=basic mpi.bind_to=core n_ranks=27 N=769 strategy=sliced,cubic numba_threads=1,8
 
 uv run python run_solver.py -cn experiment/fmg_scaling -m \
-    mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic numba_threads=1,8
+    hydra/launcher=basic mpi.bind_to=core n_ranks=64 N=1025 strategy=sliced,cubic numba_threads=1,8
 
 echo "FMG weak scaling completed"
