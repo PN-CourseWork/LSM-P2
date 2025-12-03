@@ -140,7 +140,7 @@ class BaseSolver(ABC):
         global_sum_sq = self._reduce_sum(local_sum_sq)
         global_pts = self._reduce_sum(local_pts)
 
-        alg_residual = np.sqrt(global_sum_sq) / global_pts
+        alg_residual = np.sqrt(global_sum_sq / global_pts)  # RMS norm
         self.metrics.final_alg_error = alg_residual
         return alg_residual
 

@@ -1,0 +1,15 @@
+# @package _global_
+# NumPy kernel benchmark - performance vs problem size
+# Run: uv run python run_solver.py +experiment=kernel/benchmark_numpy mlflow=databricks -m
+defaults:
+  - /experiment/kernel/_base
+  - _self_
+
+use_numba: false
+max_iter: 100
+N: 65
+
+hydra:
+  sweeper:
+    params:
+      N: 33,65,129,257

@@ -238,7 +238,7 @@ class FMGSolver(BaseSolver):
 
         global_sum_sq = self._reduce_sum(local_sum_sq)
         global_pts = self._reduce_sum(local_pts)
-        return np.sqrt(global_sum_sq) / global_pts
+        return np.sqrt(global_sum_sq / global_pts)  # RMS norm
 
     def _get_solution_array(self) -> np.ndarray:
         """Return the solution array (finest level)."""
