@@ -27,34 +27,36 @@ mkdir -p logs
 MOPTS="--map-by ppr:12:package --bind-to core"
 
 # Run each (ranks, N) pair separately to avoid Cartesian product
-echo "=== Weak scaling: 1 rank, N=257 ==="
+# Constant ~129³ points per rank
+
+echo "=== Weak scaling: 1 rank, N=129 ==="
 mpirun --map-by ppr:1:package --bind-to core -np 1 uv run python run_solver.py \
     +experiment=weak_scaling \
-    n_ranks=1 N=257 \
+    n_ranks=1 N=129 \
     mlflow=databricks \
     hydra/launcher=basic \
     -m
 
-echo "=== Weak scaling: 8 ranks, N=513 ==="
+echo "=== Weak scaling: 8 ranks, N=257 ==="
 mpirun --map-by ppr:4:package --bind-to core -np 8 uv run python run_solver.py \
     +experiment=weak_scaling \
-    n_ranks=8 N=513 \
+    n_ranks=8 N=257 \
     mlflow=databricks \
     hydra/launcher=basic \
     -m
 
-echo "=== Weak scaling: 27 ranks, N=769 ==="
+echo "=== Weak scaling: 27 ranks, N=385 ==="
 mpirun $MOPTS -np 27 uv run python run_solver.py \
     +experiment=weak_scaling \
-    n_ranks=27 N=769 \
+    n_ranks=27 N=385 \
     mlflow=databricks \
     hydra/launcher=basic \
     -m
 
-echo "=== Weak scaling: 64 ranks, N=1025 ==="
+echo "=== Weak scaling: 64 ranks, N=513 ==="
 mpirun $MOPTS -np 64 uv run python run_solver.py \
     +experiment=weak_scaling \
-    n_ranks=64 N=1025 \
+    n_ranks=64 N=513 \
     mlflow=databricks \
     hydra/launcher=basic \
     -m

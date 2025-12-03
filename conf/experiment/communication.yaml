@@ -19,11 +19,12 @@ N: 98
 strategy: sliced
 communicator: custom
 
-# N values compatible with 24 ranks (N-2 divisible by 12 for cubic)
+# Logarithmic N values compatible with 24 ranks (N-2 divisible by 12 for cubic)
 # Cubic decomposition: 24 = 4×3×2, LCM = 12
+# N: 26 (24+2), 50 (48+2), 98 (96+2), 194 (192+2) -> ~2x growth
 hydra:
   sweeper:
     params:
-      N: 50,98,146
+      N: 26,50,98,194
       strategy: sliced,cubic
       communicator: numpy,custom

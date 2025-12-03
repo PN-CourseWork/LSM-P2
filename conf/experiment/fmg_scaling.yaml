@@ -7,7 +7,7 @@ experiment_name: fmg_scaling
 solver: fmg
 n_smooth: 5
 omega: 0.6666666666666666
-max_iter: 100
+max_iter: 50
 tolerance: 0.0
 fmg_post_vcycles: 2
 communicator: custom
@@ -22,8 +22,9 @@ n_ranks: 1
 strategy: cubic
 
 # Hydra sweep configuration
+# N values: 2^k+1 for multigrid levels (129³=2.1M, 257³=17M, 513³=135M)
 hydra:
   sweeper:
     params:
-      N: 257,513
+      N: 129,257,513
       strategy: sliced,cubic

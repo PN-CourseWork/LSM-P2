@@ -5,7 +5,7 @@ experiment_name: scaling
 
 # Jacobi solver settings
 solver: jacobi
-max_iter: 400
+max_iter: 500
 omega: 0.8
 tolerance: 0.0
 communicator: custom
@@ -20,9 +20,9 @@ n_ranks: 1
 strategy: sliced
 
 # Hydra sweep configuration
-# Run with: mpiexec -n P uv run python run_solver.py +experiment=scaling mlflow=databricks -m
+# N values: 2^k+1 for multigrid compatibility (65³=274K, 129³=2.1M, 257³=17M, 513³=135M)
 hydra:
   sweeper:
     params:
-      N: 257,513
+      N: 65,129,257,513
       strategy: sliced,cubic

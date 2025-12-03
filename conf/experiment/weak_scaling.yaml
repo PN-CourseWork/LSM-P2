@@ -5,7 +5,7 @@ experiment_name: weak_scaling
 
 # Jacobi solver settings
 solver: jacobi
-max_iter: 400
+max_iter: 500
 omega: 0.8
 tolerance: 0.0
 communicator: custom
@@ -15,12 +15,13 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 257
+N: 129
 n_ranks: 1
 strategy: cubic
 
 # Weak scaling requires PAIRED (n_ranks, N) - not Cartesian product!
-# Pairs: (1,257), (8,513), (27,769), (64,1025) - constant ~257³ per rank
+# Constant ~129³ points per rank:
+#   (1, 129), (8, 257), (27, 385), (64, 513)
 # Run each pair via job script, sweeping only strategy
 hydra:
   sweeper:
