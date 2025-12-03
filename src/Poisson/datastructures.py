@@ -72,6 +72,15 @@ class GlobalParams:
             else "local"
         )
 
+    def to_mlflow(self) -> dict:
+        """Convert to MLflow-compatible params dict (bools as int, exclude derived)."""
+        exclude = {"h"}  # Derived from N, redundant
+        return {
+            k: (int(v) if isinstance(v, bool) else v)
+            for k, v in self.__dict__.items()
+            if k not in exclude
+        }
+
 
 @dataclass
 class GlobalMetrics:
@@ -140,6 +149,16 @@ class LocalMetrics:
 
     # Global (rank 0 only - logged as step metrics for convergence charts)
     residual_history: List[float] = field(default_factory=list)
+
+    def to_mlflow_batch(self) -> list:
+        """Convert timeseries to MLflow Metric objects for batch logging."""
+        from mlflow.entities import Metric
+
+        return [
+            Metric(key=name, value=value, timestamp=0, step=step)
+            for name, values in self.__dict__.items()
+            for step, value in enumerate(values)
+        ]
 
 
 # ============================================================================

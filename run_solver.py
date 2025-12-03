@@ -19,7 +19,6 @@ from dataclasses import fields
 import hydra
 import mlflow
 from hydra.core.hydra_config import HydraConfig
-from mlflow.entities import Metric
 from mlflow.tracking import MlflowClient
 from mpi4py import MPI
 from omegaconf import DictConfig, OmegaConf
@@ -92,7 +91,7 @@ def worker(cfg_path: str) -> None:
 
     # Log results (rank 0 only)
     if rank == 0:
-        log_to_mlflow(cfg, solver)
+        log_to_mlflow(params, solver)
 
     log.info(
         f"Done: {solver.metrics.iterations} iter, error={solver.metrics.final_error:.2e}, "
@@ -143,26 +142,15 @@ def create_solver(params: GlobalParams, comm):
         return FMGSolver(**common)
 
 
-def log_to_mlflow(cfg: DictConfig, solver) -> None:
+def log_to_mlflow(params: GlobalParams, solver) -> None:
     """Log solver run to MLflow."""
-    with mlflow.start_run(run_name=f"{cfg.solver}_N{cfg.N}_p{cfg.n_ranks}") as run:
-        # Params: flat config values (dicts are nested config groups like 'mlflow')
-        params = {
-            k: v
-            for k, v in OmegaConf.to_container(cfg, resolve=True).items()
-            if not isinstance(v, dict)
-        }
-        mlflow.log_params(params)
-
-        # Metrics: solver results
+    with mlflow.start_run(run_name=f"{params.solver}_N{params.N}_p{params.n_ranks}") as run:
+        # Params and metrics from dataclasses
+        mlflow.log_params(params.to_mlflow())
         mlflow.log_metrics(solver.metrics.to_mlflow())
 
         # Timeseries: batch log step-based metrics
-        timeseries = [
-            Metric(key=name, value=value, timestamp=0, step=step)
-            for name, values in solver.timeseries.__dict__.items()
-            for step, value in enumerate(values)
-        ]
+        timeseries = solver.timeseries.to_mlflow_batch()
         if timeseries:
             MlflowClient().log_batch(run_id=run.info.run_id, metrics=timeseries)
 
