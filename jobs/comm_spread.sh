@@ -10,29 +10,30 @@
 
 # =============================================================================
 # Communication Experiment: SPREAD binding
-# Ranks spread across packages for maximum memory bandwidth
+# 24 ranks spread across 2 nodes (6 per package × 2 packages × 2 nodes)
+# Maximizes memory bandwidth, tests inter-node communication
 # =============================================================================
 
 module load mpi
 mkdir -p logs/lsf
 
-# Spread: 12 ranks per package (socket), spread across nodes
-MPIOPT="--map-by ppr:12:package --bind-to core"
+export NUMBA_NUM_THREADS=1
+export OMP_NUM_THREADS=1
 
-echo "=== Communication: Spread binding, 24 ranks (intra-node) ==="
-mpirun $MPIOPT -n 24 uv run python run_solver.py \
+# MPI parameters: 24 ranks spread across 2 nodes
+NP=24
+NPS=6  # ranks per package (socket)
+
+# Spread: 6 ranks per package, spread across nodes
+export MPI_OPTIONS="--map-by ppr:$NPS:package --bind-to core"
+
+echo "=== Communication: Spread binding ==="
+echo "NP=$NP, NPS=$NPS (6 ranks/package × 2 packages × 2 nodes)"
+echo "MPI_OPTIONS: $MPI_OPTIONS"
+
+uv run python run_solver.py \
     +experiment=communication \
     hydra/launcher=basic \
-    n_ranks=24 \
-    experiment_name=comm_spread \
-    mlflow=databricks \
-    -m
-
-echo "=== Communication: Spread binding, 48 ranks (inter-node) ==="
-mpirun $MPIOPT -n 48 uv run python run_solver.py \
-    +experiment=communication \
-    hydra/launcher=basic \
-    n_ranks=48 \
     experiment_name=comm_spread \
     mlflow=databricks \
     -m

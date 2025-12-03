@@ -10,29 +10,30 @@
 
 # =============================================================================
 # Communication Experiment: COMPACT binding
-# Ranks packed together on same node first
+# 24 ranks packed on 2 nodes (12 per node × 2 nodes)
+# Minimizes inter-node communication, tests intra-node bandwidth
 # =============================================================================
 
 module load mpi
 mkdir -p logs/lsf
 
-# Compact: fill one node before moving to next (24 per node)
-MPIOPT="--map-by ppr:24:node --bind-to core"
+export NUMBA_NUM_THREADS=1
+export OMP_NUM_THREADS=1
 
-echo "=== Communication: Compact binding, 24 ranks (intra-node) ==="
-mpirun $MPIOPT -n 24 uv run python run_solver.py \
+# MPI parameters: 24 ranks compacted across 2 nodes
+NP=24
+NPN=12  # ranks per node
+
+# Compact: 12 ranks per node, fill nodes before spreading
+export MPI_OPTIONS="--map-by ppr:$NPN:node --bind-to core"
+
+echo "=== Communication: Compact binding ==="
+echo "NP=$NP, NPN=$NPN (12 ranks/node × 2 nodes)"
+echo "MPI_OPTIONS: $MPI_OPTIONS"
+
+uv run python run_solver.py \
     +experiment=communication \
     hydra/launcher=basic \
-    n_ranks=24 \
-    experiment_name=comm_compact \
-    mlflow=databricks \
-    -m
-
-echo "=== Communication: Compact binding, 48 ranks (inter-node) ==="
-mpirun $MPIOPT -n 48 uv run python run_solver.py \
-    +experiment=communication \
-    hydra/launcher=basic \
-    n_ranks=48 \
     experiment_name=comm_compact \
     mlflow=databricks \
     -m

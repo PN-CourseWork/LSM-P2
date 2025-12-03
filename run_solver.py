@@ -8,8 +8,12 @@ Architecture:
 Usage:
     uv run python run_solver.py N=65 solver=jacobi n_ranks=1
     uv run python run_solver.py N=129 solver=fmg n_ranks=4
+
+    # With custom MPI options (for HPC binding):
+    uv run python run_solver.py --mpi-options "--map-by ppr:12:package --bind-to core" ...
 """
 
+import argparse
 import json
 import logging
 import os
@@ -46,8 +50,9 @@ def main(cfg: DictConfig) -> None:
 
     log.info(f"{cfg.solver}, N={cfg.N}, n_ranks={cfg.n_ranks}")
 
-    cmd = [
-        "mpiexec",
+    # Build MPI command with optional binding options
+    mpi_options = os.environ.get("MPI_OPTIONS", "").split()
+    cmd = ["mpiexec"] + mpi_options + [
         "-n",
         str(cfg.n_ranks),
         "uv",
