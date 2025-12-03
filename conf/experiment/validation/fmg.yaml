@@ -1,0 +1,15 @@
+# @package _global_
+# FMG validation: larger grids (multigrid efficiency)
+# Run: uv run python run_solver.py +experiment=validation/fmg -m
+defaults:
+  - /experiment/validation/_base
+  - _self_
+
+solver: fmg
+N: 129
+# Uses default n_smooth=5, fmg_post_vcycles=1
+
+hydra:
+  sweeper:
+    params:
+      N: 65,129,257

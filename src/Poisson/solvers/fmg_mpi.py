@@ -43,7 +43,7 @@ class FMGMPISolver(MPISolverMixin, FMGSolver):
 
     def _infer_levels(self, N: int) -> int:
         """Determine number of levels considering MPI constraints."""
-        min_local = 3  # Minimum local interior for restriction/prolongation
+        min_local = 2  # Minimum local interior for restriction/prolongation
 
         if self.size > 1:
             if self.strategy == "cubic":

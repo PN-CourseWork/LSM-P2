@@ -1,0 +1,43 @@
+#!/bin/bash
+#BSUB -J scaling_2node
+#BSUB -q hpcintro
+#BSUB -n 48
+#BSUB -R "span[ptile=24]"
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -W 2:00
+#BSUB -o logs/lsf/scaling_2node_%J.out
+#BSUB -e logs/lsf/scaling_2node_%J.err
+
+# =============================================================================
+# Scaling Experiments: 2 nodes (48 cores)
+# Binding: SPREAD (ppr:12:socket for even socket distribution)
+# =============================================================================
+
+module load mpi
+cd $LS_SUBCWD
+
+# Spread binding: 12 ranks per socket
+MPIOPT="--map-by ppr:12:socket --bind-to core"
+
+run_experiment() {
+    local NP=$1
+    local CONFIG=$2
+    local EXTRA_ARGS="${@:3}"
+
+    echo "=== Running: $CONFIG with $NP ranks ==="
+    mpiexec $MPIOPT -n $NP uv run python run_solver.py \
+        +experiment=$CONFIG \
+        hydra/launcher=basic \
+        n_ranks=$NP \
+        $EXTRA_ARGS
+}
+
+# Strong Scaling: Jacobi & FMG (48 ranks)
+run_experiment 48 scaling
+run_experiment 48 fmg_scaling
+
+# Weak Scaling: 27 ranks, N=769
+run_experiment 27 weak_scaling N=769
+run_experiment 27 fmg_scaling N=769 experiment_name=fmg_weak_scaling
+
+echo "Scaling 2-node completed"

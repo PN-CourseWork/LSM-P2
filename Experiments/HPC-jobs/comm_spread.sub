@@ -1,21 +1,36 @@
 #!/bin/bash
+#BSUB -J comm_spread
 #BSUB -q hpcintro
-#BSUB -W 00:20
 #BSUB -n 48
-#BSUB -J spread
-#BSUB -o Experiments/03-communication/output/spread_%J.out
-#BSUB -e Experiments/03-communication/output/spread_%J.err
-#BSUB -R 'rusage[mem=4GB]'
-#BSUB -R 'span[ptile=24]'
+#BSUB -R "span[ptile=24]"
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -W 1:00
+#BSUB -o logs/lsf/comm_spread_%J.out
+#BSUB -e logs/lsf/comm_spread_%J.err
 
-module purge
+# =============================================================================
+# Communication Experiment: SPREAD binding
+# Ranks spread across nodes/sockets for maximum memory bandwidth
+# =============================================================================
+
 module load mpi
-uv sync
+cd $LS_SUBCWD
 
-NP=24
-NPS=6
+# Spread: distribute ranks across nodes round-robin
+MPIOPT="--map-by ppr:12:socket --bind-to core"
 
-MOPTS="--report-binding --map-by ppr:$NPS:package --bind-to core"
-MOPTS="--map-by ppr:$NPS:package --bind-to core"
+echo "=== Communication: Spread binding, 24 ranks (intra-node) ==="
+mpiexec $MPIOPT -n 24 uv run python run_solver.py \
+    +experiment=communication \
+    hydra/launcher=basic \
+    n_ranks=24 \
+    experiment_name=comm_spread
 
-mpiexec $MOPTS -n $NP uv run python Experiments/03-communication/compute_communication.py
+echo "=== Communication: Spread binding, 48 ranks (inter-node) ==="
+mpiexec $MPIOPT -n 48 uv run python run_solver.py \
+    +experiment=communication \
+    hydra/launcher=basic \
+    n_ranks=48 \
+    experiment_name=comm_spread
+
+echo "Communication spread completed"

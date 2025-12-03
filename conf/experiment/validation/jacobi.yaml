@@ -1,0 +1,14 @@
+# @package _global_
+# Jacobi validation: small grids (fast convergence check)
+# Run: uv run python run_solver.py +experiment=validation/jacobi -m
+defaults:
+  - /experiment/validation/_base
+  - _self_
+
+solver: jacobi
+N: 33
+
+hydra:
+  sweeper:
+    params:
+      N: 17,33,65

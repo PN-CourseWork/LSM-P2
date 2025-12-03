@@ -68,7 +68,7 @@ def start_mlflow_run_context(
     experiment_name: str,
     parent_run_name: str,
     child_run_name: str,
-    project_prefix: str = "/Shared/LSM-PoissonMPI-v2",
+    project_prefix: str = "/Shared/LSM-PoissonMPI-v3",
     args: Optional[argparse.Namespace] = None,
 ):
     """
@@ -219,7 +219,7 @@ def load_runs(
     experiment: str,
     converged_only: bool = True,
     exclude_parent_runs: bool = True,
-    project_prefix: str = "/Shared/LSM-PoissonMPI-v2",
+    project_prefix: str = "/Shared/LSM-PoissonMPI-v3",
 ) -> pd.DataFrame:
     """Load runs from an MLflow experiment.
 

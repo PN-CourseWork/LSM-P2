@@ -22,7 +22,7 @@ class FMGSolver(BaseSolver):
     N : int
         Grid size (N x N x N). Must satisfy (N-1) divisible by 2^levels.
     n_smooth : int
-        Pre/post smoothing iterations (default: 3).
+        Pre/post smoothing iterations (default: 5).
     fmg_post_vcycles : int
         V-cycles after FMG phase (default: 1).
     use_numba : bool
@@ -38,7 +38,7 @@ class FMGSolver(BaseSolver):
     def __init__(
         self,
         N: int,
-        n_smooth: int = 3,
+        n_smooth: int = 5,
         fmg_post_vcycles: int = 1,
         use_numba: bool = False,
         omega: float = 2 / 3,
@@ -51,7 +51,7 @@ class FMGSolver(BaseSolver):
         self.fmg_post_vcycles = fmg_post_vcycles
         self.use_numba = use_numba
         self.specified_numba_threads = specified_numba_threads
-        self.min_coarse_size = 3
+        self.min_coarse_size = 5  # Allow coarsening to smaller grids
 
         # Infer number of levels
         self.n_levels = self._infer_levels(N)

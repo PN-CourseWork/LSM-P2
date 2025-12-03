@@ -78,7 +78,13 @@ def worker(cfg_path: str) -> None:
 
     # Setup MLflow (all ranks, but only rank 0 logs)
     mlflow.set_tracking_uri(cfg.mlflow.get("tracking_uri", "./mlruns"))
-    mlflow.set_experiment(cfg.experiment_name)
+
+    # Apply project prefix for Databricks (experiment names must be absolute paths)
+    experiment_name = cfg.experiment_name
+    project_prefix = cfg.mlflow.get("project_prefix", "")
+    if project_prefix and not experiment_name.startswith("/"):
+        experiment_name = f"{project_prefix}/{experiment_name}"
+    mlflow.set_experiment(experiment_name)
 
     if rank == 0:
         log.info(

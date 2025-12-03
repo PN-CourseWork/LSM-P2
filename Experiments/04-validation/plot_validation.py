@@ -48,7 +48,7 @@ def compute_order_of_accuracy(N_values, errors):
     return orders
 
 
-@hydra.main(config_path="../hydra-conf", config_name="experiment/validation", version_base=None)
+@hydra.main(config_path="../../conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     """Run validation plotting with Hydra configuration."""
 
@@ -66,16 +66,20 @@ def main(cfg: DictConfig) -> None:
 
     print("Loading data from MLflow...")
     setup_mlflow_tracking(mode=cfg.mlflow.mode)
-    prefix = cfg.mlflow.databricks_project_prefix
+    prefix = cfg.mlflow.get("project_prefix", "")
 
-    experiment_name = cfg.get("experiment_name", "validation")
+    experiment_name = "validation"  # Fixed for this plotting script
     df = load_runs(experiment_name, converged_only=False, project_prefix=prefix)
 
     if df.empty:
         print(f"No runs found in experiment '{experiment_name}'.")
         print("Run the experiment first:")
-        print("  uv run python run_solver.py +experiment=validation")
+        print("  uv run python run_solver.py +experiment=validation/jacobi -m")
+        print("  uv run python run_solver.py +experiment=validation/fmg -m")
         return
+
+    # Filter out runs with missing essential params
+    df = df.dropna(subset=["params.N", "metrics.final_error"])
 
     # Extract parameters and metrics
     df["N"] = df["params.N"].astype(int)
@@ -155,6 +159,7 @@ def main(cfg: DictConfig) -> None:
         hue="Strategy",
         style="Communicator",
         markers=True,
+        dashes=True,  # Use different dash patterns for communicator
         kind="line",
         height=3.5,
         aspect=1.0,
