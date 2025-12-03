@@ -51,13 +51,12 @@ def main(cfg: DictConfig) -> None:
     log.info(f"{cfg.solver}, N={cfg.N}, n_ranks={cfg.n_ranks}")
 
     # Build MPI command with optional binding options
+    # Use sys.executable to ensure workers use same Python as orchestrator
     mpi_options = os.environ.get("MPI_OPTIONS", "").split()
     cmd = ["mpiexec"] + mpi_options + [
         "-n",
         str(cfg.n_ranks),
-        "uv",
-        "run",
-        "python",
+        sys.executable,
         __file__,
         cfg_path,
     ]
