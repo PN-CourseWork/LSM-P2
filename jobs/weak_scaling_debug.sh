@@ -25,34 +25,18 @@ echo "Python: $(which python)"
 echo "venv Python: $(uv run which python)"
 echo "MPI_OPTIONS: $MPI_OPTIONS"
 
-# Test 0: Simple MPI test
+# Test using EXACT same config as working strong scaling
+# Just override N and n_ranks for weak scaling pair
 echo ""
-echo "=== Test 0: Simple MPI hello world ==="
-PYTHON_PATH=$(uv run which python)
-mpiexec -n 2 $PYTHON_PATH -c "from mpi4py import MPI; print(f'Hello from rank {MPI.COMM_WORLD.Get_rank()}')" 2>&1
-echo "Exit code: $?"
-
-# Test 1: Using exact pattern from working scaling.sh (with -m flag)
-echo ""
-echo "=== Test 1: jacobi N=129 ranks=1 (with -m) ==="
+echo "=== Test: Using strong_scaling_jacobi config (KNOWN WORKING) ==="
+echo "Overriding: N=129, n_ranks=1"
 uv run python run_solver.py \
-    +experiment=weak_scaling_jacobi \
-    N=129 n_ranks=1 \
+    +experiment=strong_scaling_jacobi \
+    N=129 n_ranks=1 strategy=cubic \
     max_iter=5 \
     hydra/launcher=basic \
     mlflow=databricks \
     -m 2>&1
-echo "Exit code: $?"
-
-# Test 2: Without -m flag for comparison
-echo ""
-echo "=== Test 2: jacobi N=129 ranks=1 (without -m) ==="
-uv run python run_solver.py \
-    +experiment=weak_scaling_jacobi \
-    N=129 n_ranks=1 \
-    max_iter=5 \
-    hydra/launcher=basic \
-    mlflow=databricks 2>&1
 echo "Exit code: $?"
 
 echo ""
