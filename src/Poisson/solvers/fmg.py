@@ -302,9 +302,7 @@ class FMGSolver(BaseSolver):
         """Reset timers and timeseries."""
         self._time_compute = 0.0
         self._time_halo = 0.0
-        self.timeseries.residual_history.clear()
-        self.timeseries.compute_times.clear()
-        self.timeseries.halo_times.clear()
+        self.timeseries.clear()
 
     def _finalize(self, wall_time: float):
         """Finalize metrics."""

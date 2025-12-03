@@ -7,6 +7,14 @@ import numpy as np
 from mpi4py import MPI
 
 
+def _neighbor_ranks(neighbors: dict, axis: str) -> tuple[int, int]:
+    """Get neighbor ranks for an axis, defaulting to MPI.PROC_NULL."""
+    lo = neighbors.get(f"{axis}_lower")
+    hi = neighbors.get(f"{axis}_upper")
+    return (lo if lo is not None else MPI.PROC_NULL,
+            hi if hi is not None else MPI.PROC_NULL)
+
+
 class HaloExchanger(ABC):
     """Abstract base for halo exchange strategies."""
 
@@ -54,18 +62,8 @@ class NumpyHaloExchanger(HaloExchanger):
         nz, ny, nx = self._local_shape
 
         # Z-direction
-        if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
-            lo = (
-                neighbors["z_lower"]
-                if neighbors["z_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["z_upper"]
-                if neighbors["z_upper"] is not None
-                else MPI.PROC_NULL
-            )
-
+        lo, hi = _neighbor_ranks(neighbors, "z")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             # Send to upper, receive from lower
             send_buf = np.ascontiguousarray(arr[-2, 1:-1, 1:-1])
             recv_buf = np.empty_like(send_buf)
@@ -81,18 +79,8 @@ class NumpyHaloExchanger(HaloExchanger):
                 arr[-1, 1:-1, 1:-1] = recv_buf.reshape(ny, nx)
 
         # Y-direction
-        if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
-            lo = (
-                neighbors["y_lower"]
-                if neighbors["y_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["y_upper"]
-                if neighbors["y_upper"] is not None
-                else MPI.PROC_NULL
-            )
-
+        lo, hi = _neighbor_ranks(neighbors, "y")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             send_buf = np.ascontiguousarray(arr[1:-1, -2, 1:-1])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, hi, 2, recv_buf, lo, 2)
@@ -106,18 +94,8 @@ class NumpyHaloExchanger(HaloExchanger):
                 arr[1:-1, -1, 1:-1] = recv_buf.reshape(nz, nx)
 
         # X-direction
-        if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
-            lo = (
-                neighbors["x_lower"]
-                if neighbors["x_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["x_upper"]
-                if neighbors["x_upper"] is not None
-                else MPI.PROC_NULL
-            )
-
+        lo, hi = _neighbor_ranks(neighbors, "x")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             send_buf = np.ascontiguousarray(arr[1:-1, 1:-1, -2])
             recv_buf = np.empty_like(send_buf)
             cart_comm.Sendrecv(send_buf, hi, 4, recv_buf, lo, 4)
@@ -181,17 +159,8 @@ class DatatypeHaloExchanger(HaloExchanger):
             return z * ny * nx + y * nx + x
 
         # Z-direction
-        if neighbors["z_lower"] is not None or neighbors["z_upper"] is not None:
-            lo = (
-                neighbors["z_lower"]
-                if neighbors["z_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["z_upper"]
-                if neighbors["z_upper"] is not None
-                else MPI.PROC_NULL
-            )
+        lo, hi = _neighbor_ranks(neighbors, "z")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             dt = self._datatypes["z"]
 
             send_off = flat_idx(nz - 2, 1, 1)
@@ -211,17 +180,8 @@ class DatatypeHaloExchanger(HaloExchanger):
                 arr[-1, 1:-1, 1:-1] = 0.0
 
         # Y-direction
-        if neighbors["y_lower"] is not None or neighbors["y_upper"] is not None:
-            lo = (
-                neighbors["y_lower"]
-                if neighbors["y_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["y_upper"]
-                if neighbors["y_upper"] is not None
-                else MPI.PROC_NULL
-            )
+        lo, hi = _neighbor_ranks(neighbors, "y")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             dt = self._datatypes["y"]
 
             send_off = flat_idx(1, ny - 2, 1)
@@ -241,17 +201,8 @@ class DatatypeHaloExchanger(HaloExchanger):
                 arr[1:-1, -1, 1:-1] = 0.0
 
         # X-direction
-        if neighbors["x_lower"] is not None or neighbors["x_upper"] is not None:
-            lo = (
-                neighbors["x_lower"]
-                if neighbors["x_lower"] is not None
-                else MPI.PROC_NULL
-            )
-            hi = (
-                neighbors["x_upper"]
-                if neighbors["x_upper"] is not None
-                else MPI.PROC_NULL
-            )
+        lo, hi = _neighbor_ranks(neighbors, "x")
+        if lo != MPI.PROC_NULL or hi != MPI.PROC_NULL:
             dt = self._datatypes["x"]
 
             send_off = flat_idx(1, 1, nx - 2)

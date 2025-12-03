@@ -99,9 +99,7 @@ class JacobiSolver(BaseSolver):
 
     def _reset_timeseries(self):
         """Clear timeseries data."""
-        self.timeseries.residual_history.clear()
-        self.timeseries.compute_times.clear()
-        self.timeseries.halo_times.clear()
+        self.timeseries.clear()
 
     def _get_time(self) -> float:
         """Get current time. Override for MPI timing."""

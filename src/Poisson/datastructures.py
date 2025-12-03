@@ -150,6 +150,12 @@ class LocalMetrics:
     # Global (rank 0 only - logged as step metrics for convergence charts)
     residual_history: List[float] = field(default_factory=list)
 
+    def clear(self):
+        """Clear all timeseries data."""
+        self.compute_times.clear()
+        self.halo_times.clear()
+        self.residual_history.clear()
+
     def to_mlflow_batch(self) -> list:
         """Convert timeseries to MLflow Metric objects for batch logging."""
         from mlflow.entities import Metric
