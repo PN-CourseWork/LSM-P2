@@ -221,26 +221,10 @@ class FMGSolver(BaseSolver):
         lvl.u, lvl.u_temp = lvl.u_temp, lvl.u
 
     def _compute_alg_res(self, lvl: GridLevel):
-        """Compute algebraic residual r = f - Au."""
-        u, f, r = lvl.u, lvl.f, lvl.r
-        h2 = lvl.h * lvl.h
-
-        self._sync_halos(u, lvl)
-
-        u_center = u[1:-1, 1:-1, 1:-1]
-        u_neighbors = (
-            u[0:-2, 1:-1, 1:-1]
-            + u[2:, 1:-1, 1:-1]
-            + u[1:-1, 0:-2, 1:-1]
-            + u[1:-1, 2:, 1:-1]
-            + u[1:-1, 1:-1, 0:-2]
-            + u[1:-1, 1:-1, 2:]
-        )
-        laplacian = (u_neighbors - 6.0 * u_center) / h2
-        r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian
-
-        # Zero residual at physical boundaries
-        self._apply_boundary_conditions(r, lvl)
+        """Compute algebraic residual r = f - Au for a grid level."""
+        self._sync_halos(lvl.u, lvl)
+        self._compute_alg_residual(lvl.u, lvl.f, lvl.h, lvl.r)
+        self._apply_boundary_conditions(lvl.r, lvl)
 
     def _coarse_solve(self, lvl: GridLevel):
         """Solve on coarsest grid using max_iter smoothing iterations."""
@@ -260,3 +244,7 @@ class FMGSolver(BaseSolver):
     def _get_solution_array(self) -> np.ndarray:
         """Return the solution array (finest level)."""
         return self.levels[0].u
+
+    def _get_source_array(self) -> np.ndarray:
+        """Return the source term array (finest level)."""
+        return self.levels[0].f

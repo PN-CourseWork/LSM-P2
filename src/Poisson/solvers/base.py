@@ -67,6 +67,70 @@ class BaseSolver(ABC):
         """Return the solution array."""
         return self.u
 
+    def _get_source_array(self) -> np.ndarray:
+        """Return the source term array."""
+        return self.f
+
+    def _compute_alg_residual(
+        self, u: np.ndarray, f: np.ndarray, h: float, r: np.ndarray = None
+    ) -> np.ndarray:
+        """Compute algebraic residual r = f - Au (interior only).
+
+        Parameters
+        ----------
+        u : array
+            Solution array.
+        f : array
+            Source term array.
+        h : float
+            Grid spacing.
+        r : array, optional
+            Output array. If None, allocates new array.
+
+        Returns
+        -------
+        r : array
+            Residual array with interior values filled.
+
+        Note: Caller is responsible for halo sync before and BC after if needed.
+        """
+        if r is None:
+            r = np.zeros_like(u)
+
+        h2 = h * h
+        u_center = u[1:-1, 1:-1, 1:-1]
+        u_neighbors = (
+            u[0:-2, 1:-1, 1:-1]
+            + u[2:, 1:-1, 1:-1]
+            + u[1:-1, 0:-2, 1:-1]
+            + u[1:-1, 2:, 1:-1]
+            + u[1:-1, 1:-1, 0:-2]
+            + u[1:-1, 1:-1, 2:]
+        )
+        laplacian = (u_neighbors - 6.0 * u_center) / h2
+        r[1:-1, 1:-1, 1:-1] = f[1:-1, 1:-1, 1:-1] + laplacian
+        return r
+
+    def compute_alg_error(self) -> float:
+        """Compute algebraic residual norm ||f - Au||.
+
+        Returns RMS norm of the algebraic residual.
+        """
+        u = self._get_solution_array()
+        f = self._get_source_array()
+        r = self._compute_alg_residual(u, f, self.h)
+
+        interior = r[1:-1, 1:-1, 1:-1]
+        local_sum_sq = np.sum(interior**2)
+        local_pts = float(interior.size)
+
+        global_sum_sq = self._reduce_sum(local_sum_sq)
+        global_pts = self._reduce_sum(local_pts)
+
+        alg_error = np.sqrt(global_sum_sq) / global_pts
+        self.metrics.final_alg_error = alg_error
+        return alg_error
+
     def _get_time(self) -> float:
         """Get current time. Override for MPI timing."""
         return time.perf_counter()

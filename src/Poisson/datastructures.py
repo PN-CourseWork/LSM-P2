@@ -92,7 +92,8 @@ class GlobalMetrics:
     converged: bool = False
     iterations: int = 0
     final_residual: Optional[float] = None
-    final_error: Optional[float] = None
+    final_error: Optional[float] = None  # L2 error vs analytical solution
+    final_alg_error: Optional[float] = None  # ||f - Au|| algebraic residual
     wall_time: Optional[float] = None
 
     # Timing breakdown (sum across all iterations)
