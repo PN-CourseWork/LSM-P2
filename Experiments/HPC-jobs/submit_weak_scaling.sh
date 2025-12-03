@@ -14,7 +14,7 @@
 # Each pair × strategy(2) = 4 pairs × 2 = 8 jobs
 # =============================================================================
 
-module load mpi/5.0.5-gcc-14.2.0
+module load mpi/4.1.6-gcc-14.2.0-binutils-2.42 || module load openmpi || true
 cd $LS_SUBCWD
 
 # Weak scaling requires paired (n_ranks, N) - run each pair separately

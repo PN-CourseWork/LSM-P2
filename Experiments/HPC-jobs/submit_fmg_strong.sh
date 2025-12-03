@@ -15,7 +15,7 @@
 # Each × strategy(2) = 6 × 2 = 12 jobs per config = 24 total
 # =============================================================================
 
-module load mpi/5.0.5-gcc-14.2.0
+module load mpi/4.1.6-gcc-14.2.0-binutils-2.42 || module load openmpi || true
 cd $LS_SUBCWD
 
 # Pure MPI: 1 Numba thread, scale up ranks
