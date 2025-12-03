@@ -1,26 +1,24 @@
 # @package _global_
-defaults:
-  - /config
-  - /solver: jacobi
-  - _self_
+# Communication experiment: compare halo exchange strategies
 
 experiment_name: communication
 
-# Halo exchange benchmark
+# Use Jacobi solver for halo exchange benchmarking
+solver: jacobi
 n_ranks: 4
 max_iter: 200
 tolerance: 0.0
 
 # Default values
-N: 64
+N: 65
 strategy: sliced
 communicator: custom
 
 # Hydra sweep configuration
-# Run with: uv run python run_solver.py -cn experiment/communication -m
+# Run with: mpiexec -n 4 uv run python run_solver.py +experiment=communication mlflow=databricks -m
 hydra:
   sweeper:
     params:
-      N: 32,48,64,80,96
+      N: 33,65,97
       strategy: sliced,cubic
       communicator: numpy,custom
