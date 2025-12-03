@@ -11,23 +11,6 @@ class JacobiMPISolver(JacobiSolver):
     """Parallel Jacobi solver with MPI domain decomposition.
 
     Extends JacobiSolver with MPI communication for distributed solving.
-
-    Parameters
-    ----------
-    N : int
-        Global grid size (N x N x N).
-    strategy : str
-        Decomposition: 'sliced' or 'cubic' (default: 'sliced').
-    communicator : str
-        Halo exchange: 'numpy' or 'custom' (default: 'custom').
-    use_numba : bool
-        Use Numba JIT kernel (default: False).
-    omega : float
-        Relaxation factor (default: 0.8).
-    max_iter : int
-        Maximum iterations (default: 1000).
-    tolerance : float
-        Convergence tolerance (default: 1e-6).
     """
 
     def __init__(
@@ -95,18 +78,18 @@ class JacobiMPISolver(JacobiSolver):
         return np.sqrt(global_sum[0]) / n_interior
 
     def _finalize(self, wall_time: float, u_solution: np.ndarray):
-        """Finalize results after solve (rank 0 only for some metrics)."""
+        """Finalize metrics after solve (rank 0 only for some metrics)."""
         self.u = u_solution
 
         if self.rank == 0:
-            self.results.final_residual = self.timeseries.residual_history[-1]
-            self.results.total_compute_time = sum(self.timeseries.compute_times)
-            self.results.total_halo_time = sum(self.timeseries.halo_exchange_times)
+            self.metrics.final_residual = self.timeseries.residual_history[-1]
+            self.metrics.total_compute_time = sum(self.timeseries.compute_times)
+            self.metrics.total_halo_time = sum(self.timeseries.halo_times)
 
-        self._compute_metrics(wall_time, self.results.iterations)
+        self._compute_metrics(wall_time, self.metrics.iterations)
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution (parallel)."""
         l2_error = self.grid.compute_l2_error(self.u)
-        self.results.final_error = l2_error
+        self.metrics.final_error = l2_error
         return l2_error

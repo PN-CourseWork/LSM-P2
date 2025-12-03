@@ -1,286 +1,187 @@
 """
-Unified Solver Runner - runs sequential or MPI solvers based on n_ranks.
+Poisson Solver Runner - Clean Hydra + MLflow integration.
+
+Architecture:
+    - Orchestrator (main): Hydra entry, saves config, spawns MPI
+    - Worker: MPI computation, MLflow logging
 
 Usage:
-    uv run python run_solver.py -cn experiment/validation
-    uv run python run_solver.py -cn experiment/scaling --multirun
+    uv run python run_solver.py N=65 solver=jacobi n_ranks=1
+    uv run python run_solver.py N=129 solver=fmg n_ranks=4
 """
 
 import logging
 import os
 import subprocess
 import sys
-import tempfile
+from dataclasses import fields
 
 import hydra
+import mlflow
 from hydra.core.hydra_config import HydraConfig
+from mlflow.entities import Metric
+from mlflow.tracking import MlflowClient
+from mpi4py import MPI
 from omegaconf import DictConfig, OmegaConf
+
+from Poisson.datastructures import GlobalParams
+from Poisson.solvers import FMGMPISolver, FMGSolver, JacobiMPISolver, JacobiSolver
 
 log = logging.getLogger(__name__)
 
 
-def _get_param(cfg, *keys, default=None):
-    """Helper to get param from nested config or global fallback."""
-    val = cfg
-    try:
-        for k in keys:
-            val = val[k]
-        return val
-    except (KeyError, AttributeError, TypeError):
-        pass
-    return default
-
-
-def _get_hardware_info() -> dict:
-    """Get hostname, socket ID, and CPU model for current process."""
-    import platform
-    import socket as sock
-
-    info = {"hostname": sock.gethostname(), "cpu_model": platform.processor() or "unknown", "socket_id": -1}
-
-    return info
-
-
-def _create_solver(cfg: DictConfig, is_mpi: bool = False, **mpi_kwargs):
-    """Create solver instance from config."""
-    from Poisson.solvers import JacobiSolver, FMGSolver, JacobiMPISolver, FMGMPISolver
-
-    N = _get_param(cfg, "problem", "N") or cfg.get("N")
-    solver_name = _get_param(cfg, "solver", "name") or cfg.get("solver_type", "jacobi")
-    
-    # Gather params from structured location or global fallback
-    solver_params = _get_param(cfg, "solver", "params") or {}
-    # Merge legacy global keys if present
-    for k in ["omega", "tolerance", "max_iter", "numba_threads", "n_smooth", "fmg_post_vcycles", "use_numba"]:
-        if k in cfg:
-            solver_params[k] = cfg[k]
-
-    common = {"use_numba": solver_params.get("use_numba", False)}
-
-    if solver_name == "jacobi":
-        cls = JacobiMPISolver if is_mpi else JacobiSolver
-        params = {
-            "N": N, 
-            "omega": solver_params.get("omega", 0.8), 
-            "tolerance": solver_params.get("tolerance", 1e-6),
-            "max_iter": solver_params.get("max_iter", 10000), 
-            "numba_threads": solver_params.get("numba_threads", 1), 
-            **common
-        }
-    else:  # multigrid/fmg
-        cls = FMGMPISolver if is_mpi else FMGSolver
-        params = {
-            "N": N, 
-            "n_smooth": solver_params.get("n_smooth", 3), 
-            "omega": solver_params.get("omega", 2/3),
-            "tolerance": solver_params.get("tolerance", 1e-16), 
-            "max_iter": solver_params.get("max_iter", 100),
-            "fmg_post_vcycles": solver_params.get("fmg_post_vcycles", 1), 
-            **common
-        }
-        if is_mpi:
-            params["numba_threads"] = solver_params.get("numba_threads", 1)
-
-    if is_mpi:
-        params.update(mpi_kwargs)
-
-    return cls(**params)
-
-
-def _log_results(cfg, solver, n_ranks: int, hw_info: list = None):
-    """Log solver results to MLflow."""
-    import numpy as np
-    from dataclasses import asdict
-    import mlflow
-    from utils.mlflow.io import (
-        start_mlflow_run_context, log_parameters, log_metrics_dict, log_timeseries_metrics
-    )
-
-    solver_name = _get_param(cfg, "solver", "name") or cfg.get("solver_type", "jacobi")
-    strategy = _get_param(cfg, "solver", "strategy") or cfg.get("strategy")
-    communicator = _get_param(cfg, "solver", "communicator") or cfg.get("communicator")
-    N = _get_param(cfg, "problem", "N") or cfg.get("N")
-    
-    solver_params = _get_param(cfg, "solver", "params") or {}
-    # Merge legacy global keys
-    for k in ["omega", "tolerance", "max_iter", "use_numba", "numba_threads"]:
-        if k in cfg:
-            solver_params[k] = cfg[k]
-
-    experiment_name = cfg.get("experiment_name") or "default"
-    run_name = f"{solver_name}_N{N}_p{n_ranks}" + (f"_{strategy}" if strategy else "")
-
-    with start_mlflow_run_context(experiment_name=experiment_name, parent_run_name=f"N{N}", child_run_name=run_name):
-        params = {
-            "N": N, "n_ranks": n_ranks, "solver": solver_name,
-            "omega": solver_params.get("omega"), 
-            "max_iter": solver_params.get("max_iter"), 
-            "tolerance": solver_params.get("tolerance")
-        }
-        if strategy:
-            params.update({"strategy": strategy, "communicator": communicator,
-                          "label": f"{communicator.title()} ({strategy})"})
-        if hasattr(solver, "local_shape"):
-            params.update({"local_volume": int(np.prod(solver.local_shape)), "halo_size_mb": solver.halo_size_mb})
-        if solver_params.get("use_numba"):
-            params.update({"use_numba": True, "numba_threads": solver_params.get("numba_threads", 1)})
-
-        log_parameters(params)
-        
-        metrics_to_log = asdict(solver.results)
-        
-        log_metrics_dict(metrics_to_log)
-
-        if hw_info:
-            import pandas as pd
-            hw_df = pd.DataFrame(hw_info)
-            mlflow.log_table(hw_df, artifact_file="hardware.json")
-            log_parameters({"nodes": hw_df["hostname"].nunique()})
-
-        if solver.timeseries.halo_exchange_times:
-            halo = np.array(solver.timeseries.halo_exchange_times) * 1e6
-            log_metrics_dict({f"halo_time_{k}_us": float(fn(halo)) for k, fn in
-                             [("mean", np.mean), ("std", np.std), ("min", np.min), ("max", np.max)]})
-
-        log_timeseries_metrics(solver.timeseries)
-
-    log.info(f"Done: {solver.results.iterations} iter, error={solver.results.final_error:.2e}, "
-             f"time={solver.results.wall_time:.3f}s" + (f", {solver.results.mlups:.1f} Mlup/s" if solver.results.mlups else ""))
+# =============================================================================
+# Orchestrator (Hydra entry point)
+# =============================================================================
 
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
-    """Entry point - runs sequential or spawns MPI based on n_ranks."""
-    n_ranks = cfg.get("n_ranks", 1)
-    N = _get_param(cfg, "problem", "N") or cfg.get("N")
-    solver_name = _get_param(cfg, "solver", "name") or cfg.get("solver_type", "jacobi")
-    
-    log.info(f"{solver_name}, N={N}, n_ranks={n_ranks}")
-
-    if n_ranks == 1:
-        _run_sequential(cfg)
-    else:
-        _spawn_mpi(cfg, n_ranks)
-
-
-def _run_sequential(cfg: DictConfig):
-    """Run sequential solver."""
-    from utils.mlflow.io import setup_mlflow_tracking
-
-    setup_mlflow_tracking(mode=cfg.mlflow.mode)
-
-    solver_name = _get_param(cfg, "solver", "name") or cfg.get("solver_type", "jacobi")
-    if solver_name not in ["jacobi", "multigrid", "fmg"]:
-        log.error(f"Unknown solver: {solver_name}")
-        sys.exit(1)
-
-    solver = _create_solver(cfg)
-    solver.warmup()
-    solver.fmg_solve() if solver_name in ["multigrid", "fmg"] else solver.solve()
-    solver.compute_l2_error()
-    _log_results(cfg, solver, n_ranks=1)
-
-    # Log artifacts (Hydra config and logs)
-    import mlflow
-    try:
-        hydra_cfg = HydraConfig.get()
-        output_dir = hydra_cfg.runtime.output_dir
-        mlflow.log_artifact(os.path.join(output_dir, ".hydra", "config.yaml"), artifact_path="hydra")
-        mlflow.log_artifact(os.path.join(output_dir, "run_solver.log"), artifact_path="hydra")
-    except Exception as e:
-        log.warning(f"Could not log Hydra artifacts: {e}")
-
-
-def _spawn_mpi(cfg: DictConfig, n_ranks: int):
-    """Spawn MPI subprocess with full config dump."""
-    # Determine output dir
-    try:
-        hydra_cfg = HydraConfig.get()
-        output_dir = hydra_cfg.runtime.output_dir
-    except Exception:
-        output_dir = tempfile.gettempdir()
-        
-    # Save config for workers
-    cfg_path = os.path.join(output_dir, "mpi_config.yaml")
+    """Hydra orchestrator - saves config and spawns MPI workers."""
+    output_dir = HydraConfig.get().runtime.output_dir
+    cfg_path = os.path.join(output_dir, "config.yaml")
     OmegaConf.save(cfg, cfg_path)
-    
-    mpi = _get_param(cfg, "machine", "mpi") or cfg.get("mpi", {})
+
+    log.info(f"{cfg.solver}, N={cfg.N}, n_ranks={cfg.n_ranks}")
+
+    cmd = [
+        "mpiexec",
+        "-n",
+        str(cfg.n_ranks),
+        "uv",
+        "run",
+        "python",
+        __file__,
+        cfg_path,
+    ]
+    log.info(f"Spawning: {' '.join(cmd)}")
+
     env = os.environ.copy()
-    env["MPI_SUBPROCESS"] = "1"
-
-    cmd = ["mpiexec", "-n", str(n_ranks)]
-    if mpi.get("bind_to"):
-        cores_per_node = mpi.get("cores_per_node", 24)
-        alloc = int(os.environ.get("LSB_DJOB_NUMPROC", cores_per_node))
-        n_nodes = max(1, alloc // cores_per_node)
-        rps = max(1, (n_ranks + n_nodes - 1) // n_nodes // mpi.get("sockets_per_node", 2))
-        cmd.extend(["--report-bindings", "--map-by", f"ppr:{rps}:package", "--bind-to", str(mpi.bind_to)])
-
-    cmd.extend(["uv", "run", "python", os.path.abspath(__file__), cfg_path])
-
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=300)
-    for line in (result.stdout or "").strip().split("\n"):
-        if line:
-            log.info(line)
-    for line in (result.stderr or "").strip().split("\n"):
-        if line:
-            log.warning(line) if "error" in line.lower() else log.info(line)
-            
-    # Log artifacts (Hydra config and logs) from the spawner
-    import mlflow
-    try:
-        if mlflow.active_run():
-            mlflow.log_artifact(os.path.join(output_dir, ".hydra", "config.yaml"), artifact_path="hydra")
-            mlflow.log_artifact(os.path.join(output_dir, "run_solver.log"), artifact_path="hydra")
-    except Exception as e:
-        log.warning(f"Could not log Hydra artifacts: {e}")
+    env["MPI_WORKER"] = "1"
+    subprocess.run(cmd, env=env, timeout=600, check=True)
 
 
-def _run_mpi_solver(cfg: DictConfig, comm):
-    """Run MPI solver (called within mpiexec subprocess)."""
-    from utils.mlflow.io import setup_mlflow_tracking
+# =============================================================================
+# Worker (MPI computation)
+# =============================================================================
 
-    rank, n_ranks = comm.Get_rank(), comm.Get_size()
-    hw_info = _get_hardware_info()
-    hw_info["rank"] = rank
-    all_hw = comm.gather(hw_info, root=0)
 
-    solver_name = _get_param(cfg, "solver", "name") or cfg.get("solver_type", "jacobi")
-    strategy = _get_param(cfg, "solver", "strategy") or cfg.get("strategy", "sliced")
-    communicator = _get_param(cfg, "solver", "communicator") or cfg.get("communicator", "custom")
-    N = _get_param(cfg, "problem", "N") or cfg.get("N")
+def worker(cfg_path: str) -> None:
+    """MPI worker - runs solver and logs to MLflow."""
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    cfg = OmegaConf.load(cfg_path)
+    params = config_to_params(cfg)
+
+    # Setup MLflow (all ranks, but only rank 0 logs)
+    mlflow.set_tracking_uri(cfg.mlflow.get("tracking_uri", "./mlruns"))
+    mlflow.set_experiment(cfg.experiment_name)
 
     if rank == 0:
-        setup_mlflow_tracking(mode=cfg.mlflow.mode)
-        log.info(f"{solver_name}, N={N}, ranks={n_ranks}, {strategy}/{communicator}")
+        log.info(
+            f"{params.solver}, N={params.N}, ranks={params.n_ranks}, "
+            f"{params.strategy}/{params.communicator}"
+        )
 
-    if solver_name not in ["jacobi", "multigrid", "fmg"]:
-        if rank == 0:
-            log.error(f"Unknown solver: {solver_name}")
-        sys.exit(1)
-
-    solver = _create_solver(cfg, is_mpi=True, strategy=strategy, communicator=communicator)
+    # Run solver
+    solver = create_solver(params, comm)
     solver.warmup()
-    solver.fmg_solve() if solver_name in ["multigrid", "fmg"] else solver.solve()
+    solver.fmg_solve() if params.solver == "fmg" else solver.solve()
     solver.compute_l2_error()
 
+    # Log results (rank 0 only)
     if rank == 0:
-        _log_results(cfg, solver, n_ranks, all_hw)
+        log_to_mlflow(cfg, solver)
+
+    log.info(
+        f"Done: {solver.metrics.iterations} iter, error={solver.metrics.final_error:.2e}, "
+        f"time={solver.metrics.wall_time:.3f}s"
+        + (f", {solver.metrics.mlups:.1f} MLup/s" if solver.metrics.mlups else "")
+    )
+
+
+# =============================================================================
+# Shared utilities
+# =============================================================================
+
+
+def config_to_params(cfg: DictConfig) -> GlobalParams:
+    """Convert Hydra config to GlobalParams."""
+    param_fields = {f.name for f in fields(GlobalParams) if f.init}
+    return GlobalParams(**{k: cfg[k] for k in param_fields})
+
+
+def create_solver(params: GlobalParams, comm):
+    """Create solver instance."""
+    common = {
+        "N": params.N,
+        "omega": params.omega,
+        "tolerance": params.tolerance,
+        "max_iter": params.max_iter,
+        "use_numba": params.use_numba,
+        "specified_numba_threads": params.specified_numba_threads,
+    }
+
+    # Use MPI solvers when n_ranks > 1, sequential otherwise
+    use_mpi = params.n_ranks > 1
+
+    if params.solver == "jacobi":
+        if use_mpi:
+            return JacobiMPISolver(
+                **common, strategy=params.strategy, communicator=params.communicator
+            )
+        return JacobiSolver(**common)
+    else:  # fmg
+        common.update(
+            n_smooth=params.n_smooth, fmg_post_vcycles=params.fmg_post_vcycles
+        )
+        if use_mpi:
+            return FMGMPISolver(
+                **common, strategy=params.strategy, communicator=params.communicator
+            )
+        return FMGSolver(**common)
+
+
+def log_to_mlflow(cfg: DictConfig, solver) -> None:
+    """Log solver run to MLflow."""
+    with mlflow.start_run(run_name=f"{cfg.solver}_N{cfg.N}_p{cfg.n_ranks}") as run:
+        # Params: flat config values (dicts are nested config groups like 'mlflow')
+        params = {
+            k: v
+            for k, v in OmegaConf.to_container(cfg, resolve=True).items()
+            if not isinstance(v, dict)
+        }
+        mlflow.log_params(params)
+
+        # Metrics: solver results (None values not allowed by MLflow)
+        metrics = {
+            k: (int(v) if isinstance(v, bool) else v)
+            for k, v in solver.metrics.__dict__.items()
+            if v is not None
+        }
+        mlflow.log_metrics(metrics)
+
+        # Timeseries: batch log step-based metrics
+        timeseries = [
+            Metric(key=name, value=value, timestamp=0, step=step)
+            for name, values in solver.timeseries.__dict__.items()
+            for step, value in enumerate(values)
+        ]
+        if timeseries:
+            MlflowClient().log_batch(run_id=run.info.run_id, metrics=timeseries)
+
+
+# =============================================================================
+# Entry point
+# =============================================================================
 
 
 if __name__ == "__main__":
-    if os.environ.get("MPI_SUBPROCESS"):
-        # Worker mode: Load config from file passed as arg
-        from mpi4py import MPI
+    if os.environ.get("MPI_WORKER"):
         logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
-        
-        if len(sys.argv) > 1:
-            cfg_path = sys.argv[1]
-            cfg = OmegaConf.load(cfg_path)
-            _run_mpi_solver(cfg, MPI.COMM_WORLD)
-        else:
-            print("Error: Worker started without config path.")
-            sys.exit(1)
+        if len(sys.argv) < 2:
+            sys.exit("Error: Worker requires config path argument")
+        worker(sys.argv[1])
     else:
-        # Hydra mode
         main()

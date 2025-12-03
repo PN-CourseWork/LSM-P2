@@ -183,21 +183,21 @@ class FMGMPISolver(FMGSolver):
         return np.sqrt(global_data[0]) / global_data[1]
 
     def _finalize(self, wall_time: float):
-        """Finalize results (rank 0 only for some metrics)."""
+        """Finalize metrics (rank 0 only for some metrics)."""
         if self.rank == 0:
-            self.results.final_residual = (
+            self.metrics.final_residual = (
                 self.timeseries.residual_history[-1]
                 if self.timeseries.residual_history
                 else 0.0
             )
-            self.results.total_compute_time = self._time_compute
-            self.results.total_halo_time = self._time_halo
+            self.metrics.total_compute_time = self._time_compute
+            self.metrics.total_halo_time = self._time_halo
 
-        self._compute_metrics(wall_time, self.results.iterations)
+        self._compute_metrics(wall_time, self.metrics.iterations)
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution (parallel)."""
         fine = self.levels[0]
         l2_error = fine.grid.compute_l2_error(fine.u)
-        self.results.final_error = l2_error
+        self.metrics.final_error = l2_error
         return l2_error

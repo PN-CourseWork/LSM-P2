@@ -1,30 +1,41 @@
 defaults:
   - machine: local
-  - solver: jacobi
   - mlflow: local
   - override hydra/launcher: basic
-  - override hydra/callbacks: mlflow_log
   - _self_
 
 # ============================================================
-# Global Configuration
+# GlobalParams - flat config matching dataclass
 # ============================================================
 
-# Experiment Identity
-prefix: DEBUG
-name: default
-experiment_name: ${prefix}-${name}
+# Required
+N: 65
 
-# Problem Size
-N: 64
+# Solver selection and params
+solver: jacobi  # "jacobi" | "fmg"
+omega: 0.8
+tolerance: 1.0e-6
+max_iter: 1000
+
+# FMG-specific (ignored by Jacobi)
+n_smooth: 3
+fmg_post_vcycles: 1
 
 # Parallelization
-n_ranks: 4
+n_ranks: 1
+strategy: sliced  # "sliced" | "cubic"
+communicator: custom  # "numpy" | "custom"
 
-# Hydra Logging
-job_name: null
-log_dir: logs/lsf
+# Numba
+use_numba: false
+specified_numba_threads: 1
 
+# Experiment tracking
+experiment_name: default
+
+# ============================================================
+# Hydra output paths
+# ============================================================
 hydra:
   run:
     dir: outputs/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}

@@ -19,11 +19,11 @@ Parallel (MPI):
 from pathlib import Path
 
 from .datastructures import (
+    GlobalParams,
     GlobalMetrics,
-    LocalSeries,
-    KernelParams,
-    KernelMetrics,
-    KernelSeries,
+    LocalParams,
+    LocalMetrics,
+    RankGeometry,
     GridLevel,
 )
 from .kernels import NumPyKernel, NumbaKernel
@@ -33,10 +33,7 @@ from .solvers import (
     FMGSolver,
     FMGMPISolver,
 )
-from .mpi import (
-    DistributedGrid,
-    RankGeometry,
-)
+from .mpi import DistributedGrid
 from .problems import (
     create_grid_3d,
     sinusoidal_exact_solution,
@@ -45,13 +42,12 @@ from .problems import (
 )
 
 __all__ = [
-    # Data structures - Kernel
-    "KernelParams",
-    "KernelMetrics",
-    "KernelSeries",
-    # Data structures - Solver
+    # Data structures
+    "GlobalParams",
     "GlobalMetrics",
-    "LocalSeries",
+    "LocalParams",
+    "LocalMetrics",
+    "RankGeometry",
     "GridLevel",
     # Kernels
     "NumPyKernel",
@@ -64,7 +60,6 @@ __all__ = [
     "FMGMPISolver",
     # Grid
     "DistributedGrid",
-    "RankGeometry",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",

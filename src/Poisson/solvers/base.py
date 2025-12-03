@@ -2,11 +2,14 @@
 
 from abc import ABC, abstractmethod
 
-from ..datastructures import GlobalMetrics, LocalSeries
+from ..datastructures import GlobalMetrics, LocalMetrics
 
 
 class BaseSolver(ABC):
     """Abstract base for all Poisson solvers."""
+
+    # Bytes per lattice update: 7-point stencil = 6 neighbors + center + f = 8 mem-ops × 8 bytes
+    BYTES_PER_POINT = 64
 
     def __init__(
         self,
@@ -21,8 +24,9 @@ class BaseSolver(ABC):
         self.tolerance = tolerance
         self.h = 2.0 / (N - 1)
 
-        self.results = GlobalMetrics()
-        self.timeseries = LocalSeries()
+        # Metrics containers (match datastructures.py naming)
+        self.metrics = GlobalMetrics()
+        self.timeseries = LocalMetrics()
 
     @abstractmethod
     def solve(self) -> GlobalMetrics:
@@ -31,14 +35,11 @@ class BaseSolver(ABC):
 
     def _compute_metrics(self, wall_time: float, iterations: int):
         """Compute performance metrics."""
-        self.results.wall_time = wall_time
-        self.results.iterations = iterations
+        self.metrics.wall_time = wall_time
+        self.metrics.iterations = iterations
 
         n_interior = (self.N - 2) ** 3
         if iterations > 0 and wall_time > 0:
-            self.results.mlups = n_interior * iterations / (wall_time * 1e6)
-            # 7-point stencil: 6 neighbors + center + f = 8 mem-ops × 8 bytes = 64 bytes
-            # (Course Week 02, p.17: "each lup involves 8 memory operations: 7 loads and 1 store")
-            bytes_per_point = 64
-            total_bytes = n_interior * iterations * bytes_per_point
-            self.results.bandwidth_gb_s = total_bytes / (wall_time * 1e9)
+            self.metrics.mlups = n_interior * iterations / (wall_time * 1e6)
+            total_bytes = n_interior * iterations * self.BYTES_PER_POINT
+            self.metrics.bandwidth_gb_s = total_bytes / (wall_time * 1e9)

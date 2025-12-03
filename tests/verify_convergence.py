@@ -19,12 +19,22 @@ from scipy.stats import linregress
 def run_simulations():
     """Run the Hydra sweeps to generate data."""
     print("🚀 Starting Convergence Sweeps...")
-    
+
+    # Clean up old test experiments (permanently delete directories + trash)
+    mlflow.set_tracking_uri("./mlruns")
+    client = mlflow.MlflowClient()
+    from mlflow.entities import ViewType
+    for exp in client.search_experiments(view_type=ViewType.ALL):
+        if exp.name.startswith("TEST-convergence"):
+            print(f"   🗑️  Deleting old experiment: {exp.name}")
+            shutil.rmtree(f"./mlruns/{exp.experiment_id}", ignore_errors=True)
+            shutil.rmtree(f"./mlruns/.trash/{exp.experiment_id}", ignore_errors=True)
+
     experiments = [
         "test/jacobi_convergence",
         "test/fmg_convergence"
     ]
-    
+
     for exp in experiments:
         print(f"   ▶ Running {exp}...")
         cmd = [

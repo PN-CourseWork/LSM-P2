@@ -43,7 +43,7 @@ class FMGSolver(BaseSolver):
         fmg_post_vcycles: int = 1,
         use_numba: bool = False,
         omega: float = 2 / 3,
-        numba_threads: int = 1,
+        specified_numba_threads: int = 1,
         **kwargs,
     ):
         super().__init__(N, omega=omega, **kwargs)
@@ -51,7 +51,7 @@ class FMGSolver(BaseSolver):
         self.n_smooth = n_smooth
         self.fmg_post_vcycles = fmg_post_vcycles
         self.use_numba = use_numba
-        self.numba_threads = numba_threads
+        self.specified_numba_threads = specified_numba_threads
         self.min_coarse_size = 3
 
         # Infer number of levels
@@ -102,7 +102,9 @@ class FMGSolver(BaseSolver):
         for level, N in enumerate(N_values):
             h = 2.0 / (N - 1)
             kernel = KernelClass(
-                N=N, omega=self.omega, numba_threads=self.numba_threads
+                N=N,
+                omega=self.omega,
+                specified_numba_threads=self.specified_numba_threads,
             )
 
             lvl = GridLevel(
@@ -151,15 +153,15 @@ class FMGSolver(BaseSolver):
             self.timeseries.residual_history.append(residual)
 
             if residual < self.tolerance:
-                self.results.converged = True
-                self.results.iterations = i + 1
+                self.metrics.converged = True
+                self.metrics.iterations = i + 1
                 break
         else:
-            self.results.iterations = self.max_iter
+            self.metrics.iterations = self.max_iter
 
         wall_time = self._get_time() - t_start
         self._finalize(wall_time)
-        return self.results
+        return self.metrics
 
     def fmg_solve(self) -> GlobalMetrics:
         """Full Multigrid: solve from coarsest to finest."""
@@ -203,12 +205,12 @@ class FMGSolver(BaseSolver):
             residual = self._v_cycle(0)
             self.timeseries.residual_history.append(residual)
 
-        self.results.converged = residual < self.tolerance
-        self.results.iterations = self.n_levels + self.fmg_post_vcycles
+        self.metrics.converged = residual < self.tolerance
+        self.metrics.iterations = self.n_levels + self.fmg_post_vcycles
 
         wall_time = self._get_time() - t_start
         self._finalize(wall_time)
-        return self.results
+        return self.metrics
 
     def _v_cycle(self, level: int) -> float:
         """Recursive V-cycle."""
@@ -302,18 +304,22 @@ class FMGSolver(BaseSolver):
         self._time_halo = 0.0
         self.timeseries.residual_history.clear()
         self.timeseries.compute_times.clear()
-        self.timeseries.halo_exchange_times.clear()
+        self.timeseries.halo_times.clear()
 
     def _finalize(self, wall_time: float):
-        """Finalize results."""
-        self.results.final_residual = (
+        """Finalize metrics."""
+        self.metrics.final_residual = (
             self.timeseries.residual_history[-1]
             if self.timeseries.residual_history
             else 0.0
         )
-        self.results.total_compute_time = self._time_compute
-        self.results.total_halo_time = self._time_halo
-        self._compute_metrics(wall_time, self.results.iterations)
+        self.metrics.total_compute_time = self._time_compute
+        self.metrics.total_halo_time = self._time_halo
+        # Get observed numba threads from finest level kernel
+        self.metrics.observed_numba_threads = self.levels[
+            0
+        ].kernel.observed_numba_threads
+        self._compute_metrics(wall_time, self.metrics.iterations)
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution."""
@@ -321,5 +327,5 @@ class FMGSolver(BaseSolver):
         u_exact = sinusoidal_exact_solution(self.N)
         diff = fine.u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
         l2_error = np.sqrt(np.sum(diff**2) * self.h**3)
-        self.results.final_error = l2_error
+        self.metrics.final_error = l2_error
         return l2_error

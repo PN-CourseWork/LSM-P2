@@ -1,116 +1,161 @@
 """Data structures for solver configuration and results.
 
-All datastructures defined here are local to each rank. In an MPI context,
-each rank instantiates its own copy of these structures with rank-specific data.
+Architecture: 2x2 matrix of Params vs Metrics × Global vs Local
+
+                 Params (input/config)         Metrics (output/results)
+                 ─────────────────────         ────────────────────────
+Global           GlobalParams                  GlobalMetrics
+(same across     N, solver, omega,             wall_time, mlups,
+ranks / agg)     n_ranks, strategy...          converged, iterations...
+
+Local            LocalParams                   LocalMetrics
+(per-rank)       rank, hostname,               compute_times[],
+                 neighbors, local_shape...     halo_times[]...
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 
 # ============================================================================
-# Kernel
+# Global (identical across ranks, or aggregated on rank 0)
 # ============================================================================
 
 
 @dataclass
-class KernelParams:
-    """Kernel configuration parameters.
+class GlobalParams:
+    """Run configuration - validated by Hydra, logged to MLflow as params.
 
-    Note: N is the LOCAL grid size (after domain decomposition + halo zones for MPI).
-    For standalone usage, N is the full problem size.
+    Immutable configuration set before the run. Identical across all MPI ranks.
     """
 
-    N: int  # Local grid size (including halo zones for MPI)
-    omega: float
-    tolerance: float = 1e-10
-    max_iter: int = 100000
-    numba_threads: int | None = None  # None for NumPy
+    # Required
+    N: int
 
-    # Derived values (computed in __post_init__)
+    # Solver
+    solver: str = "jacobi"  # "jacobi" | "fmg"
+    omega: float = 0.8
+    tolerance: float = 1e-6
+    max_iter: int = 1000
+
+    # FMG-specific (ignored by Jacobi)
+    n_smooth: int = 3
+    fmg_post_vcycles: int = 1
+
+    # Parallelization
+    n_ranks: int = 1
+    strategy: Optional[str] = None  # "sliced" | "cubic"
+    communicator: Optional[str] = None  # "numpy" | "custom"
+
+    # Numba
+    use_numba: bool = False
+    specified_numba_threads: int = 1  # What user requested
+
+    # Experiment tracking
+    experiment_name: str = "default"
+
+    # Auto-detected at runtime (not from config)
+    environment: str = field(init=False)
     h: float = field(init=False)
 
     def __post_init__(self):
         """Compute derived values after initialization."""
         self.h = 2.0 / (self.N - 1)
-
-
-@dataclass
-class KernelMetrics:
-    """Final convergence metrics (updated during kernel execution)."""
-
-    converged: bool = False
-    iterations: int = 0
-    final_residual: float | None = None
-    total_compute_time: float = 0.0
-
-
-@dataclass
-class KernelSeries:
-    """Per-iteration tracking arrays.
-
-    The kernel automatically populates residuals and compute_times during step().
-    Physical errors can be optionally appended by the caller for validation.
-    """
-
-    residuals: list[float] = field(default_factory=list)
-    compute_times: list[float] = field(default_factory=list)
-    physical_errors: list[float] | None = None
-
-
-# ============================================================================
-# Solver - Global (identical across ranks, or rank 0 only)
-# ============================================================================
+        self.environment = (
+            "hpc"
+            if os.environ.get("LSB_JOBID") or os.environ.get("SLURM_JOB_ID")
+            else "local"
+        )
 
 
 @dataclass
 class GlobalMetrics:
-    """Final convergence metrics (computed/stored on rank 0 only)."""
+    """Aggregated results - logged to MLflow as metrics.
 
-    iterations: int = 0
+    Final results computed/aggregated on rank 0.
+    """
+
     converged: bool = False
-    final_error: float | None = None
-    wall_time: float | None = None
+    iterations: int = 0
+    final_residual: Optional[float] = None
+    final_error: Optional[float] = None
+    wall_time: Optional[float] = None
+
     # Timing breakdown (sum across all iterations)
-    total_compute_time: float | None = None
-    total_halo_time: float | None = None
-    total_mpi_comm_time: float | None = None
+    total_compute_time: Optional[float] = None
+    total_halo_time: Optional[float] = None
+
     # Performance metrics
-    mlups: float | None = None  # Million Lattice Updates per Second
-    bandwidth_gb_s: float | None = None  # Memory bandwidth in GB/s
+    mlups: Optional[float] = None  # Million Lattice Updates per Second
+    bandwidth_gb_s: Optional[float] = None  # Memory bandwidth in GB/s
+
+    # Numba runtime info (what was actually available)
+    observed_numba_threads: Optional[int] = None
 
 
 # ============================================================================
-# Solver - Local (each rank has different values)
+# Local (per-rank)
 # ============================================================================
 
 
 @dataclass
-class LocalSeries:
-    """Per-iteration/operation timing arrays (each rank).
+class LocalParams:
+    """Per-rank geometry - gathered to rank 0, logged as artifact.
 
-    Each rank accumulates its own timing data for each iteration/operation.
-    Rank 0 additionally stores residual history.
-
-    For Jacobi: one entry per iteration
-    For Multigrid: one entry per smoothing operation (reveals grid hierarchy)
-
-    Note: With non-blocking Iallreduce, MPI time overlaps with halo exchange,
-    so we only track compute and halo times. "Other" overhead can be computed
-    as: wall_time - sum(compute_times) - sum(halo_exchange_times)
+    Per-rank topology information.
     """
 
-    compute_times: list[float] = field(default_factory=list)
-    halo_exchange_times: list[float] = field(default_factory=list)
-    residual_history: list[float] = field(default_factory=list)
-    # For multigrid: track which level each operation is on (0=finest)
-    level_indices: list[int] = field(default_factory=list)
+    rank: int
+    hostname: str = ""
+    cart_coords: Optional[Tuple[int, int, int]] = None
+    neighbors: Dict[str, Optional[int]] = field(default_factory=dict)
+    local_shape: Optional[Tuple[int, int, int]] = None
+    global_start: Optional[Tuple[int, int, int]] = None
+    global_end: Optional[Tuple[int, int, int]] = None
+
+
+@dataclass
+class LocalMetrics:
+    """Per-rank timeseries - gathered for topology artifact.
+
+    Per-rank timing data. Accumulated during solve, logged post-solve.
+    """
+
+    # Per-rank timing (gathered to artifact for load balancing analysis)
+    compute_times: List[float] = field(default_factory=list)
+    halo_times: List[float] = field(default_factory=list)
+
+    # Global (rank 0 only - logged as step metrics for convergence charts)
+    residual_history: List[float] = field(default_factory=list)
 
 
 # ============================================================================
-# Multigrid
+# MPI Grid Geometry
+# ============================================================================
+
+
+@dataclass
+class RankGeometry:
+    """Per-rank grid geometry information.
+
+    Used by DistributedGrid to describe the local portion of the domain.
+    """
+
+    rank: int
+    local_shape: Tuple[int, int, int]
+    halo_shape: Tuple[int, int, int]
+    global_start: Tuple[int, int, int]
+    global_end: Tuple[int, int, int]
+    neighbors: Dict[str, Optional[int]]
+
+
+# ============================================================================
+# Multigrid-specific
 # ============================================================================
 
 
@@ -134,35 +179,8 @@ class GridLevel:
 
 
 # ============================================================================
-# MPI Geometry
+# Legacy aliases (for backwards compatibility during migration)
 # ============================================================================
 
-
-@dataclass
-class RankGeometry:
-    """Geometry information for a single MPI rank.
-
-    Attributes
-    ----------
-    rank : int
-        MPI rank number.
-    local_shape : tuple[int, int, int]
-        Local domain shape (interior points owned by this rank).
-    halo_shape : tuple[int, int, int]
-        Shape including halo zones (local_shape + 2 in each dimension).
-    global_start : tuple[int, int, int]
-        Global indices of owned region start (inclusive).
-    global_end : tuple[int, int, int]
-        Global indices of owned region end (exclusive).
-    neighbors : dict[str, int | None]
-        Neighbor ranks for each face. Keys: 'x_lower', 'x_upper',
-        'y_lower', 'y_upper', 'z_lower', 'z_upper'.
-        Value is None if at physical boundary.
-    """
-
-    rank: int
-    local_shape: tuple[int, int, int]
-    halo_shape: tuple[int, int, int]
-    global_start: tuple[int, int, int]
-    global_end: tuple[int, int, int]
-    neighbors: dict[str, int | None]
+# These will be removed after full migration
+LocalSeries = LocalMetrics  # Alias for backwards compatibility

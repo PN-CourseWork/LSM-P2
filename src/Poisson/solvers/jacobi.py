@@ -13,34 +13,19 @@ class JacobiSolver(BaseSolver):
 
     No MPI overhead - runs entirely on a single process.
     Useful for benchmarking kernel performance (NumPy vs Numba).
-
-    Parameters
-    ----------
-    N : int
-        Grid size (N x N x N).
-    use_numba : bool
-        Use Numba JIT kernel (default: False).
-    numba_threads : int
-        Number of Numba threads (default: 1).
-    omega : float
-        Relaxation factor (default: 0.8).
-    max_iter : int
-        Maximum iterations (default: 1000).
-    tolerance : float
-        Convergence tolerance (default: 1e-6).
     """
 
     def __init__(
         self,
         N: int,
         use_numba: bool = False,
-        numba_threads: int = 1,
+        specified_numba_threads: int = 1,
         **kwargs,
     ):
         super().__init__(N, **kwargs)
 
         self.use_numba = use_numba
-        self.numba_threads = numba_threads
+        self.specified_numba_threads = specified_numba_threads
 
         # Select kernel
         self._init_kernel()
@@ -52,7 +37,9 @@ class JacobiSolver(BaseSolver):
         """Initialize the Jacobi kernel."""
         if self.use_numba:
             self.kernel = NumbaKernel(
-                N=self.N, omega=self.omega, numba_threads=self.numba_threads
+                N=self.N,
+                omega=self.omega,
+                specified_numba_threads=self.specified_numba_threads,
             )
         else:
             self.kernel = NumPyKernel(N=self.N, omega=self.omega)
@@ -88,33 +75,33 @@ class JacobiSolver(BaseSolver):
 
             self.timeseries.compute_times.append(compute_time)
             if halo_time > 0:
-                self.timeseries.halo_exchange_times.append(halo_time)
+                self.timeseries.halo_times.append(halo_time)
 
             # Compute residual
             residual = self._compute_residual(u, u_old, n_interior)
             self.timeseries.residual_history.append(residual)
 
             if residual < self.tolerance:
-                self.results.converged = True
-                self.results.iterations = i + 1
+                self.metrics.converged = True
+                self.metrics.iterations = i + 1
                 break
 
             # Swap buffers
             u, u_old = u_old, u
         else:
-            self.results.iterations = self.max_iter
-            self.results.converged = False
+            self.metrics.iterations = self.max_iter
+            self.metrics.converged = False
 
         wall_time = self._get_time() - t_start
         self._finalize(wall_time, u_old)
 
-        return self.results
+        return self.metrics
 
     def _reset_timeseries(self):
         """Clear timeseries data."""
         self.timeseries.residual_history.clear()
         self.timeseries.compute_times.clear()
-        self.timeseries.halo_exchange_times.clear()
+        self.timeseries.halo_times.clear()
 
     def _get_time(self) -> float:
         """Get current time. Override for MPI timing."""
@@ -136,16 +123,17 @@ class JacobiSolver(BaseSolver):
         return np.sqrt(np.sum(diff**2)) / n_interior
 
     def _finalize(self, wall_time: float, u_solution: np.ndarray):
-        """Finalize results after solve."""
+        """Finalize metrics after solve."""
         self.u = u_solution
-        self.results.final_residual = self.timeseries.residual_history[-1]
-        self.results.total_compute_time = sum(self.timeseries.compute_times)
-        self._compute_metrics(wall_time, self.results.iterations)
+        self.metrics.final_residual = self.timeseries.residual_history[-1]
+        self.metrics.total_compute_time = sum(self.timeseries.compute_times)
+        self.metrics.observed_numba_threads = self.kernel.observed_numba_threads
+        self._compute_metrics(wall_time, self.metrics.iterations)
 
     def compute_l2_error(self) -> float:
         """Compute L2 error against analytical solution."""
         u_exact = sinusoidal_exact_solution(self.N)
         diff = self.u[1:-1, 1:-1, 1:-1] - u_exact[1:-1, 1:-1, 1:-1]
         l2_error = np.sqrt(np.sum(diff**2) * self.h**3)
-        self.results.final_error = l2_error
+        self.metrics.final_error = l2_error
         return l2_error
