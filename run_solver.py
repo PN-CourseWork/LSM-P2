@@ -241,17 +241,30 @@ def _run_sequential_solver(cfg: DictConfig):
 
 
 def _get_hardware_info() -> dict:
-    """Get hardware info for the current process."""
+    """Get detailed hardware info for the current process."""
     import platform
-    import socket
+    import socket as sock
 
     info = {
-        "hostname": socket.gethostname(),
+        "hostname": sock.gethostname(),
         "processor": platform.processor() or "unknown",
         "platform": platform.platform(),
+        "cpu_model": "unknown",
+        "core_id": -1,
+        "socket_id": -1,
     }
 
-    # Try to get CPU info on Linux
+    # Get CPU affinity (which core(s) this process can run on)
+    try:
+        affinity = os.sched_getaffinity(0)
+        info["cpu_affinity"] = list(affinity)
+        if len(affinity) == 1:
+            info["core_id"] = list(affinity)[0]
+    except (AttributeError, OSError):
+        # sched_getaffinity not available (e.g., macOS)
+        info["cpu_affinity"] = []
+
+    # Try to get CPU model from /proc/cpuinfo (Linux)
     try:
         with open("/proc/cpuinfo", "r") as f:
             for line in f:
@@ -260,6 +273,26 @@ def _get_hardware_info() -> dict:
                     break
     except (IOError, OSError):
         pass
+
+    # Try to get socket/NUMA info for the bound core
+    if info["core_id"] >= 0:
+        try:
+            # Physical package ID = socket
+            pkg_path = f"/sys/devices/system/cpu/cpu{info['core_id']}/topology/physical_package_id"
+            with open(pkg_path, "r") as f:
+                info["socket_id"] = int(f.read().strip())
+        except (IOError, OSError, ValueError):
+            pass
+
+        try:
+            # NUMA node
+            import glob
+            numa_paths = glob.glob(f"/sys/devices/system/cpu/cpu{info['core_id']}/node*")
+            if numa_paths:
+                # Extract node number from path like /sys/.../node0
+                info["numa_node"] = int(numa_paths[0].split("node")[-1])
+        except (IOError, OSError, ValueError, IndexError):
+            pass
 
     return info
 
