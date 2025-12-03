@@ -8,11 +8,6 @@ Solver selection:
 - n_ranks=1: JacobiSolver or FMGSolver (no MPI overhead)
 - n_ranks>1: JacobiMPISolver or FMGMPISolver (with MPI)
 
-HPC Job Array Support:
-- LSB_DJOB_NUMPROC: allocated cores (determines valid rank counts)
-- LSB_JOBINDEX: selects which multirun config to execute (1-based)
-- Runs are skipped if n_ranks exceeds allocation or doesn't match tier
-
 Usage
 -----
 
@@ -23,11 +18,6 @@ Usage
 
     # Multirun sweep (local - runs all sequentially)
     uv run python run_solver.py -cn experiment/scaling --multirun
-
-    # HPC with job array (each job runs one config)
-    #BSUB -J scaling[1-100]
-    #BSUB -n 48
-    uv run python run_solver.py -cn experiment/scaling --multirun
 """
 
 import logging
@@ -36,49 +26,9 @@ import subprocess
 import sys
 
 import hydra
-from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
 log = logging.getLogger(__name__)
-
-
-def _get_allocation_tier(n_ranks: int, cores_per_node: int = 24) -> int:
-    """Get minimum allocation tier (in cores) needed for n_ranks."""
-    if n_ranks <= 0:
-        return cores_per_node
-    return ((n_ranks - 1) // cores_per_node + 1) * cores_per_node
-
-
-def _should_run(n_ranks: int, alloc_cores: int, cores_per_node: int = 24) -> bool:
-    """Check if this run belongs to the current allocation tier.
-
-    A run belongs to tier T if:
-    - n_ranks <= T (fits in allocation)
-    - n_ranks > T - cores_per_node (requires this tier, not a smaller one)
-    """
-    prev_tier = alloc_cores - cores_per_node
-    return prev_tier < n_ranks <= alloc_cores
-
-
-def _get_multirun_index() -> tuple[int, int]:
-    """Get current multirun index and total from Hydra.
-
-    Returns (current_idx, total) where current_idx is 0-based.
-    Returns (0, 1) if not in multirun mode.
-    """
-    try:
-        from hydra.core.hydra_config import HydraConfig
-        hc = HydraConfig.get()
-        job = hc.job
-        # job.num is current job number (0-based in multirun)
-        # We need to get total from sweep
-        sweep_dir = hc.sweep.dir if hasattr(hc, 'sweep') else None
-        if sweep_dir:
-            # In multirun mode
-            return job.num, -1  # Total not easily available
-        return 0, 1
-    except Exception:
-        return 0, 1
 
 
 @hydra.main(config_path="Experiments/hydra-conf", config_name="config", version_base=None)
@@ -86,35 +36,16 @@ def main(cfg: DictConfig) -> None:
     """Entry point - runs sequential or spawns MPI based on n_ranks.
 
     In multirun mode, Hydra calls this once per sweep combination.
-    With LSB_JOBINDEX, only the matching run executes.
     """
-    # HPC configuration
     mpi = cfg.get("mpi", {})
     cores_per_node = mpi.get("cores_per_node", 24)
     alloc_cores = int(os.environ.get("LSB_DJOB_NUMPROC", cores_per_node))
-    job_index = int(os.environ.get("LSB_JOBINDEX", 0))
-
-    # Get current multirun index (0-based)
-    multirun_idx, _ = _get_multirun_index()
-
-    # In job array mode: only run if this is our job
-    if job_index > 0:
-        # LSB_JOBINDEX is 1-based, multirun_idx is 0-based
-        if multirun_idx != job_index - 1:
-            return  # Not our job, skip silently
 
     n_ranks = cfg.get("n_ranks", 1)
-
-    # Check if this run fits in our allocation tier
-    if not _should_run(n_ranks, alloc_cores, cores_per_node):
-        tier_needed = _get_allocation_tier(n_ranks, cores_per_node)
-        log.info(f"Skipping: n_ranks={n_ranks} needs {tier_needed} cores, have {alloc_cores}")
-        return
-
     solver_type = cfg.get("solver_type", "jacobi")
     N = cfg.get("N", 64)
 
-    log.info(f"[Run {multirun_idx}] {solver_type}, N={N}, n_ranks={n_ranks}")
+    log.info(f"{solver_type}, N={N}, n_ranks={n_ranks}")
 
     # Sequential vs MPI
     if n_ranks == 1:
