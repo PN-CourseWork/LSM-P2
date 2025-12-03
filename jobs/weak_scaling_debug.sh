@@ -11,6 +11,7 @@
 # Quick debug: just 2 runs to verify everything works
 
 module load mpi
+uv sync
 mkdir -p logs/lsf
 
 export NUMBA_NUM_THREADS=1

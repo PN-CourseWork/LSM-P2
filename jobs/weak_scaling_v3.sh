@@ -17,6 +17,7 @@
 # =============================================================================
 
 module load mpi
+uv sync
 mkdir -p logs/lsf
 
 export NUMBA_NUM_THREADS=1
