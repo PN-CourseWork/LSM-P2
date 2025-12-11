@@ -19,17 +19,9 @@
 
 set -euo pipefail
 
-# Load MPI module only on cluster
-if [[ -n "${LSB_JOBID:-}" ]]; then
-    echo "Running on cluster (Job ID: $LSB_JOBID)"
-    module load mpi
-    mkdir -p logs/lsf
-    export MPI_OPTIONS="--map-by ppr:4:package --bind-to core"
-else
-    echo "Running locally"
-    export MPI_OPTIONS=""
-fi
-
+module load mpi
+mkdir -p logs/lsf
+export MPI_OPTIONS="--map-by ppr:4:package --bind-to core"
 export NUMBA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 
