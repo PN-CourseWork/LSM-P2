@@ -34,6 +34,6 @@ uv run python run_solver.py \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
-    experiment_name=weak_scaling_v2-LARGE \
+    experiment_name=weak_scaling_v2 \
     -m
 
