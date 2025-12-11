@@ -1,7 +1,7 @@
 #!/bin/bash
 #BSUB -J scaling
 #BSUB -q hpcintro
-#BSUB -n 144
+#BSUB -n 24
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
 #BSUB -W 1:00
