@@ -1,10 +1,10 @@
 #!/bin/bash
 #BSUB -J scaling
 #BSUB -q hpcintro
-#BSUB -n 48
+#BSUB -n 72
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
-#BSUB -W 2:00
+#BSUB -W 0:30
 #BSUB -o logs/lsf/scaling_%J.out
 #BSUB -e logs/lsf/scaling_%J.err
 
