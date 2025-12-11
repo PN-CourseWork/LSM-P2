@@ -1,0 +1,5 @@
+- +experiment=weak_scaling_jacobi
+- N=5
+- n_ranks=1
+- max_iter=10
+- mlflow=databricks

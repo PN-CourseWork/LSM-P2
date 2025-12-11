@@ -1,0 +1,58 @@
+Metadata-Version: 2.4
+Name: poisson_solver
+Version: 0.1.0
+Summary: MPI Poisson Solver
+Author: Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel
+License: MIT
+Requires-Python: ==3.12.*
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: pyarrow>=14.0.0
+Requires-Dist: scipy>=1.11.0
+Requires-Dist: sphinx<9.0.0,>=7.0.0
+Requires-Dist: pydata-sphinx-theme>=0.14.0
+Requires-Dist: numpydoc>=1.6.0
+Requires-Dist: sphinx-copybutton>=0.5.2
+Requires-Dist: sphinx-gallery>=0.14.0
+Requires-Dist: sphinxcontrib-mermaid>=0.9.2
+Requires-Dist: pillow>=10.0.0
+Requires-Dist: ruff>=0.1.0
+Requires-Dist: pytest>=7.4.0
+Requires-Dist: pytest-cov>=4.1.0
+Requires-Dist: numba>=0.62.1
+Requires-Dist: mpi4py>=4.1.1
+Requires-Dist: mlflow>=3.6.0
+Requires-Dist: pyvista>=0.46.4
+Requires-Dist: h5py>=3.15.1
+Requires-Dist: tables>=3.10.2
+Requires-Dist: psutil>=7.1.3
+Requires-Dist: pyyaml>=6.0.3
+Requires-Dist: questionary>=2.1.1
+Requires-Dist: python-dotenv>=1.2.1
+Requires-Dist: hydra-core>=1.3.2
+Requires-Dist: omegaconf>=2.3.0
+Requires-Dist: hydra-submitit-launcher>=1.2.0
+
+# MPI Poisson Solver
+
+**Authors:** Alexander Elbæk Nielsen, Junriu Li, Philip Korsager Nickel
+**Institution:** Technical University of Denmark, DTU Compute
+
+## Quick Start
+
+### Installation
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
+
+1. **Install uv** :
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   uv sync
+   ```
+
