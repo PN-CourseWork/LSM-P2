@@ -1,7 +1,7 @@
 #!/bin/bash
 #BSUB -J scaling
 #BSUB -q hpcintro
-#BSUB -n 144
+#BSUB -n 24
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
 #BSUB -W 1:00
@@ -22,7 +22,7 @@ export OMP_NUM_THREADS=1
 
 # Spread ranks across all 8 packages (4 nodes × 2 packages)
 # ppr:12:package allows up to 96 ranks spread evenly
-#export MPI_OPTIONS="--map-by ppr:12:package --bind-to core"
+export MPI_OPTIONS="--map-by ppr:4:package --bind-to core"
 
 # Iteration count for scaling experiments
 MAX_ITER=50
