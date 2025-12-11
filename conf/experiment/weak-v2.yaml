@@ -17,7 +17,7 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 1295
+N: 1025
 n_ranks: 128
 strategy: cubic
 
