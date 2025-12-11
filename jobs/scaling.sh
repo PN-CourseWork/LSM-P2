@@ -35,5 +35,7 @@ uv run python run_solver.py \
     hydra/launcher=basic \
     mlflow=databricks \
     experiment_name=weak_scaling_v2 \
+    +n_ranks=1 \
+    +N=100 \
     -m
 
