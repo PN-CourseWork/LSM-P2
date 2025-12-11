@@ -1,9 +1,31 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 
-# Load the data
-df = pd.read_csv('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling.csv')
+# Enable LaTeX rendering
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Computer Modern Roman']
+
+# Load and combine both CSV files
+df1 = pd.read_csv('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling.csv')
+df2 = pd.read_csv('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_large.csv')
+df = pd.concat([df1, df2], ignore_index=True)
+
+# Calculate local grid size (N / cbrt(n_ranks) for cubic decomposition)
+df['local_size_raw'] = df['N'] / np.cbrt(df['n_ranks'])
+
+# Bin into approximate local size groups (within ~5% tolerance)
+def bin_local_size(x):
+    if 245 <= x <= 270:
+        return 257
+    elif 500 <= x <= 530:
+        return 513
+    else:
+        return int(round(x))
+
+df['local_size'] = df['local_size_raw'].apply(bin_local_size)
 
 # Rename columns for clarity in plots
 df = df.rename(columns={
@@ -19,153 +41,76 @@ df['Solver'] = df['Solver'].str.upper()
 df['Decomposition'] = df['Decomposition'].str.capitalize()
 df['Datatype'] = df['Datatype'].str.capitalize()
 
-# Create a combined label for hue
-df['Config'] = df['Solver'] + ' / ' + df['Decomposition'] + ' / ' + df['Datatype']
-
 # Set the style
-sns.set_theme(style="whitegrid")
-plt.rcParams['figure.figsize'] = (14, 8)
+sns.set_theme()
+plt.rcParams['text.usetex'] = True
 
 # Aggregate data by taking mean for duplicate configurations
-df_agg = df.groupby(['Ranks', 'Solver', 'Decomposition', 'Datatype', 'Config']).agg({
+df_agg = df.groupby(['Ranks', 'Solver', 'Decomposition', 'Datatype', 'local_size']).agg({
     'MLUPS': 'mean'
 }).reset_index()
 
-# Plot 1: Full faceted view - Solver x Decomposition with Datatype as hue
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+# Get unique local sizes
+local_sizes = sorted(df_agg['local_size'].unique())
+print(f"Found local grid sizes: {local_sizes}")
 
-for i, solver in enumerate(['JACOBI', 'FMG']):
-    for j, decomp in enumerate(['Cubic', 'Sliced']):
-        ax = axes[i, j]
-        subset = df_agg[(df_agg['Solver'] == solver) & (df_agg['Decomposition'] == decomp)]
+# Create a separate plot for each local grid size
+for local_size in local_sizes:
+    df_local = df_agg[df_agg['local_size'] == local_size].copy()
 
-        for datatype, marker in [('Numpy', 'o'), ('Custom', 's')]:
-            data = subset[subset['Datatype'] == datatype].sort_values('Ranks')
-            if len(data) > 0:
-                ax.plot(data['Ranks'], data['MLUPS'], marker=marker, markersize=8,
-                       linewidth=2, label=datatype)
+    # Get rank ticks for this local size
+    rank_ticks = sorted(df_local['Ranks'].unique())
 
-        ax.set_xlabel('Number of Ranks', fontsize=11)
-        ax.set_ylabel('MLUPS', fontsize=11)
-        ax.set_title(f'{solver} - {decomp}', fontsize=12, fontweight='bold')
-        ax.legend(title='Datatype')
-        ax.grid(True, alpha=0.3)
+    if len(rank_ticks) < 2:
+        print(f"Skipping local_size={local_size} - only {len(rank_ticks)} rank value(s)")
+        continue
 
-plt.suptitle('Weak Scaling: MLUPS vs Ranks\n(by Solver, Decomposition, and Datatype)',
-             fontsize=14, fontweight='bold', y=1.02)
-plt.tight_layout()
-plt.savefig('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_faceted.png',
-            dpi=150, bbox_inches='tight')
-plt.close()
+    # Calculate efficiency for each configuration
+    efficiency_data = []
+    for solver in ['JACOBI', 'FMG']:
+        for decomp in ['Cubic', 'Sliced']:
+            for datatype in ['Numpy', 'Custom']:
+                config_data = df_local[(df_local['Solver'] == solver) &
+                                       (df_local['Decomposition'] == decomp) &
+                                       (df_local['Datatype'] == datatype)].sort_values('Ranks')
+                if len(config_data) > 1:
+                    baseline = config_data[config_data['Ranks'] == config_data['Ranks'].min()]['MLUPS'].values[0]
+                    base_ranks = config_data['Ranks'].min()
+                    for _, row in config_data.iterrows():
+                        efficiency_data.append({
+                            'Ranks': row['Ranks'],
+                            'Solver': solver,
+                            'Decomposition': decomp,
+                            'Datatype': datatype,
+                            'Efficiency': row['MLUPS'] / (baseline * row['Ranks'] / base_ranks) * 100
+                        })
 
-# Plot 2: Single plot with all combinations
-fig, ax = plt.subplots(figsize=(14, 8))
+    df_eff = pd.DataFrame(efficiency_data)
 
-# Use different line styles and markers for each combination
-styles = {
-    ('JACOBI', 'Cubic', 'Numpy'): {'marker': 'o', 'linestyle': '-', 'color': 'tab:blue'},
-    ('JACOBI', 'Cubic', 'Custom'): {'marker': 's', 'linestyle': '-', 'color': 'tab:orange'},
-    ('JACOBI', 'Sliced', 'Numpy'): {'marker': 'o', 'linestyle': '--', 'color': 'tab:blue'},
-    ('JACOBI', 'Sliced', 'Custom'): {'marker': 's', 'linestyle': '--', 'color': 'tab:orange'},
-    ('FMG', 'Cubic', 'Numpy'): {'marker': '^', 'linestyle': '-', 'color': 'tab:green'},
-    ('FMG', 'Cubic', 'Custom'): {'marker': 'D', 'linestyle': '-', 'color': 'tab:red'},
-    ('FMG', 'Sliced', 'Numpy'): {'marker': '^', 'linestyle': '--', 'color': 'tab:green'},
-    ('FMG', 'Sliced', 'Custom'): {'marker': 'D', 'linestyle': '--', 'color': 'tab:red'},
-}
+    # Use seaborn relplot
+    g = sns.relplot(data=df_eff, x='Ranks', y='Efficiency', col='Solver',
+                    hue='Decomposition', style='Datatype',
+                    kind='line', markers=True, markersize=8, linewidth=2,
+                    height=5, aspect=1.1, facet_kws={'legend_out': False})
+    g.set_axis_labels(r'Number of Ranks', r'Weak Scaling Efficiency (\%)')
 
-for (solver, decomp, datatype), style in styles.items():
-    subset = df_agg[(df_agg['Solver'] == solver) &
-                    (df_agg['Decomposition'] == decomp) &
-                    (df_agg['Datatype'] == datatype)].sort_values('Ranks')
-    if len(subset) > 0:
-        ax.plot(subset['Ranks'], subset['MLUPS'],
-               marker=style['marker'], linestyle=style['linestyle'],
-               color=style['color'], markersize=8, linewidth=2,
-               label=f'{solver} / {decomp} / {datatype}')
+    # Filter ticks to avoid overlap (remove values too close together)
+    filtered_ticks = []
+    for t in rank_ticks:
+        if not filtered_ticks or t > filtered_ticks[-1] * 1.15:  # At least 15% apart
+            filtered_ticks.append(t)
 
-ax.set_xlabel('Number of Ranks', fontsize=12)
-ax.set_ylabel('MLUPS (Million Lattice Updates Per Second)', fontsize=12)
-ax.set_title('Weak Scaling Performance\n(Solver / Decomposition / Datatype)', fontsize=14, fontweight='bold')
-ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9)
-ax.grid(True, alpha=0.3)
+    for ax in g.axes.flat:
+        ax.set_xticks(filtered_ticks)
+        ax.set_xticklabels([str(int(r)) for r in filtered_ticks])
+        ax.set_ylim(0, 120)
+        ax.legend(loc='lower left', fontsize=9)
 
-plt.tight_layout()
-plt.savefig('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_combined.png',
-            dpi=150, bbox_inches='tight')
-plt.close()
+    plt.tight_layout()
+    filename = f'/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_efficiency_local{local_size}.pdf'
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    print(f"Saved: weak_scaling_efficiency_local{local_size}.pdf")
 
-# Plot 3: Seaborn relplot for elegant faceting
-g = sns.relplot(
-    data=df_agg,
-    x='Ranks', y='MLUPS',
-    hue='Datatype', style='Solver',
-    col='Decomposition',
-    kind='line',
-    markers=True,
-    markersize=10,
-    height=5, aspect=1.2
-)
-g.fig.suptitle('Weak Scaling: MLUPS vs Ranks', fontsize=14, fontweight='bold', y=1.02)
-g.set_axis_labels('Number of Ranks', 'MLUPS')
-plt.tight_layout()
-plt.savefig('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_seaborn_relplot.png',
-            dpi=150, bbox_inches='tight')
-plt.close()
-
-# Plot 4: Ideal scaling comparison (normalized)
-fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-for idx, solver in enumerate(['JACOBI', 'FMG']):
-    ax = axes[idx]
-    subset = df_agg[df_agg['Solver'] == solver]
-
-    # Get baseline (1 rank) for each configuration
-    for decomp in ['Cubic', 'Sliced']:
-        for datatype in ['Numpy', 'Custom']:
-            config_data = subset[(subset['Decomposition'] == decomp) &
-                                (subset['Datatype'] == datatype)].sort_values('Ranks')
-            if len(config_data) > 0:
-                baseline = config_data[config_data['Ranks'] == config_data['Ranks'].min()]['MLUPS'].values[0]
-                base_ranks = config_data['Ranks'].min()
-
-                # Normalize by ideal scaling
-                config_data = config_data.copy()
-                config_data['Efficiency'] = config_data['MLUPS'] / (baseline * config_data['Ranks'] / base_ranks) * 100
-
-                linestyle = '-' if decomp == 'Cubic' else '--'
-                color = 'tab:blue' if datatype == 'Numpy' else 'tab:orange'
-                marker = 'o' if datatype == 'Numpy' else 's'
-
-                ax.plot(config_data['Ranks'], config_data['Efficiency'],
-                       marker=marker, linestyle=linestyle, color=color,
-                       markersize=8, linewidth=2,
-                       label=f'{decomp} / {datatype}')
-
-    ax.axhline(y=100, color='gray', linestyle=':', linewidth=2, label='Ideal (100%)')
-    ax.set_xlabel('Number of Ranks', fontsize=12)
-    ax.set_ylabel('Weak Scaling Efficiency (%)', fontsize=12)
-    ax.set_title(f'{solver} Solver', fontsize=12, fontweight='bold')
-    ax.legend(fontsize=9)
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim(0, 120)
-
-plt.suptitle('Weak Scaling Efficiency\n(Relative to Ideal Linear Scaling)', fontsize=14, fontweight='bold')
-plt.tight_layout()
-plt.savefig('/Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/newRuns/weak_scaling_efficiency.png',
-            dpi=150, bbox_inches='tight')
-plt.close()
-
-print("Plots saved:")
-print("  1. weak_scaling_faceted.png - 2x2 faceted view by solver and decomposition")
-print("  2. weak_scaling_combined.png - All configurations in one plot")
-print("  3. weak_scaling_seaborn_relplot.png - Seaborn relplot with faceting")
-print("  4. weak_scaling_efficiency.png - Weak scaling efficiency comparison")
-
-# Summary statistics
-print("\n--- Data Summary ---")
-print(f"Total runs: {len(df)}")
-print(f"\nSolvers: {df['Solver'].unique()}")
-print(f"Decompositions: {df['Decomposition'].unique()}")
-print(f"Datatypes: {df['Datatype'].unique()}")
-print(f"Rank counts: {sorted(df['Ranks'].unique())}")
-print(f"\nMLUPS range: {df['MLUPS'].min():.2f} - {df['MLUPS'].max():.2f}")
+print("\nData summary:")
+print(df_agg.groupby('local_size')[['Ranks']].apply(lambda x: sorted(x['Ranks'].unique())))
