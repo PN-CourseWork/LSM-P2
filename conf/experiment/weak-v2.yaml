@@ -7,7 +7,7 @@ experiment_name: fmg_scaling
 solver: fmg
 n_smooth: 5
 omega: 0.6666666666666666
-max_iter: 300
+max_iter: 500
 tolerance: 0.0
 fmg_post_vcycles: 2
 communicator: custom
