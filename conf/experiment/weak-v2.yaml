@@ -17,8 +17,8 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 257
-n_ranks: 1
+N: 1295
+n_ranks: 128
 strategy: cubic
 
 # Hydra sweep configuration
@@ -27,8 +27,8 @@ strategy: cubic
 hydra:
   sweeper:
     params:
-      N: 257
+      N: 1295
       communicator: custom, numpy
       strategy: sliced,cubic
       solver: fmg, jacobi
-      n_ranks: 1
+      n_ranks: 128
