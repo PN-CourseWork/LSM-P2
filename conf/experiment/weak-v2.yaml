@@ -27,8 +27,8 @@ strategy: cubic
 hydra:
   sweeper:
     params:
-      N: 513
+      N: 934
       communicator: custom, numpy
       strategy: sliced,cubic
       solver: fmg, jacobi
-      n_ranks: 1
+      n_ranks: 48
