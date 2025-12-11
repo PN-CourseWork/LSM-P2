@@ -1,0 +1,21 @@
+'N': 100
+n_ranks: 1
+numba_threads: 1
+mpi:
+  bind_to: null
+  cores_per_node: 24
+solver_type: jacobi
+strategy: sliced
+communicator: custom
+use_numba: false
+omega: 1.0
+max_iter: 200
+tolerance: 0.0
+n_smooth: 3
+fmg_post_vcycles: 1
+experiment_name: kernel
+job_name: null
+log_dir: logs/lsf
+mlflow:
+  mode: local
+  databricks_project_prefix: /Shared/LSM-PoissonMPI

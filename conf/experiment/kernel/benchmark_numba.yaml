@@ -1,0 +1,17 @@
+# @package _global_
+# Numba kernel benchmark - performance vs problem size and threads
+# Run: uv run python run_solver.py +experiment=kernel/benchmark_numba mlflow=databricks -m
+defaults:
+  - /experiment/kernel/_base
+  - _self_
+
+use_numba: true
+specified_numba_threads: 1
+max_iter: 100
+N: 65
+
+hydra:
+  sweeper:
+    params:
+      N: 33,65,129,257
+      specified_numba_threads: 1,2,4,6

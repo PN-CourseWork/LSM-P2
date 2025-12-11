@@ -1,0 +1,29 @@
+# @package _global_
+# Multigrid comparison experiment
+
+experiment_name: multigrid
+
+# FMG solver settings
+solver: fmg
+n_smooth: 5
+omega: 0.6666666666666666
+max_iter: 100
+tolerance: 1.0e-10
+fmg_post_vcycles: 2
+communicator: custom
+
+# Use Numba
+use_numba: true
+specified_numba_threads: 1
+
+# Default values
+N: 129
+n_ranks: 4
+strategy: cubic
+
+# Hydra sweep configuration
+hydra:
+  sweeper:
+    params:
+      N: 33,65,129,257
+      strategy: sliced,cubic

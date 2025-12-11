@@ -1,0 +1,30 @@
+# @package _global_
+# Strong scaling experiment: Jacobi solver with fixed problem size
+
+experiment_name: scaling
+
+# Jacobi solver settings
+solver: jacobi
+max_iter: 250
+omega: 0.8
+tolerance: 0.0
+communicator: custom
+
+# Use Numba with 1 thread for pure MPI scaling
+use_numba: true
+specified_numba_threads: 1
+
+# Default values
+N: 257
+n_ranks: 1
+strategy: sliced
+
+# Hydra sweep configuration
+# N values: 2^k+1 (257³=17M, 513³=135M points)
+# Rank counts with good 3D factorizations for cubic decomposition
+hydra:
+  sweeper:
+    params:
+      N: 257,513
+      strategy: sliced,cubic
+      n_ranks: 1,2,4,8,16,24,36,48,72,96

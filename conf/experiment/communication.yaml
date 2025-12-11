@@ -1,0 +1,30 @@
+# @package _global_
+# Communication experiment: compare halo exchange strategies
+# Tests compact (1 node) vs spread (2 nodes) placement
+
+experiment_name: communication
+
+# Use Jacobi solver for halo exchange benchmarking
+solver: jacobi
+n_ranks: 24
+max_iter: 200
+tolerance: 0.0
+
+# Use Numba for consistent performance
+use_numba: true
+specified_numba_threads: 1
+
+# Default values
+N: 254
+strategy: sliced
+communicator: custom
+
+# Logarithmic N values compatible with 24 ranks (N-2 divisible by 12 for cubic)
+# Cubic decomposition: 24 = 4×3×2, LCM = 12
+# N = 12k+2: 122 (1.8M), 254 (16M), 506 (129M), 1010 (1B) -> ~2x growth
+hydra:
+  sweeper:
+    params:
+      N: 122,254,506,1010
+      strategy: sliced,cubic
+      communicator: numpy,custom

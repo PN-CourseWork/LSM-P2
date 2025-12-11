@@ -1,0 +1,22 @@
+# @package _global_
+# Weak scaling experiment: Jacobi solver
+
+experiment_name: weak_scaling_final
+
+# Jacobi solver settings
+solver: jacobi
+max_iter: 100
+omega: 0.8
+tolerance: 0.0
+communicator: custom
+
+# Use Numba with 1 thread for pure MPI scaling
+use_numba: true
+specified_numba_threads: 1
+
+# Default values
+N: 129
+n_ranks: 1
+strategy: cubic
+
+# Weak scaling pairs set via command line (N and n_ranks must match for constant work/rank)

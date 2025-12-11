@@ -1,0 +1,24 @@
+# @package _global_
+defaults:
+  - override /mlflow: local
+
+experiment_name: TEST-convergence_jacobi
+
+# Jacobi solver settings
+solver: jacobi
+tolerance: 1e-10
+max_iter: 20000
+use_numba: false
+specified_numba_threads: 1
+
+# Base settings (overridden by sweeper)
+n_ranks: 1
+N: 32
+
+hydra:
+  sweeper:
+    params:
+      n_ranks: 4
+      N: 17,33,65
+      strategy: sliced,cubic
+      communicator: numpy,custom

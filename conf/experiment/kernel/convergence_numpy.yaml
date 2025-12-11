@@ -1,0 +1,15 @@
+# @package _global_
+# NumPy kernel convergence test - error vs iterations
+# Run: uv run python run_solver.py +experiment=kernel/convergence_numpy mlflow=databricks -m
+defaults:
+  - /experiment/kernel/_base
+  - _self_
+
+N: 17
+use_numba: false
+max_iter: 100
+
+hydra:
+  sweeper:
+    params:
+      max_iter: 10,25,50,100,250,500,1000

@@ -1,0 +1,16 @@
+# @package _global_
+# Numba kernel convergence test - error vs iterations (4 threads)
+# Run: uv run python run_solver.py +experiment=kernel/convergence_numba mlflow=databricks -m
+defaults:
+  - /experiment/kernel/_base
+  - _self_
+
+N: 17
+use_numba: true
+specified_numba_threads: 4
+max_iter: 100
+
+hydra:
+  sweeper:
+    params:
+      max_iter: 10,25,50,100,250,500,1000

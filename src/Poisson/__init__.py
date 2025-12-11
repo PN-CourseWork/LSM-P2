@@ -4,6 +4,16 @@ A modular framework for studying parallel performance of 3D Poisson equation
 solvers using MPI domain decomposition. Supports pluggable decomposition
 strategies (sliced, cubic) and communication methods (NumPy arrays, custom
 MPI datatypes).
+
+Solvers
+-------
+Sequential (no MPI):
+- JacobiSolver: Kernel benchmarks and single-process solving
+- FMGSolver: Full Multigrid without MPI
+
+Parallel (MPI):
+- JacobiMPISolver: Jacobi with domain decomposition
+- FMGMPISolver: Full Multigrid with domain decomposition
 """
 
 from pathlib import Path
@@ -12,59 +22,49 @@ from .datastructures import (
     GlobalParams,
     GlobalMetrics,
     LocalParams,
-    LocalFields,
-    LocalSeries,
-    KernelParams,
-    KernelMetrics,
-    KernelSeries,
+    LocalMetrics,
+    RankGeometry,
+    GridLevel,
 )
 from .kernels import NumPyKernel, NumbaKernel
-from .solver import JacobiPoisson
-from .mpi import (
-    DomainDecomposition,
-    RankInfo,
-    NoDecomposition,
-    NumpyHaloExchange,
-    CustomHaloExchange,
+from .solvers import (
+    JacobiSolver,
+    JacobiMPISolver,
+    FMGSolver,
+    FMGMPISolver,
 )
+from .mpi import DistributedGrid
 from .problems import (
     create_grid_3d,
     sinusoidal_exact_solution,
     sinusoidal_source_term,
     setup_sinusoidal_problem,
 )
-from .helpers import run_solver
 
 __all__ = [
-    # Data structures - Kernel
-    "KernelParams",
-    "KernelMetrics",
-    "KernelSeries",
-    # Data structures - Solver
+    # Data structures
     "GlobalParams",
     "GlobalMetrics",
     "LocalParams",
-    "LocalFields",
-    "LocalSeries",
+    "LocalMetrics",
+    "RankGeometry",
+    "GridLevel",
     # Kernels
     "NumPyKernel",
     "NumbaKernel",
-    # Solver
-    "JacobiPoisson",
-    # Decomposition (DMDA-style)
-    "NoDecomposition",
-    "DomainDecomposition",
-    "RankInfo",
-    # Communicators
-    "NumpyHaloExchange",
-    "CustomHaloExchange",
+    # Solvers - Sequential
+    "JacobiSolver",
+    "FMGSolver",
+    # Solvers - MPI
+    "JacobiMPISolver",
+    "FMGMPISolver",
+    # Grid
+    "DistributedGrid",
     # Problem setup
     "create_grid_3d",
     "sinusoidal_exact_solution",
     "sinusoidal_source_term",
     "setup_sinusoidal_problem",
-    # Runner
-    "run_solver",
     # Utilities
     "get_project_root",
 ]

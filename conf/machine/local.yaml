@@ -1,0 +1,5 @@
+# Local machine defaults
+mpi:
+  bind_to: null
+  cores_per_node: 1
+  sockets_per_node: 1

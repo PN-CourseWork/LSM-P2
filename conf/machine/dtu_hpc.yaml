@@ -1,0 +1,11 @@
+# DTU HPC defaults
+mpi:
+  bind_to: core
+  cores_per_node: 24
+  sockets_per_node: 2
+
+hydra:
+  job:
+    env_set:
+      NUMBA_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"

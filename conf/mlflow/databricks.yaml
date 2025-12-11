@@ -1,0 +1,3 @@
+mode: databricks
+tracking_uri: databricks
+project_prefix: "/Shared/LSM-PoissonMPI-v3"

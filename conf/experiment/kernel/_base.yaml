@@ -1,0 +1,11 @@
+# @package _global_
+# Base kernel config - sequential Jacobi for kernel comparison
+# Note: No defaults here - composed on top of main config.yaml
+
+experiment_name: kernel
+
+# Sequential mode
+solver: jacobi
+n_ranks: 1
+omega: 0.8
+tolerance: 0.0  # Disable early stopping - always run full max_iter

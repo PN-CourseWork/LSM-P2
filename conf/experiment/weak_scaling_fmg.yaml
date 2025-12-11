@@ -1,0 +1,24 @@
+# @package _global_
+# Weak scaling experiment: FMG solver
+
+experiment_name: weak_scaling_final
+
+# FMG solver settings
+solver: fmg
+n_smooth: 5
+omega: 0.6666666666666666
+max_iter: 50
+tolerance: 0.0
+fmg_post_vcycles: 2
+communicator: custom
+
+# Use Numba with 1 thread for pure MPI scaling
+use_numba: true
+specified_numba_threads: 1
+
+# Default values
+N: 129
+n_ranks: 1
+strategy: cubic
+
+# Weak scaling: N and n_ranks pairs set via command line in job script

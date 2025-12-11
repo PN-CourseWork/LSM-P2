@@ -1,0 +1,44 @@
+defaults:
+  - machine: local
+  - mlflow: local
+  - override hydra/launcher: basic
+  - _self_
+
+# ============================================================
+# GlobalParams - flat config matching dataclass
+# ============================================================
+
+# Required
+N: 65
+
+# Solver selection and params
+solver: jacobi  # "jacobi" | "fmg"
+omega: 0.8
+tolerance: 1.0e-6
+max_iter: 1000
+
+# FMG-specific (ignored by Jacobi)
+n_smooth: 3
+fmg_post_vcycles: 1
+
+# Parallelization
+n_ranks: 1
+strategy: sliced  # "sliced" | "cubic"
+communicator: custom  # "numpy" | "custom"
+
+# Numba
+use_numba: false
+specified_numba_threads: 1
+
+# Experiment tracking
+experiment_name: default
+
+# ============================================================
+# Hydra output paths
+# ============================================================
+hydra:
+  run:
+    dir: outputs/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${experiment_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}

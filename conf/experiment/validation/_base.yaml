@@ -1,0 +1,19 @@
+# @package _global_
+# Base validation config - shared by jacobi.yaml and fmg.yaml
+# Note: No defaults here - composed on top of main config.yaml
+
+experiment_name: validation
+
+# Validation: verify O(h²) spatial convergence
+max_iter: 5000
+tolerance: 1.0e-14  # Near machine precision
+n_ranks: 4
+strategy: sliced
+communicator: custom
+
+# Sweep across decomposition strategies and communicators
+hydra:
+  sweeper:
+    params:
+      strategy: sliced,cubic
+      communicator: numpy,custom

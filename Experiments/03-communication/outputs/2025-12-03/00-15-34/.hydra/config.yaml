@@ -1,0 +1,33 @@
+'N': 64
+n_ranks: 4
+numba_threads: 1
+mpi:
+  bind_to: null
+  cores_per_node: 24
+solver_type: jacobi
+strategy: sliced
+communicator: custom
+use_numba: false
+omega: 0.8
+max_iter: 200
+tolerance: 0.0
+n_smooth: 3
+fmg_post_vcycles: 1
+experiment_name: communication
+job_name: null
+log_dir: logs/lsf
+mlflow:
+  mode: local
+  databricks_project_prefix: /Shared/LSM-PoissonMPI
+sweep:
+  'N':
+  - 32
+  - 48
+  - 64
+  - 80
+  strategy:
+  - sliced
+  - cubic
+  communicator:
+  - numpy
+  - custom
