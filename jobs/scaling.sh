@@ -34,6 +34,9 @@ uv run python run_solver.py \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
+    experiment_name=weak_scaling_jacobi \
+    n_ranks=1 \
+    N=10 \
     -m
 
 echo "=== Strong Scaling: FMG ==="
@@ -42,5 +45,8 @@ uv run python run_solver.py \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
+    experiment_name=weak_scaling_fmg \
+    n_ranks=1 \
+    N=13 \
     -m
 
