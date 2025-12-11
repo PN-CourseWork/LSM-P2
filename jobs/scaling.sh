@@ -22,10 +22,10 @@ export OMP_NUM_THREADS=1
 
 # Spread ranks across all 8 packages (4 nodes × 2 packages)
 # ppr:12:package allows up to 96 ranks spread evenly
-#export MPI_OPTIONS="--map-by ppr:12:package --bind-to core"
+export MPI_OPTIONS="--map-by ppr:4:package --bind-to core"
 
 # Iteration count for scaling experiments
-MAX_ITER=10
+MAX_ITER=50
 
 echo "=== Strong Scaling: Jacobi ==="
 echo "MPI_OPTIONS: $MPI_OPTIONS"
