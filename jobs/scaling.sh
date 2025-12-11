@@ -1,10 +1,10 @@
 #!/bin/bash
 #BSUB -J scaling
 #BSUB -q hpcintro
-#BSUB -n 144
+#BSUB -n 24
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
-#BSUB -W 1:00
+#BSUB -W 2:00
 #BSUB -o logs/lsf/scaling_%J.out
 #BSUB -e logs/lsf/scaling_%J.err
 
@@ -25,7 +25,7 @@ export OMP_NUM_THREADS=1
 #export MPI_OPTIONS="--map-by ppr:8:package --bind-to core"
 
 # Iteration count for scaling experiments
-MAX_ITER=50
+MAX_ITER=25
 
 echo "=== Strong Scaling: Jacobi ==="
 echo "MPI_OPTIONS: $MPI_OPTIONS"
@@ -34,6 +34,6 @@ uv run python run_solver.py \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
-    experiment_name=weak_scaling_v2-LARGE \
+    experiment_name=strong_scaling_v2 \
     -m
 
