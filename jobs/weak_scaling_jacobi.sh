@@ -47,7 +47,7 @@ for pair in "10,1" "17,2"; do
         max_iter=$MAX_ITER \
         hydra/launcher=basic \
         mlflow=databricks \
-        -m
+        
 done
 
 echo "Weak scaling Jacobi completed"
