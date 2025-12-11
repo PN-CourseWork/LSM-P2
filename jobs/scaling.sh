@@ -1,7 +1,7 @@
 #!/bin/bash
 #BSUB -J scaling
 #BSUB -q hpcintro
-#BSUB -n 48
+#BSUB -n 24
 #BSUB -R "span[ptile=24]"
 #BSUB -R "rusage[mem=8GB]"
 #BSUB -W 1:00
@@ -34,6 +34,6 @@ uv run python run_solver.py \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
-    experiment_name=weak_scaling_v2 \
+    experiment_name=weak_scaling_v2-LARGE \
     -m
 
