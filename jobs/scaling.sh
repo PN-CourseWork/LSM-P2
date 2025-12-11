@@ -30,21 +30,10 @@ MAX_ITER=10
 echo "=== Strong Scaling: Jacobi ==="
 echo "MPI_OPTIONS: $MPI_OPTIONS"
 uv run python run_solver.py \
-    +experiment=strong_scaling_jacobi \
+    +experiment=weak-v2 \
     max_iter=$MAX_ITER \
     hydra/launcher=basic \
     mlflow=databricks \
-    experiment_name=weak_scaling_jacobi \
-    params.N=10 \
-    params.n_ranks=1,2 \
-    -m
-
-echo "=== Strong Scaling: FMG ==="
-uv run python run_solver.py \
-    +experiment=strong_scaling_fmg \
-    max_iter=$MAX_ITER \
-    hydra/launcher=basic \
-    mlflow=databricks \
-    experiment_name=weak_scaling_fmg \
+    experiment_name=weak_scaling_v2 \
     -m
 
