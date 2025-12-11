@@ -14,8 +14,8 @@
 # Hydra sweeper handles: N, strategy, n_ranks
 # =============================================================================
 
-#module load mpi
-#mkdir -p logs/lsf
+module load mpi
+mkdir -p logs/lsf
 
 export NUMBA_NUM_THREADS=1
 export OMP_NUM_THREADS=1
@@ -35,8 +35,6 @@ uv run python run_solver.py \
     hydra/launcher=basic \
     mlflow=databricks \
     experiment_name=weak_scaling_jacobi \
-    n_ranks=1 \
-    N=10 \
     -m
 
 echo "=== Strong Scaling: FMG ==="
@@ -46,7 +44,5 @@ uv run python run_solver.py \
     hydra/launcher=basic \
     mlflow=databricks \
     experiment_name=weak_scaling_fmg \
-    n_ranks=1 \
-    N=13 \
     -m
 
