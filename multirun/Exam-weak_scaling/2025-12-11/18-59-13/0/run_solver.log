@@ -1,0 +1,2 @@
+[2025-12-11 18:59:13,241][__main__][INFO] - jacobi, N=10, n_ranks=1
+[2025-12-11 18:59:13,241][__main__][INFO] - Spawning: mpiexec -n 1 /Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/.venv/bin/python3 /Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/run_solver.py /Users/philipnickel/Documents/GitHub/DTU_Courses/LargeScaleModeling/LSM/LSM-P2-PREP/multirun/Exam-weak_scaling/2025-12-11/18-59-13/0/config.yaml

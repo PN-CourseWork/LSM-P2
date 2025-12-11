@@ -127,10 +127,10 @@ def config_to_params(cfg: DictConfig) -> GlobalParams:
 def create_solver(params: GlobalParams, comm):
     """Create solver instance."""
     common = {
-        "N": params.N,
+        "N": int(params.N),
         "omega": params.omega,
         "tolerance": params.tolerance,
-        "max_iter": params.max_iter,
+        "max_iter": int(params.max_iter),
         "use_numba": params.use_numba,
         "specified_numba_threads": params.specified_numba_threads,
     }

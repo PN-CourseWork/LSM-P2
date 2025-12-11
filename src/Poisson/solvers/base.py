@@ -24,6 +24,9 @@ class BaseSolver(ABC):
     ):
         self.N = N
         self.omega = omega
+        #######################
+        # THIS WAS CHENGED. The 'int'
+        #######################
         self.max_iter = max_iter
         self.tolerance = tolerance
         self.h = 2.0 / (N - 1)

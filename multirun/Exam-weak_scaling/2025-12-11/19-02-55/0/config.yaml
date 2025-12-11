@@ -1,0 +1,22 @@
+machine:
+  mpi:
+    bind_to: null
+    cores_per_node: 1
+    sockets_per_node: 1
+mlflow:
+  mode: databricks
+  tracking_uri: databricks
+  project_prefix: /Shared/LSM-PoissonMPI-ExamPrep
+'N': 30
+solver: jacobi
+omega: 0.8
+tolerance: 0.0
+max_iter: ''
+n_smooth: 3
+fmg_post_vcycles: 1
+n_ranks: 3
+strategy: cubic
+communicator: custom
+use_numba: true
+specified_numba_threads: 1
+experiment_name: Exam-weak_scaling
