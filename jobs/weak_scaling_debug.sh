@@ -10,6 +10,7 @@
 
 # Quick debug: just 2 runs to verify everything works
 
+module purge
 module load mpi
 uv sync
 mkdir -p logs/lsf
