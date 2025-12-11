@@ -17,7 +17,7 @@ use_numba: true
 specified_numba_threads: 1
 
 # Default values
-N: 1025
+N: 513
 n_ranks: 128
 strategy: cubic
 
@@ -27,7 +27,7 @@ strategy: cubic
 hydra:
   sweeper:
     params:
-      N: 513, 1025
+      N: 257, 513
       communicator: custom, numpy
       strategy: sliced,cubic
       solver: fmg, jacobi
