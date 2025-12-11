@@ -31,4 +31,4 @@ hydra:
       communicator: custom, numpy
       strategy: sliced,cubic
       solver: fmg, jacobi
-      n_ranks: 64, 72
+      n_ranks: 96, 128
